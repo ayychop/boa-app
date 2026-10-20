@@ -12,20 +12,53 @@ const FALLBACK_SERVERS = [
 const PROBE_TIMEOUT_MS = 5000;
 const PROBE_CONCURRENCY = 8;
 
-let baseUrlPromise = null;
+let serversPromise = null;
+let preferred = null;
 
-function getBaseUrl() {
-  if (!baseUrlPromise) {
-    baseUrlPromise = axios
-      .get('https://all.api.radio-browser.info/json/servers', { timeout: 5000 })
-      .then(({ data }) => {
-        const hosts = [...new Set(data.map((s) => s.name))];
-        if (!hosts.length) throw new Error('empty server list');
-        return `https://${hosts[Math.floor(Math.random() * hosts.length)]}`;
-      })
-      .catch(() => FALLBACK_SERVERS[Math.floor(Math.random() * FALLBACK_SERVERS.length)]);
+function shuffle(list) {
+  const a = [...list];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
   }
-  return baseUrlPromise;
+  return a;
+}
+
+function getServers() {
+  if (!serversPromise) {
+    serversPromise = axios
+      .get('https://all.api.radio-browser.info/json/servers', { timeout: 4000 })
+      .then(({ data }) => {
+        const hosts = [...new Set(data.map((s) => `https://${s.name}`))];
+        if (!hosts.length) throw new Error('empty server list');
+        return shuffle(hosts);
+      })
+      .catch(() => {
+        // Let the next call retry the lookup.
+        serversPromise = null;
+        return shuffle(FALLBACK_SERVERS);
+      });
+  }
+  return serversPromise;
+}
+
+// Mirrors go down independently, so try each until one answers and stick
+// with it for later requests.
+async function apiGet(path, config) {
+  const servers = await getServers();
+  const order = preferred ? [preferred, ...servers.filter((s) => s !== preferred)] : servers;
+  let lastError;
+  for (const base of order) {
+    try {
+      const res = await axios.get(`${base}${path}`, { timeout: 8000, ...config });
+      preferred = base;
+      return res;
+    } catch (err) {
+      if (axios.isCancel(err)) throw err;
+      lastError = err;
+    }
+  }
+  throw lastError;
 }
 
 function hasValidStreamUrl(station) {
@@ -116,6 +149,11 @@ function normalize(station, metadataVerified) {
   };
 }
 
+// Home's "Trending" row and the Radio tab ask for the same genre; share one
+// request (and its metadata probes) instead of doing the work twice.
+const CACHE_TTL_MS = 5 * 60 * 1000;
+const cache = new Map();
+
 /**
  * Fetch stations for a genre tag, keeping only ones with a usable
  * `url_resolved` stream that broadcast current-track (ICY) metadata.
@@ -129,11 +167,22 @@ function normalize(station, metadataVerified) {
  * @param {string} tag e.g. "afrobeats", "hip hop"
  * @param {{ limit?: number, verifyMetadata?: boolean, signal?: AbortSignal }} [options]
  */
-export async function fetchStationsByTag(tag, options = {}) {
-  const { limit = 30, verifyMetadata = Platform.OS !== 'web', signal } = options;
-  const baseUrl = await getBaseUrl();
+export function fetchStationsByTag(tag, options = {}) {
+  const { limit = 30, verifyMetadata = Platform.OS !== 'web' } = options;
+  const key = `${tag.trim().toLowerCase()}|${limit}|${verifyMetadata}`;
+  const hit = cache.get(key);
+  if (hit && Date.now() - hit.at < CACHE_TTL_MS) return hit.promise;
+  const promise = loadStations(tag, options).catch((err) => {
+    cache.delete(key);
+    throw err;
+  });
+  cache.set(key, { at: Date.now(), promise });
+  return promise;
+}
 
-  const { data } = await axios.get(`${baseUrl}/json/stations/search`, {
+async function loadStations(tag, options) {
+  const { limit = 30, verifyMetadata = Platform.OS !== 'web', signal } = options;
+  const { data } = await apiGet('/json/stations/search', {
     params: {
       tag: tag.trim().toLowerCase(),
       tagExact: false,
@@ -143,7 +192,6 @@ export async function fetchStationsByTag(tag, options = {}) {
       // Over-fetch: many stations fall out at the filtering steps below.
       limit: limit * 4,
     },
-    timeout: 10000,
     signal,
   });
 

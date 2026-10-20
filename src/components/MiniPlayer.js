@@ -1,79 +1,104 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import Animated, { FadeInDown, FadeOutDown } from 'react-native-reanimated';
+import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import { usePlayer } from '../context/PlayerContext';
+import { describePlayback } from '../audio/status';
 import StationLogo from './StationLogo';
-import { colors, radius, space, type } from '../theme';
+import { colors, fonts, radius, space } from '../theme';
 
-export default function MiniPlayer() {
-  const { station, isPlaying, togglePlay } = usePlayer();
+const HEIGHT = 60;
+// Space screens should leave free at the bottom so content isn't hidden.
+export const MINI_PLAYER_SPACE = HEIGHT + space.md * 2;
+
+export default function MiniPlayer({ onOpen }) {
+  const { station, status, trackTitle, isPlaying, toggle } = usePlayer();
   if (!station) return null;
 
   return (
-    <View style={styles.wrap} pointerEvents="box-none">
-      <View style={styles.bar}>
-        <StationLogo station={station} size={42} rounded={8} />
-        <View style={styles.body}>
-          <Text style={styles.title} numberOfLines={1}>
-            {station.name}
-          </Text>
-          <View style={styles.liveRow}>
-            <View style={[styles.dot, !isPlaying && styles.dotPaused]} />
+    <Animated.View
+      entering={FadeInDown.springify().damping(17).stiffness(170)}
+      exiting={FadeOutDown.duration(180)}
+      style={styles.wrap}
+      pointerEvents="box-none"
+    >
+      <View style={styles.pill}>
+        <BlurView intensity={60} tint="dark" experimentalBlurMethod="dimezisBlurView" style={StyleSheet.absoluteFill} />
+        <View style={styles.tint} />
+        <Pressable
+          onPress={onOpen}
+          accessibilityRole="button"
+          accessibilityLabel={`Now playing: ${station.name}. Open radio`}
+          style={styles.info}
+        >
+          <StationLogo station={station} size={42} rounded={21} fit="cover" />
+          <View style={styles.body}>
+            <Text style={styles.title} numberOfLines={1}>
+              {station.name}
+            </Text>
             <Text style={styles.subtitle} numberOfLines={1}>
-              {isPlaying ? 'Live · track info coming soon' : 'Paused'}
+              {describePlayback(status, trackTitle) || 'Live radio'}
             </Text>
           </View>
-        </View>
+        </Pressable>
         <Pressable
-          onPress={togglePlay}
-          hitSlop={10}
+          onPress={() => toggle()}
+          hitSlop={8}
           accessibilityRole="button"
           accessibilityLabel={isPlaying ? 'Pause' : 'Play'}
-          style={({ pressed }) => [styles.toggle, pressed && { opacity: 0.6 }]}
+          style={({ pressed }) => [styles.button, pressed && { transform: [{ scale: 0.92 }] }]}
         >
-          <Ionicons name={isPlaying ? 'pause' : 'play'} size={24} color={colors.text} />
+          {status === 'loading' ? (
+            <ActivityIndicator color={colors.bg} size="small" />
+          ) : (
+            <Ionicons
+              name={isPlaying ? 'pause' : 'play'}
+              size={20}
+              color={colors.bg}
+              style={isPlaying ? null : { marginLeft: 2 }}
+            />
+          )}
         </Pressable>
-        {/* Thin progress-style rule, Spotify-like. Live radio has no duration. */}
-        <View style={styles.rule}>
-          <View style={[styles.ruleFill, !isPlaying && { backgroundColor: colors.textFaint }]} />
-        </View>
       </View>
-    </View>
+    </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: { paddingHorizontal: space.sm, paddingBottom: space.xs, backgroundColor: 'transparent' },
-  bar: {
+  wrap: {
+    position: 'absolute',
+    left: space.md,
+    right: space.md,
+    bottom: '100%',
+    marginBottom: space.md,
+    alignItems: 'center',
+  },
+  pill: {
+    width: '100%',
+    maxWidth: 520,
+    height: HEIGHT,
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.md,
-    paddingVertical: space.sm,
-    paddingLeft: space.sm,
-    paddingRight: space.md,
-    borderRadius: radius.md,
-    backgroundColor: '#2A1416',
+    paddingLeft: 9,
+    paddingRight: 9,
+    borderRadius: radius.pill,
     overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOpacity: 0.5,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.14)',
+    boxShadow: '0px 12px 32px rgba(0,0,0,0.45)',
   },
+  tint: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(30,30,34,0.55)' },
+  info: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: space.md },
   body: { flex: 1, minWidth: 0 },
-  title: { ...type.body, fontSize: 14, fontWeight: '700' },
-  liveRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 },
-  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.live },
-  dotPaused: { backgroundColor: colors.textFaint },
-  subtitle: { ...type.caption, flexShrink: 1 },
-  toggle: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
-  rule: {
-    position: 'absolute',
-    left: space.sm,
-    right: space.sm,
-    bottom: 0,
-    height: 2,
-    borderRadius: 1,
-    backgroundColor: 'rgba(255,255,255,0.12)',
+  title: { fontFamily: fonts.bold, color: colors.text, fontSize: 15, letterSpacing: -0.3 },
+  subtitle: { fontFamily: fonts.medium, color: colors.textMuted, fontSize: 12.5, marginTop: 1 },
+  button: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.text,
   },
-  ruleFill: { width: '100%', height: '100%', backgroundColor: colors.text, opacity: 0.85 },
 });

@@ -1,26 +1,43 @@
-import { createContext, useContext, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import * as engine from '../audio/engine';
 
-// UI-only "now playing" state. Audio playback (react-native-track-player)
-// gets wired in behind this same interface in the next phase.
 const PlayerContext = createContext(null);
 
 export function PlayerProvider({ children }) {
   const [station, setStation] = useState(null);
-  const [isPlaying, setIsPlaying] = useState(false);
+  const [audio, setAudio] = useState({ status: 'idle', title: null });
+
+  useEffect(() => engine.subscribe(setAudio), []);
+
+  const play = useCallback((next) => {
+    setStation(next);
+    engine.play(next);
+  }, []);
+
+  const pause = useCallback(() => engine.pause(), []);
+
+  // Tapping a record: pause it if it's the one playing, otherwise play it.
+  const toggle = useCallback(
+    (target = station) => {
+      if (!target) return;
+      const active = target.id === station?.id;
+      if (active && (audio.status === 'playing' || audio.status === 'loading')) pause();
+      else play(target);
+    },
+    [station, audio.status, play, pause],
+  );
 
   const value = useMemo(
     () => ({
       station,
-      isPlaying,
-      play(next) {
-        setStation(next);
-        setIsPlaying(true);
-      },
-      togglePlay() {
-        setIsPlaying((p) => !p);
-      },
+      status: audio.status,
+      trackTitle: audio.title,
+      isPlaying: audio.status === 'playing' || audio.status === 'loading',
+      play,
+      pause,
+      toggle,
     }),
-    [station, isPlaying],
+    [station, audio, play, pause, toggle],
   );
 
   return <PlayerContext.Provider value={value}>{children}</PlayerContext.Provider>;

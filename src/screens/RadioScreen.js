@@ -1,19 +1,27 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
+import Animated, { FadeIn, FadeInDown, FadeOut } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Ionicons } from '@expo/vector-icons';
 import { fetchStationsByTag, GENRES } from '../api/radio';
+import { describePlayback } from '../audio/status';
 import { usePlayer } from '../context/PlayerContext';
-import StationCard from '../components/StationCard';
-import { colors, radius, space, type } from '../theme';
+import RecordCarousel from '../components/RecordCarousel';
+import Vinyl from '../components/Vinyl';
+import { stationGradient } from '../components/StationLogo';
+import { MINI_PLAYER_SPACE } from '../components/MiniPlayer';
+import { colors, fonts, radius, space } from '../theme';
 
-function GenreChips({ selected, onSelect }) {
+const TEXT_BLOCK = 132;
+
+function GenrePills({ selected, onSelect }) {
   return (
     <ScrollView
       horizontal
       showsHorizontalScrollIndicator={false}
-      contentContainerStyle={styles.chips}
+      style={styles.pillsScroll}
+      contentContainerStyle={styles.pills}
     >
       {GENRES.map((g) => {
         const active = g.tag === selected;
@@ -23,9 +31,9 @@ function GenreChips({ selected, onSelect }) {
             onPress={() => onSelect(g.tag)}
             accessibilityRole="button"
             accessibilityState={{ selected: active }}
-            style={({ pressed }) => [styles.chip, active && styles.chipActive, pressed && { opacity: 0.75 }]}
+            style={({ pressed }) => [styles.pill, active && styles.pillActive, pressed && { opacity: 0.6 }]}
           >
-            <Text style={[styles.chipText, active && styles.chipTextActive]}>{g.label}</Text>
+            <Text style={[styles.pillText, active && styles.pillTextActive]}>{g.label}</Text>
           </Pressable>
         );
       })}
@@ -33,56 +41,66 @@ function GenreChips({ selected, onSelect }) {
   );
 }
 
-function SkeletonList() {
+function StationText({ station, subtitle, compact }) {
   return (
-    <View style={styles.skeletonWrap}>
-      {Array.from({ length: 6 }, (_, i) => (
-        <View key={i} style={styles.skeletonCard}>
-          <View style={styles.skeletonLogo} />
-          <View style={{ flex: 1, gap: 8 }}>
-            <View style={[styles.skeletonLine, { width: '60%' }]} />
-            <View style={[styles.skeletonLine, { width: '35%', height: 8 }]} />
-          </View>
-        </View>
-      ))}
-      <View style={styles.checking}>
-        <ActivityIndicator color={colors.textMuted} size="small" />
-        <Text style={type.caption}>Finding stations with live track info…</Text>
-      </View>
-    </View>
+    <Animated.View
+      key={station.id}
+      entering={FadeInDown.springify().damping(18).stiffness(160)}
+      exiting={FadeOut.duration(120)}
+      style={styles.textBlock}
+    >
+      <Text
+        style={[styles.name, compact && styles.nameCompact]}
+        numberOfLines={2}
+        accessibilityRole="header"
+      >
+        {station.name}
+      </Text>
+      <Text style={styles.subtitle} numberOfLines={1}>
+        {subtitle}
+      </Text>
+    </Animated.View>
   );
 }
 
-function Message({ icon, title, body, action, onAction }) {
+function Notice({ title, body, action, onAction }) {
   return (
-    <View style={styles.message}>
-      <Ionicons name={icon} size={36} color={colors.textFaint} />
-      <Text style={type.title}>{title}</Text>
-      <Text style={[type.caption, styles.messageBody]}>{body}</Text>
+    <Animated.View entering={FadeIn.duration(250)} style={styles.textBlock}>
+      <Text style={[styles.name, styles.nameCompact]}>{title}</Text>
+      {body && <Text style={[styles.subtitle, { textAlign: 'center' }]}>{body}</Text>}
       {action && (
         <Pressable onPress={onAction} style={({ pressed }) => [styles.retry, pressed && { opacity: 0.8 }]}>
           <Text style={styles.retryText}>{action}</Text>
         </Pressable>
       )}
-    </View>
+    </Animated.View>
   );
 }
 
-export default function RadioScreen() {
+export default function RadioScreen({ route, navigation }) {
   const insets = useSafeAreaInsets();
-  const { station: current, play } = usePlayer();
+  const player = usePlayer();
   const [genre, setGenre] = useState(GENRES[0].tag);
-  const [state, setState] = useState({ status: 'loading', stations: [], error: null });
+  const [index, setIndex] = useState(0);
+  const [data, setData] = useState({ status: 'loading', stations: [] });
+  const [layout, setLayout] = useState(null);
   const requestRef = useRef(0);
+  // A station to centre once its genre's list has loaded (from Home).
+  const pendingFocus = useRef(null);
 
   const load = useCallback(async (tag) => {
     const id = ++requestRef.current;
-    setState({ status: 'loading', stations: [], error: null });
+    setData({ status: 'loading', stations: [] });
+    setIndex(0);
     try {
       const stations = await fetchStationsByTag(tag);
-      if (id === requestRef.current) setState({ status: 'ready', stations, error: null });
-    } catch (error) {
-      if (id === requestRef.current) setState({ status: 'error', stations: [], error });
+      if (id !== requestRef.current) return;
+      const focus = stations.findIndex((s) => s.id === pendingFocus.current);
+      pendingFocus.current = null;
+      if (focus > 0) setIndex(focus);
+      setData({ status: 'ready', stations });
+    } catch {
+      if (id === requestRef.current) setData({ status: 'error', stations: [] });
     }
   }, []);
 
@@ -90,110 +108,186 @@ export default function RadioScreen() {
     load(genre);
   }, [genre, load]);
 
+  const focus = route.params?.stationId;
+  useEffect(() => {
+    if (!focus) return;
+    const nextGenre = route.params.genre ?? genre;
+    navigation.setParams({ stationId: undefined, genre: undefined });
+    if (nextGenre === genre && data.status === 'ready') {
+      const i = data.stations.findIndex((s) => s.id === focus);
+      if (i >= 0) setIndex(i);
+      return;
+    }
+    // Otherwise centre it once the (new) genre finishes loading.
+    pendingFocus.current = focus;
+    if (nextGenre !== genre) setGenre(nextGenre);
+    else if (data.status === 'error') load(genre);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focus]);
+
+  const { stations } = data;
+  const active = stations[index] ?? null;
   const label = GENRES.find((g) => g.tag === genre)?.label ?? genre;
 
-  const header = (
-    <View>
-      <LinearGradient
-        colors={['rgba(229,9,20,0.38)', 'rgba(229,9,20,0.08)', colors.bg]}
-        locations={[0, 0.55, 1]}
-        style={[styles.hero, { paddingTop: insets.top + space.xl }]}
-      >
-        <Text style={type.overline}>BOA Network</Text>
-        <Text style={type.display}>Radio</Text>
-        <Text style={[type.caption, { marginTop: space.xs }]}>
-          Live stations from around the world, with what's playing right now.
-        </Text>
-      </LinearGradient>
-      <GenreChips selected={genre} onSelect={setGenre} />
-      {state.status === 'ready' && state.stations.length > 0 && (
-        <View style={styles.sectionHead}>
-          <Text style={type.title}>{label}</Text>
-          <Text style={type.caption}>{state.stations.length} stations</Text>
-        </View>
-      )}
-    </View>
-  );
+  // Always reserve the mini player's slot so the record never resizes when
+  // playback starts.
+  const tabBarHeight = useBottomTabBarHeight();
+  const bottomPad = tabBarHeight + MINI_PLAYER_SPACE;
+  const stage = layout && { width: layout.width, height: layout.height - bottomPad };
 
-  let body = null;
-  if (state.status === 'loading') body = <SkeletonList />;
-  else if (state.status === 'error')
-    body = (
-      <Message
-        icon="cloud-offline-outline"
-        title="Couldn't load stations"
-        body="Check your connection and try again."
-        action="Retry"
-        onAction={() => load(genre)}
-      />
+  // The record fills ~70% of the width, but never so tall that the name and
+  // track line get pushed under the mini player.
+  const discSize = stage
+    ? Math.round(Math.min(stage.width * 0.7, (stage.height - TEXT_BLOCK) * 0.86, 440))
+    : 0;
+  const compact = stage ? stage.width < 420 : true;
+
+  const statusFor = (station) => (player.station?.id === station.id ? player.status : null);
+
+  const subtitleFor = (station) => {
+    const live = describePlayback(statusFor(station), player.trackTitle);
+    if (live) return live;
+    return [station.country, station.bitrate ? `${station.bitrate} kbps` : null].filter(Boolean).join(' · ') || 'Live radio';
+  };
+
+  let content;
+  if (!stage) content = null;
+  else if (data.status === 'ready' && stations.length > 0) {
+    content = (
+      <>
+        <RecordCarousel
+          key={genre}
+          items={stations}
+          index={index}
+          onIndexChange={setIndex}
+          onPressActive={player.toggle}
+          width={stage.width}
+          height={discSize + 40}
+          discSize={discSize}
+          renderItem={(station, i) => (
+            <Vinyl
+              station={station}
+              focused={i === index}
+              size={discSize}
+              status={statusFor(station)}
+              spinning={player.station?.id === station.id && player.status === 'playing'}
+            />
+          )}
+        />
+        <View style={styles.textSlot}>
+          {active && <StationText station={active} subtitle={subtitleFor(active)} compact={compact} />}
+        </View>
+      </>
     );
-  else if (state.stations.length === 0)
-    body = (
-      <Message
-        icon="radio-outline"
-        title={`No ${label} stations right now`}
-        body="None of the stations we found are broadcasting track info. Try another genre."
-      />
+  } else {
+    const loading = data.status === 'loading';
+    content = (
+      <>
+        <View style={{ height: discSize + 40, justifyContent: 'center' }}>
+          <Vinyl station={null} size={discSize} spinning={loading} />
+        </View>
+        <View style={styles.textSlot}>
+          {loading ? (
+            <Notice title="Tuning in…" body={`Finding ${label} stations on air`} />
+          ) : data.status === 'error' ? (
+            <Notice
+              title="Couldn't reach the airwaves"
+              body="Check your connection and try again."
+              action="Retry"
+              onAction={() => load(genre)}
+            />
+          ) : (
+            <Notice title={`No ${label} on air`} body="Try another genre." />
+          )}
+        </View>
+      </>
     );
+  }
+
+  const glow = active ? stationGradient(active)[0] : colors.accent;
 
   return (
     <View style={styles.screen}>
-      <FlatList
-        data={body ? [] : state.stations}
-        keyExtractor={(s) => s.id}
-        ListHeaderComponent={header}
-        ListEmptyComponent={body}
-        renderItem={({ item }) => (
-          <View style={styles.row}>
-            <StationCard station={item} active={current?.id === item.id} onPress={play} />
-          </View>
+      {/* Ambient wash tinted by the station in focus, Apple Music style. */}
+      <Animated.View
+        key={glow}
+        entering={FadeIn.duration(700)}
+        exiting={FadeOut.duration(700)}
+        pointerEvents="none"
+        style={StyleSheet.absoluteFill}
+      >
+        <LinearGradient
+          colors={[`${glow}45`, `${glow}10`, 'transparent']}
+          locations={[0, 0.45, 0.85]}
+          style={StyleSheet.absoluteFill}
+        />
+      </Animated.View>
+
+      <View style={[styles.header, { paddingTop: insets.top + space.lg }]}>
+        <Text style={styles.title}>Radio</Text>
+        {data.status === 'ready' && stations.length > 0 && (
+          <Text style={styles.counter}>
+            {String(index + 1).padStart(2, '0')}
+            <Text style={{ color: colors.textFaint }}> / {String(stations.length).padStart(2, '0')}</Text>
+          </Text>
         )}
-        ItemSeparatorComponent={() => <View style={{ height: space.sm }} />}
-        contentContainerStyle={styles.list}
-        showsVerticalScrollIndicator={false}
-      />
+      </View>
+      <GenrePills selected={genre} onSelect={setGenre} />
+
+      <View
+        style={[styles.stage, { paddingBottom: bottomPad }]}
+        onLayout={(e) => {
+          const { width, height } = e.nativeEvent.layout;
+          setLayout((l) => (l && l.width === width && l.height === height ? l : { width, height }));
+        }}
+      >
+        {content}
+        {data.status === 'ready' && !player.station && stations.length > 0 && (
+          <Text style={[styles.hint, { bottom: tabBarHeight + MINI_PLAYER_SPACE / 2 - 6 }]}>Swipe to browse · Tap the record to play</Text>
+        )}
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
-  list: { paddingBottom: space.xl },
-  row: { paddingHorizontal: space.lg },
-  hero: { paddingHorizontal: space.lg, paddingBottom: space.lg },
-  chips: { paddingHorizontal: space.lg, gap: space.sm, paddingBottom: space.lg },
-  chip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: radius.pill,
-    backgroundColor: colors.surfaceRaised,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-  },
-  chipActive: { backgroundColor: colors.text, borderColor: colors.text },
-  chipText: { color: colors.text, fontSize: 13, fontWeight: '600' },
-  chipTextActive: { color: colors.bg },
-  sectionHead: {
+  screen: { flex: 1, backgroundColor: colors.bg, overflow: 'hidden' },
+  header: {
     flexDirection: 'row',
     alignItems: 'baseline',
     justifyContent: 'space-between',
-    paddingHorizontal: space.lg,
-    marginBottom: space.md,
+    paddingHorizontal: space.xl,
+    paddingBottom: space.md,
   },
-  skeletonWrap: { paddingHorizontal: space.lg, gap: space.sm },
-  skeletonCard: {
-    flexDirection: 'row',
+  title: { fontFamily: fonts.semibold, color: colors.text, fontSize: 28, letterSpacing: -1 },
+  counter: { fontFamily: fonts.mono, color: colors.textMuted, fontSize: 12, letterSpacing: 1.5 },
+  pillsScroll: { flexGrow: 0, flexShrink: 0 },
+  pills: { paddingHorizontal: space.lg, gap: 2, alignItems: 'center' },
+  pill: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: radius.pill },
+  pillActive: { backgroundColor: 'rgba(255,255,255,0.12)' },
+  pillText: { fontFamily: fonts.semibold, color: colors.textFaint, fontSize: 14, letterSpacing: -0.1 },
+  pillTextActive: { color: colors.text },
+  stage: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  textSlot: { height: TEXT_BLOCK, alignSelf: 'stretch' },
+  textBlock: {
+    position: 'absolute',
+    top: space.md,
+    left: space.xl,
+    right: space.xl,
     alignItems: 'center',
-    gap: space.md,
-    padding: space.md,
-    borderRadius: radius.md,
-    backgroundColor: colors.surface,
+    gap: space.sm,
   },
-  skeletonLogo: { width: 56, height: 56, borderRadius: 10, backgroundColor: colors.surfaceRaised },
-  skeletonLine: { height: 12, borderRadius: 6, backgroundColor: colors.surfaceRaised },
-  checking: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm, paddingTop: space.md },
-  message: { alignItems: 'center', gap: space.sm, paddingHorizontal: space.xxl, paddingTop: space.xxl },
-  messageBody: { textAlign: 'center', maxWidth: 280 },
+  name: {
+    color: colors.text,
+    fontSize: 40,
+    lineHeight: 44,
+    fontFamily: fonts.bold,
+    letterSpacing: -1.4,
+    textAlign: 'center',
+  },
+  nameCompact: { fontSize: 30, lineHeight: 34, letterSpacing: -0.9 },
+  subtitle: { fontFamily: fonts.medium, color: colors.textMuted, fontSize: 15, textAlign: 'center' },
+  hint: { position: 'absolute', bottom: MINI_PLAYER_SPACE / 2 - 6, fontFamily: fonts.mono, color: colors.textFaint, fontSize: 10.5, letterSpacing: 2, textTransform: 'uppercase' },
   retry: {
     marginTop: space.sm,
     paddingHorizontal: space.xl,
@@ -201,5 +295,5 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     backgroundColor: colors.text,
   },
-  retryText: { color: colors.bg, fontWeight: '700' },
+  retryText: { fontFamily: fonts.semibold, color: colors.bg },
 });

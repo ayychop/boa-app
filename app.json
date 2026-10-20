@@ -7,7 +7,12 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "UIBackgroundModes": [
+          "audio"
+        ]
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -21,6 +26,10 @@
       "favicon": "./assets/favicon.png",
       "backgroundColor": "#0B0B0D"
     },
-    "backgroundColor": "#0B0B0D"
+    "backgroundColor": "#0B0B0D",
+    "plugins": [
+      "expo-font",
+      "expo-asset"
+    ]
   }
 }

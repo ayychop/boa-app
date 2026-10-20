@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Image, StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { colors } from '../theme';
+import { colors, fonts } from '../theme';
 
 const GRADIENTS = [
   ['#E50914', '#5B0A10'],
@@ -18,6 +18,10 @@ function hash(str) {
   return Math.abs(h);
 }
 
+export function stationGradient(station) {
+  return GRADIENTS[hash(station.id) % GRADIENTS.length];
+}
+
 function initials(name) {
   const words = name.replace(/[^\p{L}\p{N}\s]/gu, ' ').split(/\s+/).filter(Boolean);
   return (words.length > 1 ? words[0][0] + words[1][0] : (words[0] || '?').slice(0, 2)).toUpperCase();
@@ -25,8 +29,9 @@ function initials(name) {
 
 // Many radio-browser favicons are missing or dead links, so every logo has a
 // generated fallback that stays stable per station.
-export default function StationLogo({ station, size = 56, rounded = 10 }) {
+export default function StationLogo({ station, size = 56, rounded = 10, fit = 'contain' }) {
   const [failed, setFailed] = useState(false);
+  useEffect(() => setFailed(false), [station.logo]);
   const frame = { width: size, height: size, borderRadius: rounded };
 
   if (station.logo && !failed) {
@@ -35,7 +40,7 @@ export default function StationLogo({ station, size = 56, rounded = 10 }) {
         <Image
           source={{ uri: station.logo }}
           style={styles.image}
-          resizeMode="contain"
+          resizeMode={fit}
           onError={() => setFailed(true)}
         />
       </View>
@@ -44,7 +49,7 @@ export default function StationLogo({ station, size = 56, rounded = 10 }) {
 
   return (
     <LinearGradient
-      colors={GRADIENTS[hash(station.id) % GRADIENTS.length]}
+      colors={stationGradient(station)}
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
       style={[styles.frame, frame, styles.center]}
@@ -58,5 +63,5 @@ const styles = StyleSheet.create({
   frame: { overflow: 'hidden', backgroundColor: colors.surfaceRaised },
   image: { width: '100%', height: '100%' },
   center: { alignItems: 'center', justifyContent: 'center' },
-  initials: { color: 'rgba(255,255,255,0.92)', fontWeight: '800', letterSpacing: -0.5 },
+  initials: { fontFamily: fonts.extrabold, color: 'rgba(255,255,255,0.92)', letterSpacing: -0.5 },
 });
