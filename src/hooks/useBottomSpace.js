@@ -6,6 +6,6 @@ import { MINI_PLAYER_SPACE } from '../components/MiniPlayer';
 // player once something is playing; scroll views pad by this much.
 export default function useBottomSpace(extra = 0) {
   const tabBar = useBottomTabBarHeight();
-  const { station } = usePlayer();
-  return tabBar + (station ? MINI_PLAYER_SPACE : 0) + extra;
+  const { current } = usePlayer();
+  return tabBar + (current ? MINI_PLAYER_SPACE : 0) + extra;
 }

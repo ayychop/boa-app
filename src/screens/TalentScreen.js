@@ -3,7 +3,8 @@ import { Linking, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeIn, FadeInDown, LinearTransition } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
-import { brand, talent } from '../data/boaContent';
+import { talent } from '../data/boaContent';
+import { useForms } from '../context/FormsContext';
 import Headshot from '../components/Headshot';
 import BottomSheet from '../components/BottomSheet';
 import { Button, Fog, Slate, Tappable } from '../components/ui';
@@ -51,6 +52,7 @@ export default function TalentScreen({ route, navigation }) {
   const [filter, setFilter] = useState('all');
   const [selected, setSelected] = useState(null);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const forms = useForms();
 
   const open = (person) => {
     setSelected(person);
@@ -134,7 +136,7 @@ export default function TalentScreen({ route, navigation }) {
           <Text style={[type.bodyMuted, { textAlign: 'center', marginTop: space.sm }]}>
             No agent. No followers. No fee. Send us what you have and a real person will watch it.
           </Text>
-          <Button label="Get seen" icon="arrow-forward" onPress={() => Linking.openURL(brand.submitUrl)} style={{ marginTop: space.xl }} />
+          <Button label="Get seen" icon="arrow-forward" onPress={forms.openGetSeen} style={{ marginTop: space.xl }} />
         </Animated.View>
       </ScrollView>
 
@@ -157,7 +159,10 @@ export default function TalentScreen({ route, navigation }) {
                 label="Enquire"
                 icon="mail-outline"
                 variant="ghost"
-                onPress={() => Linking.openURL(selected.enquireUrl)}
+                onPress={() => {
+                  setSheetOpen(false);
+                  forms.openContact({ subject: `Booking enquiry: ${selected.name}` });
+                }}
                 style={{ flex: 1 }}
               />
             </View>

@@ -2,49 +2,74 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import * as engine from '../audio/engine';
 
 const PlayerContext = createContext(null);
+// Position ticks several times a second; keep it in its own context so only
+// scrubbers and progress bars re-render, not the whole app.
+const ProgressContext = createContext({ position: 0, duration: 0 });
 
 export function PlayerProvider({ children }) {
-  const [station, setStation] = useState(null);
-  const [audio, setAudio] = useState({ status: 'idle', title: null });
+  // What's loaded: a radio station or a podcast episode (see audio/engine.js).
+  const [current, setCurrent] = useState(null);
+  const [core, setCore] = useState({ status: 'idle', title: null, rate: 1 });
+  const [progress, setProgress] = useState({ position: 0, duration: 0 });
 
-  useEffect(() => engine.subscribe(setAudio), []);
+  useEffect(
+    () =>
+      engine.subscribe((s) => {
+        setCore((c) => (c.status === s.status && c.title === s.title && c.rate === s.rate ? c : { status: s.status, title: s.title, rate: s.rate }));
+        setProgress((p) => (p.position === s.position && p.duration === s.duration ? p : { position: s.position, duration: s.duration }));
+      }),
+    [],
+  );
 
-  const play = useCallback((next) => {
-    setStation(next);
-    engine.play(next);
+  const play = useCallback((item) => {
+    setCurrent(item);
+    engine.play(item);
   }, []);
 
   const pause = useCallback(() => engine.pause(), []);
 
-  // Tapping a record: pause it if it's the one playing, otherwise play it.
+  const isPlaying = core.status === 'playing' || core.status === 'loading';
+
+  // Tapping a record or cover: pause it if it's the one playing, else play it.
   const toggle = useCallback(
-    (target = station) => {
+    (target = current) => {
       if (!target) return;
-      const active = target.id === station?.id;
-      if (active && (audio.status === 'playing' || audio.status === 'loading')) pause();
+      if (target.id === current?.id && isPlaying) pause();
       else play(target);
     },
-    [station, audio.status, play, pause],
+    [current, isPlaying, play, pause],
   );
 
   const value = useMemo(
     () => ({
-      station,
-      status: audio.status,
-      trackTitle: audio.title,
-      isPlaying: audio.status === 'playing' || audio.status === 'loading',
+      current,
+      status: core.status,
+      trackTitle: core.title,
+      rate: core.rate,
+      isPlaying,
       play,
       pause,
       toggle,
+      seek: engine.seek,
+      skip: engine.skip,
+      setRate: engine.setRate,
     }),
-    [station, audio, play, pause, toggle],
+    [current, core, isPlaying, play, pause, toggle],
   );
 
-  return <PlayerContext.Provider value={value}>{children}</PlayerContext.Provider>;
+  return (
+    <PlayerContext.Provider value={value}>
+      <ProgressContext.Provider value={progress}>{children}</ProgressContext.Provider>
+    </PlayerContext.Provider>
+  );
 }
 
 export function usePlayer() {
   const ctx = useContext(PlayerContext);
   if (!ctx) throw new Error('usePlayer must be used inside <PlayerProvider>');
   return ctx;
+}
+
+export function usePlaybackProgress() {
+  return useContext(ProgressContext);
 }

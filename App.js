@@ -21,6 +21,7 @@ import { JetBrainsMono_400Regular, JetBrainsMono_500Medium } from '@expo-google-
 import { InstrumentSerif_400Regular_Italic } from '@expo-google-fonts/instrument-serif';
 import { PlayerProvider } from './src/context/PlayerContext';
 import { MediaProvider } from './src/context/MediaContext';
+import { FormsProvider } from './src/context/FormsContext';
 import MiniPlayer from './src/components/MiniPlayer';
 import HomeScreen from './src/screens/HomeScreen';
 import RadioScreen from './src/screens/RadioScreen';
@@ -91,7 +92,7 @@ const Profile = withTransition(ProfileScreen);
 function FloatingTabBar(props) {
   return (
     <View style={styles.tabBarWrap} pointerEvents="box-none">
-      <MiniPlayer onOpen={() => props.navigation.navigate('Radio')} />
+      <MiniPlayer onOpenRadio={() => props.navigation.navigate('Radio')} />
       <BottomTabBar {...props} />
     </View>
   );
@@ -126,35 +127,37 @@ export default function App() {
       <SafeAreaProvider>
         <PlayerProvider>
           <MediaProvider>
-            <NavigationContainer theme={navTheme}>
-              <StatusBar style="light" />
-              <Tab.Navigator
-                initialRouteName="Home"
-                tabBar={(props) => <FloatingTabBar {...props} />}
-                screenOptions={({ route }) => ({
-                  headerShown: false,
-                  tabBarActiveTintColor: colors.gold,
-                  tabBarInactiveTintColor: colors.textFaint,
-                  tabBarStyle: {
-                    backgroundColor: 'transparent',
-                    borderTopColor: colors.border,
-                    borderTopWidth: StyleSheet.hairlineWidth,
-                    elevation: 0,
-                  },
-                  tabBarBackground: () => <TabBarBackground />,
-                  tabBarLabelStyle: { fontFamily: fonts.semibold, fontSize: 10.5, letterSpacing: 0.2 },
-                  tabBarIcon: ({ focused, color, size }) => (
-                    <Ionicons name={ICONS[route.name][focused ? 0 : 1]} size={size - 3} color={color} />
-                  ),
-                })}
-              >
-                <Tab.Screen name="Home" component={Home} />
-                <Tab.Screen name="Radio" component={Radio} />
-                <Tab.Screen name="Originals" component={Originals} options={{ title: 'Originals' }} />
-                <Tab.Screen name="Talent" component={Talent} />
-                <Tab.Screen name="Profile" component={Profile} />
-              </Tab.Navigator>
-            </NavigationContainer>
+            <FormsProvider>
+              <NavigationContainer theme={navTheme}>
+                <StatusBar style="light" />
+                <Tab.Navigator
+                  initialRouteName="Home"
+                  tabBar={(props) => <FloatingTabBar {...props} />}
+                  screenOptions={({ route }) => ({
+                    headerShown: false,
+                    tabBarActiveTintColor: colors.gold,
+                    tabBarInactiveTintColor: colors.textFaint,
+                    tabBarStyle: {
+                      backgroundColor: 'transparent',
+                      borderTopColor: colors.border,
+                      borderTopWidth: StyleSheet.hairlineWidth,
+                      elevation: 0,
+                    },
+                    tabBarBackground: () => <TabBarBackground />,
+                    tabBarLabelStyle: { fontFamily: fonts.semibold, fontSize: 10.5, letterSpacing: 0.2 },
+                    tabBarIcon: ({ focused, color, size }) => (
+                      <Ionicons name={ICONS[route.name][focused ? 0 : 1]} size={size - 3} color={color} />
+                    ),
+                  })}
+                >
+                  <Tab.Screen name="Home" component={Home} />
+                  <Tab.Screen name="Radio" component={Radio} />
+                  <Tab.Screen name="Originals" component={Originals} options={{ title: 'Originals' }} />
+                  <Tab.Screen name="Talent" component={Talent} />
+                  <Tab.Screen name="Profile" component={Profile} />
+                </Tab.Navigator>
+              </NavigationContainer>
+            </FormsProvider>
           </MediaProvider>
         </PlayerProvider>
       </SafeAreaProvider>

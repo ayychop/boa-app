@@ -1,5 +1,5 @@
-import { useEffect } from 'react';
-import { Modal, Pressable, StyleSheet, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { interpolate, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { GestureDetector, GestureHandlerRootView, usePanGesture } from 'react-native-gesture-handler';
@@ -11,19 +11,26 @@ const OFFSCREEN = 900;
 
 /**
  * Spring-loaded bottom sheet. Drag it down (or tap outside) to dismiss.
- * `open` toggles it; `onClose` fires once it has fully left the screen.
+ * `open` toggles it (closing always animates out); `onClose` asks the parent
+ * to set `open` to false.
+ * Forms pass `dragAnywhere={false}` so only the handle drags, leaving
+ * scrolling and text selection to the content.
  */
-export default function BottomSheet({ open, onClose, children }) {
+export default function BottomSheet({ open, onClose, children, dragAnywhere = true }) {
   const insets = useSafeAreaInsets();
   const y = useSharedValue(OFFSCREEN);
+  const [mounted, setMounted] = useState(open);
 
   useEffect(() => {
-    if (open) y.value = withSpring(0, OPEN);
+    if (open) {
+      setMounted(true);
+      y.value = withSpring(0, OPEN);
+    } else {
+      y.value = withTiming(OFFSCREEN, { duration: 240 }, (done) => done && scheduleOnRN(setMounted, false));
+    }
   }, [open, y]);
 
-  const dismiss = () => {
-    y.value = withTiming(OFFSCREEN, { duration: 260 }, (done) => done && scheduleOnRN(onClose));
-  };
+  const dismiss = () => onClose();
 
   const pan = usePanGesture({
     activeOffsetY: 6,
@@ -34,18 +41,15 @@ export default function BottomSheet({ open, onClose, children }) {
     },
     onDeactivate: (e) => {
       'worklet';
-      if (e.translationY > 120 || e.velocityY > 900) {
-        y.value = withTiming(OFFSCREEN, { duration: 220 }, (done) => done && scheduleOnRN(onClose));
-      } else {
-        y.value = withSpring(0, { ...OPEN, velocity: e.velocityY });
-      }
+      if (e.translationY > 120 || e.velocityY > 900) scheduleOnRN(onClose);
+      else y.value = withSpring(0, { ...OPEN, velocity: e.velocityY });
     },
   });
 
   const sheetStyle = useAnimatedStyle(() => ({ transform: [{ translateY: y.value }] }));
   const backdropStyle = useAnimatedStyle(() => ({ opacity: interpolate(y.value, [0, 500], [1, 0], 'clamp') }));
 
-  if (!open) return null;
+  if (!mounted) return null;
 
   return (
     <Modal visible transparent animationType="none" onRequestClose={dismiss} statusBarTranslucent>
@@ -53,12 +57,29 @@ export default function BottomSheet({ open, onClose, children }) {
         <Animated.View style={[StyleSheet.absoluteFill, styles.backdrop, backdropStyle]}>
           <Pressable style={StyleSheet.absoluteFill} onPress={dismiss} accessibilityLabel="Close" />
         </Animated.View>
-        <GestureDetector gesture={pan}>
-          <Animated.View style={[styles.sheet, { paddingBottom: insets.bottom + space.xl }, sheetStyle]}>
-            <View style={styles.grabber} />
-            {children}
-          </Animated.View>
-        </GestureDetector>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.avoider}
+          pointerEvents="box-none"
+        >
+          {dragAnywhere ? (
+            <GestureDetector gesture={pan}>
+              <Animated.View style={[styles.sheet, { paddingBottom: insets.bottom + space.xl }, sheetStyle]}>
+                <View style={styles.grabber} />
+                {children}
+              </Animated.View>
+            </GestureDetector>
+          ) : (
+            <Animated.View style={[styles.sheet, { paddingBottom: insets.bottom + space.lg }, sheetStyle]}>
+              <GestureDetector gesture={pan}>
+                <View style={styles.handleZone}>
+                  <View style={styles.grabber} />
+                </View>
+              </GestureDetector>
+              {children}
+            </Animated.View>
+          )}
+        </KeyboardAvoidingView>
       </GestureHandlerRootView>
     </Modal>
   );
@@ -66,15 +87,11 @@ export default function BottomSheet({ open, onClose, children }) {
 
 const styles = StyleSheet.create({
   backdrop: { backgroundColor: 'rgba(0,0,0,0.6)' },
+  avoider: { flex: 1, justifyContent: 'flex-end', alignItems: 'center' },
   sheet: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    alignSelf: 'center',
     maxWidth: 640,
     width: '100%',
-    marginHorizontal: 'auto',
+    maxHeight: '92%',
     backgroundColor: colors.bgElevated,
     borderTopLeftRadius: radius.xl,
     borderTopRightRadius: radius.xl,
@@ -84,6 +101,8 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     boxShadow: '0px -20px 60px rgba(0,0,0,0.6)',
   },
+  // Taller than the grabber itself so it's easy to catch.
+  handleZone: { marginTop: -space.md, paddingTop: space.md, cursor: 'grab' },
   grabber: {
     alignSelf: 'center',
     width: 40,

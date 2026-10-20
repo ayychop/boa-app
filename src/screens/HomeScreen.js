@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Linking, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
   Easing,
@@ -12,19 +12,21 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
-import { brand, featuredProduction, productions, talent } from '../data/boaContent';
-import { fetchStationsByTag } from '../api/radio';
+import { featuredProduction, productions, talent } from '../data/boaContent';
+import { podcasts } from '../data/podcasts';
+import { fetchTier1Stations } from '../api/radio';
 import { usePlayer } from '../context/PlayerContext';
 import { useMedia } from '../context/MediaContext';
+import { useForms } from '../context/FormsContext';
 import BoaLogo from '../components/BoaLogo';
 import Headshot from '../components/Headshot';
 import Poster, { metaLine } from '../components/Poster';
+import PodcastCover from '../components/PodcastCover';
 import StationLogo from '../components/StationLogo';
 import { Button, Fog, SectionHeader, Slate, Tappable, Viewfinder } from '../components/ui';
 import useBottomSpace from '../hooks/useBottomSpace';
 import { colors, fonts, space, type } from '../theme';
 
-const TRENDING_GENRE = 'afrobeats';
 const METAL = ['#F2F2F4', '#8A8A90', '#FAFAFB', '#5E5E64', '#D9D9DD'];
 
 function Hero({ production, width, height }) {
@@ -118,12 +120,16 @@ export default function HomeScreen({ navigation }) {
   const { width, height } = useWindowDimensions();
   const bottom = useBottomSpace(space.xxl);
   const player = usePlayer();
+  const media = useMedia();
+  const forms = useForms();
   const [trending, setTrending] = useState(null);
 
+  // Curated Tier 1 only: premium R&B / Hip Hop that's been test-played and
+  // streams directly in the app, so the first tap always just plays.
   useEffect(() => {
     let alive = true;
-    fetchStationsByTag(TRENDING_GENRE)
-      .then((s) => alive && setTrending(s.slice(0, 5)))
+    fetchTier1Stations({ limit: 5 })
+      .then((s) => alive && setTrending(s))
       .catch(() => alive && setTrending([]));
     return () => {
       alive = false;
@@ -132,7 +138,7 @@ export default function HomeScreen({ navigation }) {
 
   const playStation = (station) => {
     player.play(station);
-    navigation.navigate('Radio', { genre: TRENDING_GENRE, stationId: station.id });
+    navigation.navigate('Radio', { genre: station.genre, station });
   };
 
   const heroHeight = Math.min(Math.max(height * 0.78, 520), 820);
@@ -146,13 +152,16 @@ export default function HomeScreen({ navigation }) {
         <View style={styles.section}>
           <SectionHeader
             index="01"
-            kicker="BOA Radio"
+            kicker="R&B · Hip Hop"
             title="Trending on BOA Radio"
             action="Open radio"
             onAction={() => navigation.navigate('Radio')}
           />
           {trending === null ? (
-            <ActivityIndicator color={colors.textMuted} style={{ height: 120 }} />
+            <View style={styles.tuning}>
+              <ActivityIndicator color={colors.textMuted} />
+              <Slate>Tuning the premium stations…</Slate>
+            </View>
           ) : trending.length === 0 ? (
             <Text style={[type.bodyMuted, { paddingHorizontal: space.xl }]}>Stations are off air right now.</Text>
           ) : (
@@ -162,7 +171,7 @@ export default function HomeScreen({ navigation }) {
                   <TrendingStation
                     station={s}
                     onPress={playStation}
-                    live={player.station?.id === s.id && player.isPlaying}
+                    live={player.current?.id === s.id && player.isPlaying}
                   />
                 </Animated.View>
               ))}
@@ -188,8 +197,41 @@ export default function HomeScreen({ navigation }) {
         </View>
 
         <View style={styles.section}>
+          <SectionHeader index="03" kicker="Listen" title="BOA Podcasts" />
+          <Row>
+            {podcasts.map((pod, i) => {
+              const live = player.current?.podcastId === pod.id && player.isPlaying;
+              return (
+                <Animated.View key={pod.id} entering={FadeIn.delay(i * 70)}>
+                  <Tappable
+                    onPress={() => media.openPodcast(pod)}
+                    style={styles.podcast}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${pod.title} podcast`}
+                  >
+                    <PodcastCover podcast={pod} size={148} rounded={18} />
+                    {live && (
+                      <View style={[styles.liveBadge, styles.podLive]}>
+                        <View style={styles.liveDot} />
+                        <Text style={styles.liveText}>PLAYING</Text>
+                      </View>
+                    )}
+                    <Text style={styles.podTitle} numberOfLines={1}>
+                      {pod.title}
+                    </Text>
+                    <Text style={styles.personRole} numberOfLines={1}>
+                      {pod.category} · {pod.episodes.length} episodes
+                    </Text>
+                  </Tappable>
+                </Animated.View>
+              );
+            })}
+          </Row>
+        </View>
+
+        <View style={styles.section}>
           <SectionHeader
-            index="03"
+            index="04"
             kicker="The roster"
             title="Our Talent"
             action="See all"
@@ -219,7 +261,7 @@ export default function HomeScreen({ navigation }) {
         <View style={styles.mission}>
           <Fog opacity={0.28} />
           <Viewfinder inset={12} size={12} />
-          <Slate dot>04 · The mission</Slate>
+          <Slate dot>05 · The mission</Slate>
           <Text style={[type.h1, { marginTop: space.md }]}>
             Talent is everywhere. <Text style={type.serif}>Opportunity is not.</Text>
           </Text>
@@ -235,7 +277,7 @@ export default function HomeScreen({ navigation }) {
               </View>
             ))}
           </View>
-          <Button label="Get seen" icon="arrow-forward" onPress={() => Linking.openURL(brand.submitUrl)} style={{ alignSelf: 'flex-start', marginTop: space.xl }} />
+          <Button label="Get seen" icon="arrow-forward" onPress={forms.openGetSeen} style={{ alignSelf: 'flex-start', marginTop: space.xl }} />
         </View>
       </ScrollView>
     </View>
@@ -276,6 +318,10 @@ const styles = StyleSheet.create({
   liveText: { fontFamily: fonts.mono, fontSize: 9, letterSpacing: 1.2, color: colors.live },
   stationName: { fontFamily: fonts.semibold, fontSize: 12.5, color: colors.text, marginTop: 10, maxWidth: 104 },
   person: { width: 104, alignItems: 'center' },
+  tuning: { height: 120, alignItems: 'center', justifyContent: 'center', gap: space.md },
+  podcast: { width: 148 },
+  podLive: { top: 10, left: 10 },
+  podTitle: { fontFamily: fonts.semibold, fontSize: 13.5, color: colors.text, marginTop: 10 },
   personName: { fontFamily: fonts.semibold, fontSize: 13, color: colors.text, marginTop: 10, maxWidth: 104 },
   personRole: { fontFamily: fonts.medium, fontSize: 11, color: colors.textFaint, marginTop: 2 },
   mission: {

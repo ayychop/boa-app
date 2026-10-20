@@ -55,28 +55,27 @@ export const productions = [
     trailerYouTubeId: null,
     episodes: [],
   },
-  // The site lists two more "Coming Soon" slots with no titles. These titles
-  // come from the product brief and don't appear on boanetworks.com yet.
+  // The site lists these two as untitled "Coming Soon" slots.
   {
-    id: 'northern-line',
-    title: 'Northern Line',
-    format: null,
-    genres: [],
+    id: 'mind-states-3',
+    title: 'Mind States 3',
+    format: 'Series',
+    genres: ['Crime', 'Drama', 'Thriller'],
     year: null,
     status: 'coming-soon',
-    logline: null, // TODO: confirm with BOA
+    logline: null, // TODO: not published yet
     image: null,
     trailerYouTubeId: null,
     episodes: [],
   },
   {
-    id: 'the-quiet-hours',
-    title: 'The Quiet Hours',
-    format: null,
-    genres: [],
+    id: 'mind-states-4',
+    title: 'Mind States 4',
+    format: 'Series',
+    genres: ['Crime', 'Drama', 'Thriller'],
     year: null,
     status: 'coming-soon',
-    logline: null, // TODO: confirm with BOA
+    logline: null, // TODO: not published yet
     image: null,
     trailerYouTubeId: null,
     episodes: [],

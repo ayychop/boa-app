@@ -95,10 +95,17 @@ export default function RadioScreen({ route, navigation }) {
     try {
       const stations = await fetchStationsByTag(tag);
       if (id !== requestRef.current) return;
-      const focus = stations.findIndex((s) => s.id === pendingFocus.current);
+      const wanted = pendingFocus.current;
       pendingFocus.current = null;
-      if (focus > 0) setIndex(focus);
-      setData({ status: 'ready', stations });
+      let list = stations;
+      if (wanted) {
+        const i = stations.findIndex((s) => s.id === wanted.id);
+        // A curated pick from Home may not be in this genre's list; give it
+        // the first record rather than leaving it off the carousel.
+        if (i < 0) list = [wanted, ...stations];
+        setIndex(Math.max(i, 0));
+      }
+      setData({ status: 'ready', stations: list });
     } catch {
       if (id === requestRef.current) setData({ status: 'error', stations: [] });
     }
@@ -108,14 +115,19 @@ export default function RadioScreen({ route, navigation }) {
     load(genre);
   }, [genre, load]);
 
-  const focus = route.params?.stationId;
+  // Home deep-links here with { station, genre } to centre that record.
+  const focus = route.params?.station;
   useEffect(() => {
     if (!focus) return;
     const nextGenre = route.params.genre ?? genre;
-    navigation.setParams({ stationId: undefined, genre: undefined });
+    navigation.setParams({ station: undefined, genre: undefined });
     if (nextGenre === genre && data.status === 'ready') {
-      const i = data.stations.findIndex((s) => s.id === focus);
+      const i = data.stations.findIndex((s) => s.id === focus.id);
       if (i >= 0) setIndex(i);
+      else {
+        setData((d) => ({ ...d, stations: [focus, ...d.stations] }));
+        setIndex(0);
+      }
       return;
     }
     // Otherwise centre it once the (new) genre finishes loading.
@@ -142,7 +154,7 @@ export default function RadioScreen({ route, navigation }) {
     : 0;
   const compact = stage ? stage.width < 420 : true;
 
-  const statusFor = (station) => (player.station?.id === station.id ? player.status : null);
+  const statusFor = (station) => (player.current?.id === station.id ? player.status : null);
 
   const subtitleFor = (station) => {
     const live = describePlayback(statusFor(station), player.trackTitle);
@@ -170,7 +182,7 @@ export default function RadioScreen({ route, navigation }) {
               focused={i === index}
               size={discSize}
               status={statusFor(station)}
-              spinning={player.station?.id === station.id && player.status === 'playing'}
+              spinning={player.current?.id === station.id && player.status === 'playing'}
             />
           )}
         />
@@ -242,7 +254,7 @@ export default function RadioScreen({ route, navigation }) {
         }}
       >
         {content}
-        {data.status === 'ready' && !player.station && stations.length > 0 && (
+        {data.status === 'ready' && !player.current && stations.length > 0 && (
           <Text style={[styles.hint, { bottom: tabBarHeight + MINI_PLAYER_SPACE / 2 - 6 }]}>Swipe to browse · Tap the record to play</Text>
         )}
       </View>

@@ -74,13 +74,15 @@ function hasValidStreamUrl(station) {
 }
 
 /**
- * Ask the stream for ICY metadata and resolve true if the server announces an
- * `icy-metaint` interval, i.e. it interleaves StreamTitle (current track) data.
+ * Open the stream just long enough to read its response headers.
+ * Resolves { ok, icy, audio }: a 2xx/3xx answer, whether the server announces
+ * an `icy-metaint` interval (it interleaves StreamTitle, i.e. current-track,
+ * data), and whether it says it's sending audio.
  *
  * Uses XMLHttpRequest because RN's fetch only resolves once the body finishes,
  * which never happens for a live stream. We abort as soon as headers arrive.
  */
-function probeIcyMetadata(url) {
+function probeStream(url) {
   return new Promise((resolve) => {
     const xhr = new XMLHttpRequest();
     let settled = false;
@@ -93,24 +95,33 @@ function probeIcyMetadata(url) {
       } catch {}
       resolve(result);
     };
-    const timer = setTimeout(() => finish(false), PROBE_TIMEOUT_MS);
+    const timer = setTimeout(() => finish({ ok: false }), PROBE_TIMEOUT_MS);
 
     xhr.onreadystatechange = () => {
       if (xhr.readyState >= 2) {
-        const ok = xhr.status >= 200 && xhr.status < 400;
-        finish(ok && !!xhr.getResponseHeader('icy-metaint'));
+        const type = xhr.getResponseHeader('content-type') || '';
+        finish({
+          ok: xhr.status >= 200 && xhr.status < 400,
+          icy: !!xhr.getResponseHeader('icy-metaint'),
+          audio: /^(audio\/|application\/ogg)/i.test(type),
+        });
       }
     };
-    xhr.onerror = () => finish(false);
+    xhr.onerror = () => finish({ ok: false });
 
     try {
       xhr.open('GET', url);
       xhr.setRequestHeader('Icy-MetaData', '1');
       xhr.send();
     } catch {
-      finish(false);
+      finish({ ok: false });
     }
   });
+}
+
+async function probeIcyMetadata(url) {
+  const r = await probeStream(url);
+  return r.ok && r.icy;
 }
 
 // Probe in popularity order, a few at a time, and stop launching new probes
@@ -134,6 +145,7 @@ async function takeVerified(candidates, limit, check) {
 
 function normalize(station, metadataVerified) {
   return {
+    kind: 'radio',
     id: station.stationuuid,
     name: station.name.trim(),
     streamUrl: station.url_resolved,
@@ -217,6 +229,120 @@ async function loadStations(tag, options) {
     async (s) => s.has_extended_info || (await probeIcyMetadata(s.url_resolved)),
   );
   return verified.map((s) => normalize(s, true));
+}
+
+// --- Tier 1: curated, guaranteed in-app streams ----------------------------
+
+const TIER1_GENRES = [
+  { genre: 'rnb', tags: ['rnb', 'r&b'] },
+  { genre: 'hip hop', tags: ['hip hop', 'hiphop', 'hip-hop'] },
+];
+const TIER1_TAGS = new Set(TIER1_GENRES.flatMap((g) => g.tags));
+const TIER1_TIMEOUT_MS = 6000;
+
+// Tier 1 judges the URL the app actually plays (url_resolved). Anything that
+// is still a playlist (.m3u/.pls/...) or HLS there would need another hop or
+// an external player, so it's a "deep link" stream and is skipped. A station
+// whose directory link was a playlist that radio-browser already resolved to
+// a direct MP3 is fine: we play the MP3, and probePlayback proves it.
+function isTier1(station) {
+  if (!hasValidStreamUrl(station)) return false;
+  if (/\.(m3u8?|pls|asx|xspf)(\?|$)/i.test(station.url_resolved)) return false;
+  if (station.ssl_error) return false;
+  // MP3 is the one codec every browser and both native players decode.
+  if (station.codec !== 'MP3' || (station.bitrate || 0) < 128) return false;
+  // Keyword-stuffed directory names ("# TOP 100 CLUB CHARTS - ...").
+  const name = station.name.trim();
+  if (/^[\W_]/.test(name) || name.length > 40) return false;
+  // Genre must be a headline tag, not one of twenty.
+  const tags = station.tags.split(',').map((t) => t.trim().toLowerCase());
+  return tags.slice(0, 3).some((t) => TIER1_TAGS.has(t)) || /hip.?hop|r&b|rnb|\brap\b|urban/i.test(name);
+}
+
+// Web: let a real <audio> element prove the stream decodes and buffers.
+function probePlayback(url) {
+  return new Promise((resolve) => {
+    const el = new window.Audio();
+    let timer = null;
+    const finish = (ok) => {
+      clearTimeout(timer);
+      el.oncanplay = el.onerror = null;
+      el.removeAttribute('src');
+      el.load();
+      resolve(ok);
+    };
+    timer = setTimeout(() => finish(false), TIER1_TIMEOUT_MS);
+    el.muted = true;
+    el.preload = 'auto';
+    el.oncanplay = () => finish(true);
+    el.onerror = () => finish(false);
+    el.src = url;
+  });
+}
+
+async function playsInApp(station) {
+  if (Platform.OS === 'web') return probePlayback(station.url_resolved);
+  const r = await probeStream(station.url_resolved);
+  return r.ok && (r.audio || r.icy);
+}
+
+async function searchExactTag(tag) {
+  const { data } = await apiGet('/json/stations/search', {
+    params: { tag, tagExact: true, hidebroken: true, order: 'votes', reverse: true, limit: 40 },
+  });
+  return data;
+}
+
+async function loadTier1(limit) {
+  // Rank each genre by votes, then alternate R&B / Hip Hop so the row mixes.
+  const perGenre = await Promise.all(
+    TIER1_GENRES.map(async ({ genre, tags }) => {
+      const lists = await Promise.all(tags.map((t) => searchExactTag(t).catch(() => [])));
+      return lists
+        .flat()
+        .filter(isTier1)
+        .sort((a, b) => b.votes - a.votes)
+        .map((s) => ({ ...s, _genre: genre }));
+    }),
+  );
+  const seen = new Set();
+  const mixed = [];
+  // "TMM 2" and "TMM 2 (HQ)" are one station at two bitrates.
+  const nameKey = (name) =>
+    name
+      .toLowerCase()
+      .replace(/\(.*?\)|\b(hq|hd|\d+\s?k(bps)?|mp3|aac)\b/g, '')
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim();
+  for (let i = 0; i < Math.max(...perGenre.map((l) => l.length)); i++) {
+    for (const list of perGenre) {
+      const s = list[i];
+      const key = s && nameKey(s.name);
+      if (!s || seen.has(s.url_resolved) || seen.has(key)) continue;
+      seen.add(s.url_resolved);
+      seen.add(key);
+      mixed.push(s);
+    }
+  }
+  const verified = await takeVerified(mixed.slice(0, limit * 4), limit, playsInApp);
+  return verified.map((s) => ({ ...normalize(s, !!s.has_extended_info), genre: s._genre, tier: 1 }));
+}
+
+/**
+ * Premium R&B and Hip Hop stations that are proven to play inside the app:
+ * direct (non-redirect) HTTPS MP3 streams at 128 kbps or better, each one
+ * test-played before it's returned. Used for Home's "Trending on BOA Radio".
+ */
+export function fetchTier1Stations({ limit = 5 } = {}) {
+  const key = `tier1|${limit}`;
+  const hit = cache.get(key);
+  if (hit && Date.now() - hit.at < CACHE_TTL_MS) return hit.promise;
+  const promise = loadTier1(limit).catch((err) => {
+    cache.delete(key);
+    throw err;
+  });
+  cache.set(key, { at: Date.now(), promise });
+  return promise;
 }
 
 export const GENRES = [
