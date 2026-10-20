@@ -8,6 +8,7 @@ import Animated, {
   useSharedValue,
   withRepeat,
   withSequence,
+  withSpring,
   withTiming,
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -61,13 +62,29 @@ export default function Vinyl({ station, size, spinning, status = null, focused 
 
   const spinStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${angle.value}deg` }] }));
 
+  // Dynamic Island-style "pop" when a tap starts or stops this record: a quick
+  // dip, then an under-damped spring back. Transform only, on the UI thread.
+  const pop = useSharedValue(1);
+  const lastStatus = useRef(status);
+  useEffect(() => {
+    const prev = lastStatus.current;
+    lastStatus.current = status;
+    const tapped = (status === 'loading' && prev !== 'loading') || (status === 'paused' && prev !== 'paused');
+    if (!tapped || reduceMotion) return;
+    pop.value = withSequence(
+      withTiming(0.955, { duration: 90, easing: Easing.bezier(0.23, 1, 0.32, 1) }),
+      withSpring(1, { duration: 520, dampingRatio: 0.45 }),
+    );
+  }, [status, reduceMotion, pop]);
+  const popStyle = useAnimatedStyle(() => ({ transform: [{ scale: pop.value }] }));
+
   const ring = Math.max(5, Math.round(size * 0.022));
   const disc = size - ring * 2;
   const label = Math.round(size * 0.4);
   const showPlay = station && focused && status !== 'playing' && status !== 'loading';
 
   return (
-    <View style={[styles.shadow, { width: size, height: size, borderRadius: size / 2 }]}>
+    <Animated.View style={[styles.shadow, { width: size, height: size, borderRadius: size / 2 }, popStyle]}>
       <LinearGradient
         colors={METAL}
         start={{ x: 0, y: 0 }}
@@ -132,7 +149,7 @@ export default function Vinyl({ station, size, spinning, status = null, focused 
           </View>
         </View>
       )}
-    </View>
+    </Animated.View>
   );
 }
 

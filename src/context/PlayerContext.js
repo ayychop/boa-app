@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import * as engine from '../audio/engine';
+import { haptics } from '../utils/haptics';
 
 const PlayerContext = createContext(null);
 // Position ticks several times a second; keep it in its own context so only
@@ -21,12 +22,17 @@ export function PlayerProvider({ children }) {
     [],
   );
 
+  // Every play/pause is a user action, so each gets one light tap.
   const play = useCallback((item) => {
+    haptics.tap();
     setCurrent(item);
     engine.play(item);
   }, []);
 
-  const pause = useCallback(() => engine.pause(), []);
+  const pause = useCallback(() => {
+    haptics.tap();
+    engine.pause();
+  }, []);
 
   const isPlaying = core.status === 'playing' || core.status === 'loading';
 

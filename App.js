@@ -5,7 +5,15 @@ import { DarkTheme, NavigationContainer, useIsFocused } from '@react-navigation/
 import { BottomTabBar, createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withSpring } from 'react-native-reanimated';
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withSequence,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import { useFonts } from 'expo-font';
@@ -29,6 +37,7 @@ import OriginalsScreen from './src/screens/OriginalsScreen';
 import TalentScreen from './src/screens/TalentScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 import { colors, fonts } from './src/theme';
+import { haptics } from './src/utils/haptics';
 
 const Tab = createBottomTabNavigator();
 
@@ -52,7 +61,12 @@ const ICONS = {
   Profile: ['person', 'person-outline'],
 };
 
-// Each tab rises and fades in on a soft spring when it gains focus.
+// easeOutExpo: nearly all of the movement happens in the first third, so the
+// new tab is readable almost at once and then just settles.
+const EASE_OUT_EXPO = Easing.bezier(0.16, 1, 0.3, 1);
+
+// Tabs are switched constantly, so this stays small: a short fade and an 8pt
+// rise, opacity-only under Reduce Motion.
 function TabTransition({ children }) {
   const focused = useIsFocused();
   const reduceMotion = useReducedMotion();
@@ -60,16 +74,36 @@ function TabTransition({ children }) {
 
   useEffect(() => {
     if (!focused) progress.value = 0;
-    else progress.value = reduceMotion ? 1 : withSpring(1, { stiffness: 210, damping: 26, mass: 0.9 });
+    else progress.value = withTiming(1, { duration: reduceMotion ? 180 : 340, easing: EASE_OUT_EXPO });
   }, [focused, reduceMotion, progress]);
 
   const style = useAnimatedStyle(() => ({
     flex: 1,
     opacity: progress.value,
-    transform: [{ translateY: (1 - progress.value) * 14 }, { scale: 0.985 + progress.value * 0.015 }],
+    transform: [{ translateY: reduceMotion ? 0 : (1 - progress.value) * 8 }],
   }));
 
   return <Animated.View style={style}>{children}</Animated.View>;
+}
+
+// Dynamic Island-style pop on the icon that just became active: a quick dip
+// then an under-damped overshoot back to size.
+function TabIcon({ name, focused, color, size }) {
+  const reduceMotion = useReducedMotion();
+  const scale = useSharedValue(1);
+  useEffect(() => {
+    if (!focused || reduceMotion) return;
+    scale.value = withSequence(
+      withTiming(0.8, { duration: 90, easing: Easing.bezier(0.23, 1, 0.32, 1) }),
+      withSpring(1, { duration: 480, dampingRatio: 0.42 }),
+    );
+  }, [focused, reduceMotion, scale]);
+  const style = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+  return (
+    <Animated.View style={style}>
+      <Ionicons name={ICONS[name][focused ? 0 : 1]} size={size - 3} color={color} />
+    </Animated.View>
+  );
 }
 
 const withTransition = (Screen) =>
@@ -146,9 +180,10 @@ export default function App() {
                     tabBarBackground: () => <TabBarBackground />,
                     tabBarLabelStyle: { fontFamily: fonts.semibold, fontSize: 10.5, letterSpacing: 0.2 },
                     tabBarIcon: ({ focused, color, size }) => (
-                      <Ionicons name={ICONS[route.name][focused ? 0 : 1]} size={size - 3} color={color} />
+                      <TabIcon name={route.name} focused={focused} color={color} size={size} />
                     ),
                   })}
+                  screenListeners={{ tabPress: () => haptics.selection() }}
                 >
                   <Tab.Screen name="Home" component={Home} />
                   <Tab.Screen name="Radio" component={Radio} />

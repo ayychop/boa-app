@@ -2,18 +2,30 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
-import Animated, { FadeIn, FadeInDown, FadeOut } from 'react-native-reanimated';
-import { LinearGradient } from 'expo-linear-gradient';
+import { useIsFocused } from '@react-navigation/native';
+import Animated, {
+  Easing,
+  FadeIn,
+  FadeInDown,
+  FadeOut,
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withRepeat,
+  withTiming,
+} from 'react-native-reanimated';
 import { fetchStationsByTag, GENRES } from '../api/radio';
-import { describePlayback } from '../audio/status';
+import { getStationGlow } from '../api/stationColor';
 import { usePlayer } from '../context/PlayerContext';
-import RecordCarousel from '../components/RecordCarousel';
+import useNowPlaying from '../hooks/useNowPlaying';
+import RecordCarousel, { carouselItemWidth } from '../components/RecordCarousel';
+import GlowField, { FogPlane } from '../components/GlowField';
 import Vinyl from '../components/Vinyl';
-import { stationGradient } from '../components/StationLogo';
 import { MINI_PLAYER_SPACE } from '../components/MiniPlayer';
 import { colors, fonts, radius, space } from '../theme';
 
-const TEXT_BLOCK = 132;
+const TEXT_BLOCK = 150;
+const LIVE_RED = '#F2555A';
 
 function GenrePills({ selected, onSelect }) {
   return (
@@ -41,7 +53,20 @@ function GenrePills({ selected, onSelect }) {
   );
 }
 
-function StationText({ station, subtitle, compact }) {
+// A slow breathing dot: the one piece of constant motion on the stage.
+function LiveDot({ color }) {
+  const reduceMotion = useReducedMotion();
+  const o = useSharedValue(1);
+  useEffect(() => {
+    if (reduceMotion) return;
+    o.value = withRepeat(withTiming(0.35, { duration: 1100, easing: Easing.bezier(0.77, 0, 0.175, 1) }), -1, true);
+  }, [reduceMotion, o]);
+  const style = useAnimatedStyle(() => ({ opacity: o.value }));
+  return <Animated.View style={[styles.liveDot, { backgroundColor: color }, style]} />;
+}
+
+function StationText({ station, track, status, meta, compact }) {
+  const onAir = status === 'playing';
   return (
     <Animated.View
       key={station.id}
@@ -49,15 +74,25 @@ function StationText({ station, subtitle, compact }) {
       exiting={FadeOut.duration(120)}
       style={styles.textBlock}
     >
-      <Text
-        style={[styles.name, compact && styles.nameCompact]}
-        numberOfLines={2}
-        accessibilityRole="header"
-      >
+      <Text style={[styles.name, compact && styles.nameCompact]} numberOfLines={2} accessibilityRole="header">
         {station.name}
       </Text>
-      <Text style={styles.subtitle} numberOfLines={1}>
-        {subtitle}
+      {/* Keyed on the title so a new track crossfades in. */}
+      <Animated.View key={track || 'live'} entering={FadeIn.duration(350)} style={styles.trackRow}>
+        {track ? (
+          <Text style={styles.subtitle} numberOfLines={1}>
+            <Text style={styles.subtitleLead}>Now playing: </Text>
+            {track}
+          </Text>
+        ) : (
+          <>
+            <LiveDot color={onAir ? colors.live : LIVE_RED} />
+            <Text style={styles.subtitle}>Live Broadcast</Text>
+          </>
+        )}
+      </Animated.View>
+      <Text style={styles.meta} numberOfLines={1}>
+        {meta}
       </Text>
     </Animated.View>
   );
@@ -80,6 +115,10 @@ function Notice({ title, body, action, onAction }) {
 export default function RadioScreen({ route, navigation }) {
   const insets = useSafeAreaInsets();
   const player = usePlayer();
+  const isFocused = useIsFocused();
+  // Carousel position, shared with the parallax layers behind it.
+  const scrollX = useSharedValue(0);
+  const [glows, setGlows] = useState({});
   const [genre, setGenre] = useState(GENRES[0].tag);
   const [index, setIndex] = useState(0);
   const [data, setData] = useState({ status: 'loading', stations: [] });
@@ -141,6 +180,21 @@ export default function RadioScreen({ route, navigation }) {
   const active = stations[index] ?? null;
   const label = GENRES.find((g) => g.tag === genre)?.label ?? genre;
 
+  // Pull glow colours for the record in focus and its neighbours, so the
+  // colour is usually ready before you swipe to it.
+  useEffect(() => {
+    let alive = true;
+    stations.slice(Math.max(0, index - 1), index + 3).forEach((s) => {
+      getStationGlow(s).then((c) => alive && setGlows((g) => (s.id in g ? g : { ...g, [s.id]: c })));
+    });
+    return () => {
+      alive = false;
+    };
+  }, [stations, index]);
+
+  // Track info for the record in focus, polled while this tab is visible.
+  const fetchedTrack = useNowPlaying(active, isFocused);
+
   // Always reserve the mini player's slot so the record never resizes when
   // playback starts.
   const tabBarHeight = useBottomTabBarHeight();
@@ -156,38 +210,74 @@ export default function RadioScreen({ route, navigation }) {
 
   const statusFor = (station) => (player.current?.id === station.id ? player.status : null);
 
-  const subtitleFor = (station) => {
-    const live = describePlayback(statusFor(station), player.trackTitle);
-    if (live) return live;
-    return [station.country, station.bitrate ? `${station.bitrate} kbps` : null].filter(Boolean).join(' · ') || 'Live radio';
+  const metaFor = (station) => {
+    const where = [station.country, station.bitrate ? `${station.bitrate} kbps` : null].filter(Boolean).join(' · ');
+    switch (statusFor(station)) {
+      case 'loading':
+        return 'Tuning in…';
+      case 'playing':
+        return where ? `On air · ${where}` : 'On air';
+      case 'paused':
+        return 'Paused';
+      case 'error':
+        return 'Stream not responding · Tap to retry';
+      default:
+        return where || 'Live radio';
+    }
   };
+
+  // While it plays, the stream's own titles (native ICY) win over polling.
+  const trackFor = (station) =>
+    (player.current?.id === station.id && player.trackTitle) || fetchedTrack;
+  const itemWidth = carouselItemWidth(discSize);
 
   let content;
   if (!stage) content = null;
   else if (data.status === 'ready' && stations.length > 0) {
     content = (
       <>
-        <RecordCarousel
-          key={genre}
-          items={stations}
-          index={index}
-          onIndexChange={setIndex}
-          onPressActive={player.toggle}
-          width={stage.width}
-          height={discSize + 40}
-          discSize={discSize}
-          renderItem={(station, i) => (
-            <Vinyl
-              station={station}
-              focused={i === index}
-              size={discSize}
-              status={statusFor(station)}
-              spinning={player.current?.id === station.id && player.status === 'playing'}
+        <View style={{ width: stage.width, height: discSize + 40 }}>
+          <GlowField
+            items={stations}
+            colorsById={glows}
+            index={index}
+            x={scrollX}
+            itemWidth={itemWidth}
+            discSize={discSize}
+            centerY={(discSize + 40) / 2}
+            width={stage.width}
+          />
+          <RecordCarousel
+            key={genre}
+            position={scrollX}
+            items={stations}
+            index={index}
+            onIndexChange={setIndex}
+            onPressActive={player.toggle}
+            width={stage.width}
+            height={discSize + 40}
+            discSize={discSize}
+            renderItem={(station, i) => (
+              <Vinyl
+                station={station}
+                focused={i === index}
+                size={discSize}
+                status={statusFor(station)}
+                spinning={player.current?.id === station.id && player.status === 'playing'}
+              />
+            )}
+          />
+        </View>
+        <View style={styles.textSlot}>
+          {active && (
+            <StationText
+              station={active}
+              track={trackFor(active)}
+              status={statusFor(active)}
+              meta={metaFor(active)}
+              compact={compact}
             />
           )}
-        />
-        <View style={styles.textSlot}>
-          {active && <StationText station={active} subtitle={subtitleFor(active)} compact={compact} />}
         </View>
       </>
     );
@@ -216,24 +306,9 @@ export default function RadioScreen({ route, navigation }) {
     );
   }
 
-  const glow = active ? stationGradient(active)[0] : colors.accent;
-
   return (
     <View style={styles.screen}>
-      {/* Ambient wash tinted by the station in focus, Apple Music style. */}
-      <Animated.View
-        key={glow}
-        entering={FadeIn.duration(700)}
-        exiting={FadeOut.duration(700)}
-        pointerEvents="none"
-        style={StyleSheet.absoluteFill}
-      >
-        <LinearGradient
-          colors={[`${glow}45`, `${glow}10`, 'transparent']}
-          locations={[0, 0.45, 0.85]}
-          style={StyleSheet.absoluteFill}
-        />
-      </Animated.View>
+      {stage && <FogPlane x={scrollX} width={stage.width} span={itemWidth * stations.length} />}
 
       <View style={[styles.header, { paddingTop: insets.top + space.lg }]}>
         <Text style={styles.title}>Radio</Text>
@@ -298,7 +373,11 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   nameCompact: { fontSize: 30, lineHeight: 34, letterSpacing: -0.9 },
-  subtitle: { fontFamily: fonts.medium, color: colors.textMuted, fontSize: 15, textAlign: 'center' },
+  trackRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, maxWidth: '100%' },
+  liveDot: { width: 7, height: 7, borderRadius: 4 },
+  subtitle: { fontFamily: fonts.medium, color: colors.textMuted, fontSize: 15, letterSpacing: -0.1, textAlign: 'center', flexShrink: 1 },
+  subtitleLead: { color: colors.textFaint },
+  meta: { fontFamily: fonts.mono, color: colors.textFaint, fontSize: 10.5, letterSpacing: 1.8, textTransform: 'uppercase', textAlign: 'center' },
   hint: { position: 'absolute', bottom: MINI_PLAYER_SPACE / 2 - 6, fontFamily: fonts.mono, color: colors.textFaint, fontSize: 10.5, letterSpacing: 2, textTransform: 'uppercase' },
   retry: {
     marginTop: space.sm,

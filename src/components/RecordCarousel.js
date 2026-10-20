@@ -15,6 +15,7 @@ import {
   useTapGesture,
 } from 'react-native-gesture-handler';
 import { scheduleOnRN } from 'react-native-worklets';
+import { haptics } from '../utils/haptics';
 
 // Heavy and slightly under-damped (ratio ≈ 0.8): the record carries momentum,
 // then settles with a small, satisfying overshoot.
@@ -23,6 +24,9 @@ const SPRING = { mass: 1.3, stiffness: 170, damping: 24 };
 const RUBBER_BAND = 0.3;
 // Only mount records near the active one.
 const RENDER_WINDOW = 3;
+
+// Neighbours peek in from the edges at their scaled-down size.
+export const carouselItemWidth = (discSize) => Math.round(discSize * 0.9);
 
 function Slide({ index, x, itemWidth, left, children }) {
   const style = useAnimatedStyle(() => {
@@ -54,13 +58,15 @@ export default function RecordCarousel({
   height,
   discSize,
   renderItem,
+  position,
 }) {
-  // Neighbours peek in from the edges at their scaled-down size.
-  const itemWidth = Math.round(discSize * 0.9);
+  const itemWidth = carouselItemWidth(discSize);
   const left = (width - itemWidth) / 2;
   const maxIndex = items.length - 1;
 
-  const x = useSharedValue(-index * itemWidth);
+  // The parent can pass its own shared value to drive parallax layers.
+  const ownX = useSharedValue(-index * itemWidth);
+  const x = position ?? ownX;
   const dragStart = useSharedValue(0);
 
   // Keep latest values for the JS-thread tap handler and keyboard listener.
@@ -71,6 +77,8 @@ export default function RecordCarousel({
   const settled = useRef(index);
   const report = useCallback(
     (i) => {
+      // A detent: one tick when the carousel lands on a different record.
+      if (i !== settled.current) haptics.selection();
       settled.current = i;
       onIndexChange(i);
     },
