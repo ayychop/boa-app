@@ -1,8 +1,10 @@
+import { MAX_RETRIES } from './engine';
+
 // One place for the copy shown under a station while it's the current one.
-export function describePlayback(status, trackTitle) {
+export function describePlayback(status, trackTitle, retry = 0) {
   switch (status) {
     case 'loading':
-      return 'Tuning in…';
+      return retry ? `Reconnecting… (${retry}/${MAX_RETRIES})` : 'Tuning in…';
     case 'playing':
       return trackTitle || 'Live now';
     case 'paused':

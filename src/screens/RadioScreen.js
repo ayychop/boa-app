@@ -14,7 +14,9 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { fetchStationsByTag, GENRES } from '../api/radio';
-import { curatedStations } from '../data/radioStations';
+import { backupStations, curatedStations } from '../data/radioStations';
+import { checkAhead, healList, markAlive, markDead, useDeadStations } from '../api/stationHealth';
+import { MAX_RETRIES } from '../audio/engine';
 import { getStationGlow } from '../api/stationColor';
 import { usePlayer } from '../context/PlayerContext';
 import useNowPlaying from '../hooks/useNowPlaying';
@@ -218,7 +220,43 @@ export default function RadioScreen({ route, navigation }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focus]);
 
-  const { stations } = data;
+  // Self-healing list: stations found dead this session are swapped for the
+  // genre's backups (never the record on screen, so it can still be retried).
+  useDeadStations();
+  const [focusedId, setFocusedId] = useState(null);
+  const stations = healList(data.stations, curatedStations(genre) ? backupStations(genre) : [], focusedId);
+
+  useEffect(() => {
+    const id = stations[index]?.id;
+    if (id && id !== focusedId) setFocusedId(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [index, stations]);
+
+  // If a dead record was dropped (no backups left), stay on the same station.
+  useEffect(() => {
+    if (!focusedId) return;
+    const i = stations.findIndex((s) => s.id === focusedId);
+    if (i >= 0 && i !== index) setIndex(i);
+    else if (i < 0 && index > stations.length - 1) setIndex(Math.max(0, stations.length - 1));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stations.map((s) => s.id).join('|')]);
+
+  // A station that still fails after the engine's retries is dead for this
+  // session; one that plays is alive again (e.g. after a manual retry).
+  const playingId = player.current?.kind === 'radio' ? player.current.id : null;
+  useEffect(() => {
+    if (!playingId) return;
+    if (player.status === 'error') markDead(playingId);
+    if (player.status === 'playing') markAlive(playingId);
+  }, [player.status, playingId]);
+
+  // Test the neighbours in the background so dead ones are replaced before
+  // the listener swipes into them.
+  useEffect(() => {
+    if (data.status !== 'ready') return;
+    checkAhead([stations[index - 1], stations[index + 1], stations[index + 2]]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [index, data.status, stations.map((s) => s.id).join('|')]);
   const active = stations[index] ?? null;
   const label = GENRES.find((g) => g.tag === genre)?.label ?? genre;
 
@@ -256,7 +294,7 @@ export default function RadioScreen({ route, navigation }) {
     const where = [station.country, station.bitrate ? `${station.bitrate} kbps` : null].filter(Boolean).join(' · ');
     switch (statusFor(station)) {
       case 'loading':
-        return 'Tuning in…';
+        return player.retry ? `Reconnecting… (${player.retry}/${MAX_RETRIES})` : 'Tuning in…';
       case 'playing':
         return where ? `On air · ${where}` : 'On air';
       case 'paused':

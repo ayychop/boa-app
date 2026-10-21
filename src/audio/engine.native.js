@@ -8,9 +8,17 @@ import TrackPlayer, {
 // Items are live radio ({ kind: 'radio' }) or on-demand audio such as podcast
 // episodes ({ kind: 'podcast' }); see engine.js for the shared contract.
 let current = null;
-let state = { status: 'idle', title: null, position: 0, duration: 0, rate: 1 };
+let state = { status: 'idle', title: null, position: 0, duration: 0, rate: 1, retry: 0 };
 let ready = null;
+let attempts = 0;
+let failedGen = -1;
+let retryTimer = null;
+let gen = 0; // see engine.js: guards against stale failures
 const listeners = new Set();
+
+// Self-healing: quietly reconnect this many times before telling the user.
+export const MAX_RETRIES = 2;
+const RETRY_DELAYS_MS = [1200, 2500];
 
 const isLive = (item) => item?.kind !== 'podcast';
 
@@ -55,9 +63,13 @@ function setup() {
       )
       .then(() => {
         TrackPlayer.addEventListener(Event.PlaybackState, ({ state: s }) => {
-          if (STATUS[s]) emit({ status: STATUS[s] });
+          if (s === State.Error) return fail(gen); // handled by the retry path
+          if (s === State.Playing) attempts = 0;
+          // While reconnecting, keep showing "loading" rather than a flash of
+          // "paused"/"stopped" from the reset between attempts.
+          if (STATUS[s] && !(state.retry && STATUS[s] === 'paused')) emit({ status: STATUS[s], ...(s === State.Playing && { retry: 0 }) });
         });
-        TrackPlayer.addEventListener(Event.PlaybackError, () => emit({ status: 'error' }));
+        TrackPlayer.addEventListener(Event.PlaybackError, () => fail(gen));
         TrackPlayer.addEventListener(Event.PlaybackProgressUpdated, ({ position, duration }) => {
           if (!isLive(current)) emit({ position, ...(duration > 0 && { duration }) });
         });
@@ -75,14 +87,41 @@ function setup() {
   return ready;
 }
 
-export async function play(item) {
+// See engine.js: retry quietly, then surface "error".
+function fail(attempt) {
+  // One failure per attempt: some players report the same failure twice.
+  if (attempt !== gen || attempt === failedGen || !current) return;
+  failedGen = attempt;
+  if (attempts < MAX_RETRIES) {
+    attempts += 1;
+    emit({ status: 'loading', retry: attempts });
+    const item = current;
+    const resumeAt = isLive(item) ? 0 : state.position;
+    clearTimeout(retryTimer);
+    retryTimer = setTimeout(() => connect(item, { retry: true, resumeAt }), RETRY_DELAYS_MS[attempts - 1]);
+  } else {
+    emit({ status: 'error', retry: 0 });
+  }
+}
+
+/** User-initiated play: resets the retry budget. */
+export function play(item) {
+  clearTimeout(retryTimer);
+  attempts = 0;
+  return connect(item, {});
+}
+
+async function connect(item, { retry = false, resumeAt = 0 }) {
+  const attempt = ++gen;
   const switching = current?.id !== item.id;
   current = item;
-  if (switching) emit({ status: 'loading', title: null, position: 0, duration: item.duration || 0 });
-  else emit({ status: 'loading' });
+  if (retry) {
+    // status already shows the reconnect attempt
+  } else if (switching) emit({ status: 'loading', title: null, position: 0, duration: item.duration || 0, retry: 0 });
+  else emit({ status: 'loading', retry: 0 });
   try {
     await setup();
-    if (!switching && !isLive(item)) {
+    if (!switching && !retry && !isLive(item)) {
       if (state.status === 'ended') await TrackPlayer.seekTo(0);
       await TrackPlayer.play();
       return;
@@ -98,14 +137,18 @@ export async function play(item) {
       isLiveStream: isLive(item),
     });
     if (!isLive(item)) await TrackPlayer.setRate(state.rate);
+    if (resumeAt > 0) await TrackPlayer.seekTo(resumeAt);
     await TrackPlayer.play();
   } catch {
-    emit({ status: 'error' });
+    fail(attempt);
   }
 }
 
 export async function pause() {
-  emit({ status: 'paused' });
+  clearTimeout(retryTimer);
+  attempts = 0;
+  gen += 1;
+  emit({ status: 'paused', retry: 0 });
   await setup();
   await TrackPlayer.pause();
 }

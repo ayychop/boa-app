@@ -141,7 +141,71 @@ export const STATIONS_BY_GENRE = {
   ],
 };
 
+
+// Backups, swapped in (same slot) when a curated station turns out to be
+// dead this session. Every one passed the same music, playback and logo
+// checks as the main lists but didn't make the cut.
+export const BACKUP_STATIONS_BY_GENRE = {
+  "afrobeats": [
+    // music-verified
+    { kind: "radio", id: "d529453c-08b3-42bb-bb65-4e95b43c9178", name: "InterSpace Sound System", streamUrl: "https://radio.interspacemusic.com/stream.mp3", logo: "https://radio.interspacemusic.com/assets/iss-logo.png", homepage: "https://radio.interspacemusic.com/", country: "Nigeria", countryCode: "NG", tags: ["african", "afro house", "afrobeats", "amapiano", "club", "dance"], codec: "MP3", bitrate: null, votes: 25, metadataVerified: true },
+    // DJ Latet - DJ Latet – Ghana Gospel Mix (20212022) -> DJ Latet - DJ Latet – Ghana Gospel Mi
+    { kind: "radio", id: "db6792db-3a8c-4423-bf5f-bc9b0cc571c2", name: "HANA Radio", streamUrl: "https://stream.zeno.fm/qqaz1l2tujvuv", logo: "https://zeno.fm/_ipx/_/https://images.zeno.fm/ZJi8coXweWDKG7VUcdAJu3KuHmsSVONFWitoowmeeV4/rs:fill:2048:512/g:ce:0:0/aHR0cHM6Ly9wcm94eS56ZW5vLmZtL2NvbnRlbnQvc3RhdGlvbnMvMDhiYjljMDQtZjNjOS00NjY3LTk0YzQtYjgwNTU5OGJkNmYzL21pY3Jvc2l0ZS9iYWNrZ3JvdW5kX2ltYWdlLz91PTE3NDcwNjk2NDgwMDA.webp", homepage: "https://zeno.fm/radio/hana-radio-1utb/", country: "Ghana", countryCode: "GH", tags: [], codec: "MP3", bitrate: 128, votes: 160, metadataVerified: true },
+  ],
+  "hip hop": [
+    // music-verified
+    { kind: "radio", id: "15ad7a63-dd62-479c-8608-c53922dbc8b5", name: "Base FM", streamUrl: "https://icast.connectmedia.hu/5401/live.mp3", logo: "https://basefm.hu/wp-content/themes/basefm/assets/dist/img/favicon/apple-icon-120x120.png", homepage: "https://basefm.hu/", country: "Hungary", countryCode: "HU", tags: ["hiphop", "rap", "rnb"], codec: "MP3", bitrate: 320, votes: 1381, metadataVerified: true },
+    // Artie 5ive - SWAG MUSIC -> Artie 5ive - SWAG MUSIC
+    { kind: "radio", id: "87d9091c-5560-4cd8-8a7b-b00b11b98f2d", name: "Urban Radio", streamUrl: "https://nr3.newradio.it:18100/stream", logo: "https://urbanradio.it/wp-content/uploads/2022/05/cropped-favicon-180x180.png", homepage: "https://www.urbanradio.it/", country: "Italy", countryCode: "IT", tags: ["hiphop", "rap", "reggae", "reggaeton", "trap", "urban contemporary"], codec: "MP3", bitrate: 192, votes: 89, metadataVerified: true },
+    // xxxtentacion - looking for a star (alucvrd flip) -> xxxtentacion - looking for a star (alu
+    { kind: "radio", id: "89c307c8-626a-4af8-aae1-c332b6492f3a", name: "Fed's Trap Radio", streamUrl: "https://backend.fedstrapradio.com:8000/radio.mp3", logo: "https://fedstrapradio.com/img/apple-touch-icon.png", homepage: "https://fedstrapradio.com/", country: "Czechia", countryCode: "CZ", tags: ["trap"], codec: "MP3", bitrate: 192, votes: 79, metadataVerified: true },
+  ],
+  "rnb": [
+    // music-verified
+    { kind: "radio", id: "15ad7a63-dd62-479c-8608-c53922dbc8b5", name: "Base FM", streamUrl: "https://icast.connectmedia.hu/5401/live.mp3", logo: "https://basefm.hu/wp-content/themes/basefm/assets/dist/img/favicon/apple-icon-120x120.png", homepage: "https://basefm.hu/", country: "Hungary", countryCode: "HU", tags: ["hiphop", "rap", "rnb"], codec: "MP3", bitrate: 320, votes: 1381, metadataVerified: true },
+    // Sugar On My Tongue - Tyler, The Creator -> Sugar On My Tongue - Tyler, The Creator
+    { kind: "radio", id: "23687de7-9621-4e09-b190-1f83fd626906", name: "RMF 4 Dance & RnB", streamUrl: "https://rs6-krk2.rmfstream.pl/rmf_4", logo: "https://www.rmfon.pl/assets/images/favicon/apple-touch-icon.png", homepage: "https://www.rmfon.pl/play,96", country: "Poland", countryCode: "PL", tags: ["dance", "r&b"], codec: "MP3", bitrate: 128, votes: 189, metadataVerified: true },
+    // Chic - My Feet Keep Dancing -> Chic - My Feet Keep Dancing
+    { kind: "radio", id: "87fa97b5-38e7-42d2-9095-dc401f9fb597", name: "Exclusively Chic", streamUrl: "https://nl4.mystreaming.net/er/chic/icecast.audio", logo: "https://you.radio/cdn-cgi/image/width=400,quality=75/https://manager.uber.radio/static/uploads/station/e59b9825-f3e9-4bb7-83c6-63e9febfc7ad.jpg", homepage: "https://play.you.radio/station/144", country: "The United Arab Emirates", countryCode: "AE", tags: ["disco", "funk", "r&b", "rock"], codec: "MP3", bitrate: 128, votes: 113, metadataVerified: true },
+  ],
+  "amapiano": [
+    // Salif Keita, Caiiro - Madan -> Salif Keita, Caiiro - Madan
+    { kind: "radio", id: "6c42ddb1-c003-4a72-b62f-f33590e6f765", name: "Five FM Romania", streamUrl: "https://c22.radioboss.fm:8700/stream", logo: "https://5fm.ro/wp-content/uploads/2026/08/cropped-5fm-dark-blue-2026-beta2-192x192.png", homepage: "https://5fm.ro/", country: "Romania", countryCode: "RO", tags: ["afro house", "deep house", "electronic", "house", "melodic house", "progressive house"], codec: "MP3", bitrate: 320, votes: 4, metadataVerified: true },
+  ],
+  "dancehall": [
+    // CHRONIXX - Start A Fyah ||  || S || 94c46669-3e5b-4764-b91c-ad2d795e18a9 -> MELLOW MOOD - 
+    { kind: "radio", id: "ecb13e96-8465-4863-8188-a0866c783ae9", name: "Hotmix Reggae", streamUrl: "https://streaming.hotmixradio.com/hotmix-reggae-en-mp3?provider=radiobrowser", logo: "https://cdn.hotmixradio.com/hotmix-reggae-en-mp3.jpg", homepage: "https://hotmixradio.com/", country: "France", countryCode: "FR", tags: ["reggae", "roots reggae", "smooth reggae"], codec: "MP3", bitrate: 128, votes: 10, metadataVerified: true },
+    // Alpha Blondy - Coco de Rasta -> Alpha Blondy - Coco de Rasta
+    { kind: "radio", id: "bb904f3c-d4c8-4012-8432-70be72c81186", name: "1 Reggae Joint", streamUrl: "https://jointil.com/stream-reggae", logo: "https://www.jointil.com/broadcast/images/joint.radio330X330.png", homepage: "https://www.jointil.com/radio/", country: "Germany", countryCode: "DE", tags: ["dub", "dub reggae", "reggae", "reggeton", "roots reggae", "smooth reggae"], codec: "MP3", bitrate: 320, votes: 411, metadataVerified: true },
+  ],
+  "reggae": [
+    // I-Octane - Party Start -> I-Octane - Party Start
+    { kind: "radio", id: "208e60b9-2075-435a-9506-9787ef30928c", name: "RauteMusik Caribbean Wave", streamUrl: "https://streams.rautemusik.fm/caribbean-wave/mp3-192/?ref=radiobrowser", logo: "https://i.ibb.co/nL15LGH/cw.jpg", homepage: "https://www.rm.fm/caribbean-wave", country: "Germany", countryCode: "DE", tags: ["afro", "afro-latin music", "afro-pop", "afrobeats", "caribbean", "caribbean music"], codec: "MP3", bitrate: 192, votes: 132, metadataVerified: true },
+    // Sizzla - Sizzla - Wanting You -> - 20-Comforter - Morgan`s Heritage
+    { kind: "radio", id: "d9d78c50-3766-4e74-8f67-1cd7d878f2f4", name: "Ghetto Vibes Radio", streamUrl: "https://www.radioking.com/play/ghetto-vibes-radio-station", logo: null, homepage: "https://app.site123.com/manager/wizard.php?wu=6293042d3b4b8-6293042d3b4f3-6293042d3b52d&from=dash#", country: "Jamaica", countryCode: "JM", tags: ["classic soul", "dancehall", "roots reggae", "soca"], codec: "MP3", bitrate: 128, votes: 1193, metadataVerified: true },
+  ],
+  "jazz": [
+    // Dynamique - Love Hatin' -> Dynamique - Love Hatin'
+    { kind: "radio", id: "91756e93-9895-4d6e-830f-4703ae943c20", name: "Jazzy Soul", streamUrl: "https://radio.musorok.org/listen/jazzysoul/jazzysoul.mp3", logo: "https://jazzy-backend-prod.melkweg.hu/jazzy-borito-fallback-soul.jpg", homepage: "https://jazzy.hu/", country: "Hungary", countryCode: "HU", tags: ["jazz", "smooth jazz", "soul"], codec: "MP3", bitrate: 192, votes: 244, metadataVerified: true },
+    // Allan Harris - I  Let A Song Get Out Of My .. -> Allan Harris - I  Let A Song Get Out Of M
+    { kind: "radio", id: "a0481653-b63d-4ae2-9df3-0684c3313af6", name: "Jazzy Cool", streamUrl: "https://radio.musorok.org/listen/jazzycool/jazzycool.mp3", logo: "https://jazzy-backend-prod.melkweg.hu/jazzy-borito-fallback-cool.jpg", homepage: "https://jazzy.hu/", country: "Hungary", countryCode: "HU", tags: ["jazz", "smooth jazz"], codec: "MP3", bitrate: 192, votes: 215, metadataVerified: true },
+    // Anders Ponsaing / Claus Højensgård - The Man with the Red Face -> DJ Maretimo - Cafe Inter
+    { kind: "radio", id: "02569932-0b3c-4938-9d3e-b00b2158d40b", name: "Airport Lounge Radio", streamUrl: "https://az1.mediacp.eu/listen/airport-lounge-radio/radio.mp3", logo: "https://favicon-generator.org/favicon-generator/htdocs/favicons/2023-12-16/9274e8a4803971186ff5c45359ab77a4.ico.png", homepage: "https://radiosuitenetwork.torontocast.stream/airport-lounge-radio/", country: "Canada", countryCode: "CA", tags: ["aereoporto", "airport", "ambient", "chill", "chillout", "easy listening"], codec: "MP3", bitrate: 128, votes: 2316, metadataVerified: true },
+  ],
+  "gospel": [
+    // MASTER`S PROMISE - PREPARE YE THE WAY(2017) -> LESTERS - HIS REDEEMED (2013)
+    { kind: "radio", id: "cae26fec-7184-4e70-80d4-9dd166837599", name: "Affirm Southern Gospel Radio", streamUrl: "https://ais-sa2.cdnstream1.com/1708_128", logo: "https://assets.zyrosite.com/cdn-cgi/image/format=auto,w=1224,h=88,fit=crop/YbNDJoO6N1cK0J3N/affirm-logo-dWxMLpPvKOcn2bww.png", homepage: "https://affirmsoutherngospelradio.com/", country: "The United States Of America", countryCode: "US", tags: ["southern gospel"], codec: "MP3", bitrate: 128, votes: 66, metadataVerified: true },
+    // Reyer & Reni Kraayenoord - Kennen -> Reyer & Reni Kraayenoord - Kennen
+    { kind: "radio", id: "466c6af1-bb23-4d42-8509-3fb73d872a14", name: "Groot Nieuws Radio Non-Stop", streamUrl: "https://playerservices.streamtheworld.com/api/livestream-redirect/GNRNONSTOP.mp3", logo: "https://images.cvandaag.nl/artikel-foto/0fdee9961e3678d8bd55c560ea6f0384/groot-nieuws-radio.png", homepage: "https://www.grootnieuwsradio.nl/", country: "The Netherlands", countryCode: "NL", tags: ["non-stop", "worship"], codec: "MP3", bitrate: 192, votes: 99, metadataVerified: true },
+  ],
+};
+
 /** The curated list for a genre tag, or null if the genre isn't curated. */
 export function curatedStations(tag) {
   return STATIONS_BY_GENRE[tag] ?? null;
+}
+
+/** Backup stations for a genre, in the order to swap them in. */
+export function backupStations(tag) {
+  return BACKUP_STATIONS_BY_GENRE[tag] ?? [];
 }

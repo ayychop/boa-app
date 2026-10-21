@@ -317,6 +317,12 @@ function logoLoads(url) {
   });
 }
 
+/** Does this stream actually start? (web: real <audio> canplay; native: headers) */
+export function streamPlays(url) {
+  if (Platform.OS === 'web') return probePlayback(url);
+  return probeStream(url).then((r) => r.ok && (r.audio || r.icy));
+}
+
 async function playsInApp(station) {
   const [plays, logo] = await Promise.all([
     Platform.OS === 'web'

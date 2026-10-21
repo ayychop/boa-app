@@ -41,7 +41,7 @@ function ProgressLine({ tint }) {
 }
 
 export default function MiniPlayer({ onOpenRadio }) {
-  const { current, status, trackTitle, isPlaying, toggle } = usePlayer();
+  const { current, status, trackTitle, isPlaying, toggle, retry } = usePlayer();
   const media = useMedia();
   const reduceMotion = useReducedMotion();
   const { isPremium } = useUser();
@@ -71,7 +71,7 @@ export default function MiniPlayer({ onOpenRadio }) {
   const podcast = current.kind === 'podcast' ? podcastById(current.podcastId) : null;
   const subtitle = podcast
     ? `${podcast.title}${status === 'paused' ? ' · Paused' : ''}`
-    : describePlayback(status, trackTitle || nowPlaying) || 'Live radio';
+    : describePlayback(status, trackTitle || nowPlaying, retry) || 'Live radio';
   const open = () => (podcast ? media.openPodcast(podcast, { autoplay: false }) : onOpenRadio());
 
   return (

@@ -10,13 +10,17 @@ const ProgressContext = createContext({ position: 0, duration: 0 });
 export function PlayerProvider({ children }) {
   // What's loaded: a radio station or a podcast episode (see audio/engine.js).
   const [current, setCurrent] = useState(null);
-  const [core, setCore] = useState({ status: 'idle', title: null, rate: 1 });
+  const [core, setCore] = useState({ status: 'idle', title: null, rate: 1, retry: 0 });
   const [progress, setProgress] = useState({ position: 0, duration: 0 });
 
   useEffect(
     () =>
       engine.subscribe((s) => {
-        setCore((c) => (c.status === s.status && c.title === s.title && c.rate === s.rate ? c : { status: s.status, title: s.title, rate: s.rate }));
+        setCore((c) =>
+          c.status === s.status && c.title === s.title && c.rate === s.rate && c.retry === s.retry
+            ? c
+            : { status: s.status, title: s.title, rate: s.rate, retry: s.retry || 0 },
+        );
         setProgress((p) => (p.position === s.position && p.duration === s.duration ? p : { position: s.position, duration: s.duration }));
       }),
     [],
@@ -52,6 +56,8 @@ export function PlayerProvider({ children }) {
       status: core.status,
       trackTitle: core.title,
       rate: core.rate,
+      // Background reconnect attempt in progress (1..MAX_RETRIES), else 0.
+      retry: core.retry,
       isPlaying,
       play,
       pause,
