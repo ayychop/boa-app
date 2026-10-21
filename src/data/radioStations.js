@@ -12,6 +12,9 @@
 //     caught talk segments on several gospel stations, which are excluded).
 //  4. Played in a real browser (reached `canplay`) and logo checked; a dead
 //     logo is null so the app shows its generated label instead.
+//
+// Optional `brandColor` forces the glow behind a station's record when its
+// logo can't be colour-extracted (dead logo, or one the browser can't read).
 // Each entry notes the two titles it was playing.
 //
 // TODO: re-run the check periodically; internet stations change.
@@ -82,7 +85,7 @@ export const STATIONS_BY_GENRE = {
   // Dancehall
   "dancehall": [
     // Sizzla - Sizzla - Wanting You -> - 20-Comforter - Morgan`s Heritage
-    { kind: "radio", id: "d9d78c50-3766-4e74-8f67-1cd7d878f2f4", name: "Ghetto Vibes Radio", streamUrl: "https://www.radioking.com/play/ghetto-vibes-radio-station", logo: null, homepage: "https://app.site123.com/manager/wizard.php?wu=6293042d3b4b8-6293042d3b4f3-6293042d3b52d&from=dash#", country: "Jamaica", countryCode: "JM", tags: ["classic soul", "dancehall", "roots reggae", "soca"], codec: "MP3", bitrate: 128, votes: 1193, metadataVerified: true },
+    { kind: "radio", id: "d9d78c50-3766-4e74-8f67-1cd7d878f2f4", name: "Ghetto Vibes Radio", brandColor: "#D81B60", streamUrl: "https://www.radioking.com/play/ghetto-vibes-radio-station", logo: null, homepage: "https://app.site123.com/manager/wizard.php?wu=6293042d3b4b8-6293042d3b4f3-6293042d3b52d&from=dash#", country: "Jamaica", countryCode: "JM", tags: ["classic soul", "dancehall", "roots reggae", "soca"], codec: "MP3", bitrate: 128, votes: 1193, metadataVerified: true },
     // Wayne Wonder - Sensimedia Radio -> Moyann - Likkle Miss Riding Hood
     { kind: "radio", id: "49da007a-d18c-4f03-b3ba-f1934079facc", name: "Sensimedia Dancehall Radio", streamUrl: "https://sensidancehall.radioca.st/;", logo: null, homepage: "http://sensi.media/dancehallradio", country: "The United States Of America", countryCode: "US", tags: ["dancehall", "dub", "reggae"], codec: "MP3", bitrate: 192, votes: 6, metadataVerified: true },
     // I-Octane - Party Start -> I-Octane - Party Start
@@ -182,7 +185,7 @@ export const BACKUP_STATIONS_BY_GENRE = {
     // I-Octane - Party Start -> I-Octane - Party Start
     { kind: "radio", id: "208e60b9-2075-435a-9506-9787ef30928c", name: "RauteMusik Caribbean Wave", streamUrl: "https://streams.rautemusik.fm/caribbean-wave/mp3-192/?ref=radiobrowser", logo: "https://i.ibb.co/nL15LGH/cw.jpg", homepage: "https://www.rm.fm/caribbean-wave", country: "Germany", countryCode: "DE", tags: ["afro", "afro-latin music", "afro-pop", "afrobeats", "caribbean", "caribbean music"], codec: "MP3", bitrate: 192, votes: 132, metadataVerified: true },
     // Sizzla - Sizzla - Wanting You -> - 20-Comforter - Morgan`s Heritage
-    { kind: "radio", id: "d9d78c50-3766-4e74-8f67-1cd7d878f2f4", name: "Ghetto Vibes Radio", streamUrl: "https://www.radioking.com/play/ghetto-vibes-radio-station", logo: null, homepage: "https://app.site123.com/manager/wizard.php?wu=6293042d3b4b8-6293042d3b4f3-6293042d3b52d&from=dash#", country: "Jamaica", countryCode: "JM", tags: ["classic soul", "dancehall", "roots reggae", "soca"], codec: "MP3", bitrate: 128, votes: 1193, metadataVerified: true },
+    { kind: "radio", id: "d9d78c50-3766-4e74-8f67-1cd7d878f2f4", name: "Ghetto Vibes Radio", brandColor: "#D81B60", streamUrl: "https://www.radioking.com/play/ghetto-vibes-radio-station", logo: null, homepage: "https://app.site123.com/manager/wizard.php?wu=6293042d3b4b8-6293042d3b4f3-6293042d3b52d&from=dash#", country: "Jamaica", countryCode: "JM", tags: ["classic soul", "dancehall", "roots reggae", "soca"], codec: "MP3", bitrate: 128, votes: 1193, metadataVerified: true },
   ],
   "jazz": [
     // Dynamique - Love Hatin' -> Dynamique - Love Hatin'

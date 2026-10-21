@@ -39,9 +39,9 @@ function Glow({ index, x, itemWidth, size, color, id }) {
 
 /**
  * Colour glows behind the record carousel, one per record, each sliding
- * slower than its record so the scene has depth. Glows only exist for
- * stations whose logo gave a usable colour; otherwise the stage stays
- * charcoal. Render it centred on the carousel, underneath it.
+ * slower than its record so the scene has depth. Colours come from
+ * glowFor(): a station's brandColor, else its logo's colour, else a warm
+ * gold fallback. Render it centred on the carousel, underneath it.
  */
 export default function GlowField({ items, colorsById, index, x, itemWidth, discSize, centerY, width }) {
   const glowSize = Math.round(discSize * 2.1);

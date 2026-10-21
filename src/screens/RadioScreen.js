@@ -17,7 +17,7 @@ import { fetchStationsByTag, GENRES } from '../api/radio';
 import { backupStations, curatedStations } from '../data/radioStations';
 import { checkAhead, healList, markAlive, markDead, useDeadStations } from '../api/stationHealth';
 import { MAX_RETRIES } from '../audio/engine';
-import { getStationGlow } from '../api/stationColor';
+import { glowFor } from '../api/stationColor';
 import { usePlayer } from '../context/PlayerContext';
 import useNowPlaying from '../hooks/useNowPlaying';
 import RecordCarousel, { carouselItemWidth } from '../components/RecordCarousel';
@@ -261,11 +261,12 @@ export default function RadioScreen({ route, navigation }) {
   const label = GENRES.find((g) => g.tag === genre)?.label ?? genre;
 
   // Pull glow colours for the record in focus and its neighbours, so the
-  // colour is usually ready before you swipe to it.
+  // colour is usually ready before you swipe to it. brandColor wins, then the
+  // logo's colour, then a warm gold fallback (see glowFor).
   useEffect(() => {
     let alive = true;
     stations.slice(Math.max(0, index - 1), index + 3).forEach((s) => {
-      getStationGlow(s).then((c) => alive && setGlows((g) => (s.id in g ? g : { ...g, [s.id]: c })));
+      glowFor(s).then((c) => alive && setGlows((g) => (s.id in g ? g : { ...g, [s.id]: c })));
     });
     return () => {
       alive = false;

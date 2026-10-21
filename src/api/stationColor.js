@@ -69,3 +69,17 @@ export function getStationGlow(station) {
   cache.set(station.id, promise);
   return promise;
 }
+
+// When a logo gives us nothing usable: a deep, warm brand gold, so the stage
+// still glows faintly instead of going dead black.
+export const FALLBACK_GLOW = '#2A1F10';
+
+/**
+ * The glow behind a station's record, in priority order: the station's own
+ * `brandColor` (curated data), the most vibrant colour in its logo, then
+ * the warm gold fallback. Always resolves to a colour.
+ */
+export function glowFor(station) {
+  if (station?.brandColor) return Promise.resolve(station.brandColor);
+  return getStationGlow(station).then((c) => c ?? FALLBACK_GLOW);
+}
