@@ -15,6 +15,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { fetchStationsByTag, GENRES } from '../api/radio';
+import { curatedStations } from '../data/radioStations';
 import { getStationGlow } from '../api/stationColor';
 import { usePlayer } from '../context/PlayerContext';
 import useNowPlaying from '../hooks/useNowPlaying';
@@ -127,28 +128,43 @@ export default function RadioScreen({ route, navigation }) {
   // A station to centre once its genre's list has loaded (from Home).
   const pendingFocus = useRef(null);
 
-  const load = useCallback(async (tag) => {
-    const id = ++requestRef.current;
-    setData({ status: 'loading', stations: [] });
-    setIndex(0);
-    try {
-      const stations = await fetchStationsByTag(tag);
-      if (id !== requestRef.current) return;
-      const wanted = pendingFocus.current;
-      pendingFocus.current = null;
-      let list = stations;
-      if (wanted) {
-        const i = stations.findIndex((s) => s.id === wanted.id);
-        // A curated pick from Home may not be in this genre's list; give it
-        // the first record rather than leaving it off the carousel.
-        if (i < 0) list = [wanted, ...stations];
-        setIndex(Math.max(i, 0));
-      }
-      setData({ status: 'ready', stations: list });
-    } catch {
-      if (id === requestRef.current) setData({ status: 'error', stations: [] });
+  // Put the list on screen, centring a station Home asked for. A curated
+  // pick from Home may not be in this genre's list; give it the first record
+  // rather than leaving it off the carousel.
+  const show = useCallback((stations) => {
+    const wanted = pendingFocus.current;
+    pendingFocus.current = null;
+    let list = stations;
+    let at = 0;
+    if (wanted) {
+      const i = stations.findIndex((s) => s.id === wanted.id);
+      if (i < 0) list = [wanted, ...stations];
+      at = Math.max(i, 0);
     }
+    setIndex(at);
+    setData({ status: 'ready', stations: list });
   }, []);
+
+  const load = useCallback(
+    async (tag) => {
+      const id = ++requestRef.current;
+      // Curated genres are static: they render immediately, no network.
+      const curated = curatedStations(tag);
+      if (curated) {
+        show(curated);
+        return;
+      }
+      setData({ status: 'loading', stations: [] });
+      setIndex(0);
+      try {
+        const stations = await fetchStationsByTag(tag);
+        if (id === requestRef.current) show(stations);
+      } catch {
+        if (id === requestRef.current) setData({ status: 'error', stations: [] });
+      }
+    },
+    [show],
+  );
 
   useEffect(() => {
     load(genre);

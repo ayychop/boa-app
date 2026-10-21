@@ -14,6 +14,8 @@ import { colors, fonts, radius, space, type } from '../../theme';
 
 const RATES = [1, 1.25, 1.5, 2, 0.75];
 
+const minutes = (sec) => (sec ? `${Math.round(sec / 60)} min` : null);
+
 function CircleButton({ icon, label, onPress, size = 52, primary, children }) {
   return (
     <Tappable
@@ -79,7 +81,7 @@ export default function PodcastPlayer({ podcast, onClose }) {
                 <Ionicons name="chevron-down" size={24} color={colors.text} />
               </Pressable>
               <View style={{ alignItems: 'center' }}>
-                <Slate>BOA Podcasts</Slate>
+                <Slate>BOA Podcasts · {podcast.category}</Slate>
                 <Text style={styles.topTitle} numberOfLines={1}>
                   {podcast.title}
                 </Text>
@@ -92,14 +94,21 @@ export default function PodcastPlayer({ podcast, onClose }) {
             </Animated.View>
 
             <View style={{ width: contentWidth }}>
-              <Slate color={podcast.palette[0]} style={{ marginTop: space.xl }}>
-                Episode {String(episode.number).padStart(2, '0')} · {podcast.category}
-              </Slate>
+              <View style={styles.epMeta}>
+                <Slate color={podcast.palette[0]}>
+                  {[podcast.category, minutes(episode.duration)].filter(Boolean).join(' · ')}
+                </Slate>
+                {episode.sample && (
+                  <View style={styles.sampleBadge}>
+                    <Text style={styles.sampleText}>Sample Episode</Text>
+                  </View>
+                )}
+              </View>
               <Text style={styles.episodeTitle} numberOfLines={2}>
                 {episode.title}
               </Text>
               <Text style={[type.bodyMuted, { marginTop: 2 }]} numberOfLines={1}>
-                {podcast.title}
+                {podcast.title} · {podcast.author}
               </Text>
 
               <View style={{ marginTop: space.xl }}>
@@ -144,29 +153,30 @@ export default function PodcastPlayer({ podcast, onClose }) {
               )}
 
               <Text style={[type.bodyMuted, { marginTop: space.xl }]}>{podcast.tagline}</Text>
-              {episode.reading && (
-                <Text style={[type.caption, { marginTop: space.sm, color: colors.textFaint }]}>
-                  Sample audio: “{episode.reading.title}” by {episode.reading.author} · {episode.reading.source}
-                </Text>
-              )}
+
 
               <Slate style={{ marginTop: space.xxl, marginBottom: space.md }}>Episodes</Slate>
-              {podcast.episodes.map((ep) => {
+              {podcast.episodes.map((ep, i) => {
                 const isCurrent = ep.id === episode.id;
                 return (
                   <Animated.View key={ep.id} entering={FadeIn}>
                     <Pressable
                       onPress={() => player.play(episodeItem(podcast, ep))}
                       accessibilityRole="button"
-                      accessibilityLabel={`Play episode ${ep.number}: ${ep.title}`}
+                      accessibilityLabel={`Play ${ep.title}${ep.sample ? ' (sample episode)' : ''}`}
                       style={({ pressed }) => [styles.epRow, isCurrent && styles.epRowActive, pressed && { opacity: 0.7 }]}
                     >
                       <Text style={[styles.epNum, isCurrent && { color: podcast.palette[0] }]}>
-                        {String(ep.number).padStart(2, '0')}
+                        {String(i + 1).padStart(2, '0')}
                       </Text>
-                      <Text style={styles.epTitle} numberOfLines={1}>
-                        {ep.title}
-                      </Text>
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <Text style={styles.epTitle} numberOfLines={1}>
+                          {ep.title}
+                        </Text>
+                        <Text style={styles.epSub} numberOfLines={1}>
+                          {[i === 0 ? 'Latest' : null, minutes(ep.duration), ep.sample ? 'Sample Episode' : null].filter(Boolean).join(' · ')}
+                        </Text>
+                      </View>
                       <Ionicons
                         name={isCurrent && playing ? 'pulse' : 'play-circle-outline'}
                         size={22}
@@ -207,5 +217,15 @@ const styles = StyleSheet.create({
   },
   epRowActive: { backgroundColor: 'rgba(243,239,232,0.06)' },
   epNum: { fontFamily: fonts.mono, fontSize: 12, color: colors.textFaint, width: 22 },
-  epTitle: { flex: 1, fontFamily: fonts.semibold, fontSize: 15, color: colors.text },
+  epTitle: { fontFamily: fonts.semibold, fontSize: 15, color: colors.text },
+  epSub: { fontFamily: fonts.medium, fontSize: 12, color: colors.textFaint, marginTop: 2 },
+  epMeta: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginTop: space.xl, flexWrap: 'wrap' },
+  sampleBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: radius.pill,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.borderStrong,
+  },
+  sampleText: { fontFamily: fonts.mono, fontSize: 9.5, letterSpacing: 1.4, textTransform: 'uppercase', color: colors.textMuted },
 });

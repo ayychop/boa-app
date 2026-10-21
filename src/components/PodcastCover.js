@@ -1,21 +1,34 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { Image, StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Fog } from './ui';
 import { colors, fonts } from '../theme';
 
-// Generated cover art in three BOA-flavoured layouts, so shows read as a set
-// without needing artwork files yet.
+// A show's own cover art; when a show has none, generated art in one of three
+// BOA-flavoured layouts so it still reads as part of the set.
 export default function PodcastCover({ podcast, size, rounded = Math.round(size * 0.08) }) {
   const [hue, deep] = podcast.palette;
   const s = size / 100; // layout unit
   const frame = { width: size, height: size, borderRadius: rounded };
+
+  if (podcast.artwork) {
+    return (
+      <View style={[styles.frame, frame]}>
+        <Image
+          source={{ uri: podcast.artwork }}
+          style={{ width: size, height: size }}
+          resizeMode="cover"
+          accessibilityLabel={`${podcast.title} cover art`}
+        />
+      </View>
+    );
+  }
 
   if (podcast.cover === 'stack') {
     const words = podcast.title.replace('&', '+').split(/\s+/);
     return (
       <View style={[styles.frame, frame, { backgroundColor: hue }]}>
         <View style={[styles.pad, { padding: 9 * s }]}>
-          <Text style={[styles.mark, { fontSize: 6 * s, color: deep, letterSpacing: 1.2 * s }]}>BOA PODCASTS</Text>
+          <Text style={[styles.mark, { fontSize: 6 * s, color: deep, letterSpacing: 1.2 * s }]}>PODCAST</Text>
           <View style={{ flex: 1, justifyContent: 'flex-end' }}>
             {words.map((w) => {
               // Shrink long words to fit the width (adjustsFontSizeToFit is
@@ -50,7 +63,7 @@ export default function PodcastCover({ podcast, size, rounded = Math.round(size 
         </View>
         <Fog opacity={0.2} />
         <View style={[styles.pad, { top: 12 * s, padding: 9 * s }]}>
-          <Text style={[styles.mono, { fontSize: 5.5 * s, letterSpacing: 1.1 * s }]}>BOA PODCASTS · BTS · ROLL 01</Text>
+          <Text style={[styles.mono, { fontSize: 5.5 * s, letterSpacing: 1.1 * s }]}>PODCAST · ROLL 01</Text>
           <View style={{ flex: 1, justifyContent: 'flex-end' }}>
             <Text style={[styles.title, { fontSize: 15 * s, lineHeight: 15.5 * s, letterSpacing: -0.6 * s }]} numberOfLines={3}>
               {podcast.title}
@@ -67,7 +80,7 @@ export default function PodcastCover({ podcast, size, rounded = Math.round(size 
       <LinearGradient colors={[`${hue}CC`, deep, colors.bg]} locations={[0, 0.55, 1]} start={{ x: 0.9, y: 0 }} end={{ x: 0.1, y: 1 }} style={StyleSheet.absoluteFill} />
       <Fog opacity={0.22} />
       <View style={[styles.pad, { padding: 9 * s }]}>
-        <Text style={[styles.mono, { fontSize: 5.5 * s, letterSpacing: 1.1 * s }]}>BOA PODCASTS</Text>
+        <Text style={[styles.mono, { fontSize: 5.5 * s, letterSpacing: 1.1 * s }]}>PODCAST</Text>
         <View style={{ flex: 1, justifyContent: 'flex-end' }}>
           <Text style={[styles.serif, { fontSize: 21 * s, lineHeight: 21 * s }]} numberOfLines={3}>
             {podcast.title}

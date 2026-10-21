@@ -209,7 +209,7 @@ export default function HomeScreen({ navigation }) {
         </View>
 
         <View style={styles.section}>
-          <SectionHeader index="03" kicker="Listen" title="BOA Podcasts" />
+          <SectionHeader index="03" kicker="Mindset · Mood · Motivation · Tech" title="BOA Podcasts" />
           <Row>
             {podcasts.map((pod, i) => {
               const live = player.current?.podcastId === pod.id && player.isPlaying;
@@ -232,7 +232,7 @@ export default function HomeScreen({ navigation }) {
                       {pod.title}
                     </Text>
                     <Text style={styles.personRole} numberOfLines={1}>
-                      {pod.category} · {pod.episodes.length} episodes
+                      {pod.category} · {pod.author}
                     </Text>
                   </Tappable>
                 </Animated.View>

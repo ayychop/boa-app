@@ -67,7 +67,7 @@ export default function MiniPlayer({ onOpenRadio }) {
 
   const podcast = current.kind === 'podcast' ? podcastById(current.podcastId) : null;
   const subtitle = podcast
-    ? `${podcast.title} · Ep ${current.episodeNumber}${status === 'paused' ? ' · Paused' : ''}`
+    ? `${podcast.title}${status === 'paused' ? ' · Paused' : ''}`
     : describePlayback(status, trackTitle || nowPlaying) || 'Live radio';
   const open = () => (podcast ? media.openPodcast(podcast, { autoplay: false }) : onOpenRadio());
 
