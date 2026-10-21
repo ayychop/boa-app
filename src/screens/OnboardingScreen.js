@@ -1,17 +1,26 @@
-import { useState } from 'react';
-import { Image, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Animated, { FadeIn, FadeInDown, FadeOut, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
-import { LinearGradient } from 'expo-linear-gradient';
+import Animated, {
+  Easing,
+  FadeIn,
+  FadeInDown,
+  FadeOut,
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withRepeat,
+  withSequence,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
+import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '../context/UserContext';
 import BoaLogo from '../components/BoaLogo';
-import { fillFrame } from '../components/HeroArt';
-import { Button, Fog, LogoWatermark, Slate, Viewfinder } from '../components/ui';
+import { Button, LogoWatermark, Slate, Viewfinder } from '../components/ui';
 import { haptics } from '../utils/haptics';
 import { colors, fonts, radius, space, type } from '../theme';
-
-const ART = require('../../assets/images/mind-states-poster.jpg');
 
 export const VIBES = [
   { id: 'afrobeats', label: 'Afrobeats', icon: 'musical-notes' },
@@ -45,6 +54,56 @@ function VibePill({ vibe, selected, onToggle, index }) {
   );
 }
 
+const STAGE = '#0A0A0A';
+const SPOT_Y = 0.64; // the spotlight sits behind the copy, not the empty top
+
+// Soft gold pool of light behind the text, slowly breathing (scale + opacity,
+// ~7s a cycle). Sized in pixels so it stays a circle on a tall phone.
+function Spotlight({ width, height }) {
+  const reduceMotion = useReducedMotion();
+  const t = useSharedValue(0);
+  useEffect(() => {
+    if (reduceMotion) return;
+    t.value = withRepeat(withTiming(1, { duration: 3500, easing: Easing.bezier(0.45, 0, 0.55, 1) }), -1, true);
+  }, [reduceMotion, t]);
+  const style = useAnimatedStyle(() => ({
+    opacity: 0.72 + t.value * 0.28,
+    transform: [{ scale: 0.96 + t.value * 0.08 }],
+  }));
+  const r = Math.max(width, height) * 0.55;
+  return (
+    <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, style]}>
+      <Svg width={width} height={height}>
+        <Defs>
+          <RadialGradient id="spot" cx={width / 2} cy={height * SPOT_Y} r={r} gradientUnits="userSpaceOnUse">
+            <Stop offset="0" stopColor={colors.gold} stopOpacity={0.17} />
+            <Stop offset="0.35" stopColor={colors.gold} stopOpacity={0.06} />
+            <Stop offset="0.7" stopColor="#1A1A1A" stopOpacity={0.35} />
+            <Stop offset="1" stopColor={STAGE} stopOpacity={0} />
+          </RadialGradient>
+        </Defs>
+        <Rect width={width} height={height} fill="url(#spot)" />
+      </Svg>
+    </Animated.View>
+  );
+}
+
+// Inner shadow: clear in the middle, near-black at the corners.
+function Vignette({ width, height }) {
+  return (
+    <Svg width={width} height={height} style={StyleSheet.absoluteFill} pointerEvents="none">
+      <Defs>
+        <RadialGradient id="vig" cx={width / 2} cy={height * 0.55} r={Math.hypot(width, height) * 0.6} gradientUnits="userSpaceOnUse">
+          <Stop offset="0.35" stopColor="#000" stopOpacity={0} />
+          <Stop offset="0.75" stopColor="#000" stopOpacity={0.55} />
+          <Stop offset="1" stopColor="#000" stopOpacity={0.92} />
+        </RadialGradient>
+      </Defs>
+      <Rect width={width} height={height} fill="url(#vig)" />
+    </Svg>
+  );
+}
+
 /** First-run "vibe check": welcome, then pick what you're into. */
 export default function OnboardingScreen() {
   const insets = useSafeAreaInsets();
@@ -58,19 +117,15 @@ export default function OnboardingScreen() {
 
   return (
     <View style={styles.screen}>
-      <Image source={ART} blurRadius={30} resizeMode="cover" style={[fillFrame, { transform: [{ scale: 1.15 }] }]} />
-      <LinearGradient
-        colors={['rgba(5,5,6,0.6)', 'rgba(5,5,6,0.78)', colors.bg]}
-        locations={[0, 0.5, 0.9]}
-        style={StyleSheet.absoluteFill}
-      />
-      <Fog opacity={0.2} />
-      {/* The wordmark, huge and barely there, sitting behind the welcome. */}
+      {/* Cinematic stage: a gold spotlight breathing behind the copy, the
+          wordmark as a ghost, and a vignette crushing the edges to black. */}
+      <Spotlight width={width} height={height} />
       <LogoWatermark
         height={Math.round(Math.min(width * 1.15, 1100) / (1398 / 826))}
-        opacity={0.07}
+        opacity={0.03}
         style={{ left: (width - Math.min(width * 1.15, 1100)) / 2, bottom: Math.max(height * 0.2, 150) }}
       />
+      <Vignette width={width} height={height} />
       <Viewfinder inset={16} />
 
       <View style={[styles.top, { paddingTop: insets.top + space.xl }]}>
@@ -85,7 +140,7 @@ export default function OnboardingScreen() {
       <View style={[styles.body, { width: contentWidth, paddingBottom: insets.bottom + space.xxl }]}>
         {step === 0 ? (
           <Animated.View key="welcome" entering={FadeIn.duration(500)} exiting={FadeOut.duration(160)}>
-            <Slate dot>Scene 01 · Take 01</Slate>
+            <Slate dot color={colors.text}>Scene 01 · Take 01</Slate>
             <Animated.Text entering={FadeInDown.delay(100).springify().damping(18)} style={styles.headline}>
               Welcome to BOA.
             </Animated.Text>
@@ -101,7 +156,7 @@ export default function OnboardingScreen() {
           </Animated.View>
         ) : (
           <Animated.View key="vibes" entering={FadeInDown.springify().damping(20)}>
-            <Slate dot>The vibe check</Slate>
+            <Slate dot color={colors.text}>The vibe check</Slate>
             <Text style={styles.headline}>
               What's your <Text style={[type.serif, styles.serifInline]}>vibe?</Text>
             </Text>
@@ -129,7 +184,7 @@ export default function OnboardingScreen() {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg, overflow: 'hidden' },
+  screen: { flex: 1, backgroundColor: STAGE, overflow: 'hidden' },
   top: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: space.xl + 8 },
   dots: { flexDirection: 'row', gap: 6 },
   dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: 'rgba(243,239,232,0.25)' },
