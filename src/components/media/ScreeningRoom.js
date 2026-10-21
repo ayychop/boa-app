@@ -1,4 +1,5 @@
-import { Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
@@ -6,7 +7,11 @@ import YouTubePlayer from './YouTubePlayer';
 import VideoPlayer from './VideoPlayer';
 import Poster, { metaLine } from '../Poster';
 import { Button, Slate, Viewfinder } from '../ui';
+import { fillFrame, toSource } from '../HeroArt';
 import { colors, fonts, space, type } from '../../theme';
+
+// Default room art when a production has none of its own.
+const ROOM_ART = require('../../../assets/images/mind-states-backdrop.jpg');
 
 /**
  * Full-screen player. Episodes play from a direct file through <video> when
@@ -31,6 +36,20 @@ export default function ScreeningRoom({ screening, onClose, onSwitch }) {
   return (
     <Modal visible transparent animationType="none" onRequestClose={onClose} statusBarTranslucent>
       <Animated.View entering={FadeIn.duration(220)} style={styles.backdrop}>
+        {/* The room: key art blurred to pure atmosphere and pulled down to
+            near-black, so the picture stays the brightest thing on screen. */}
+        <Image
+          source={toSource(production.backdrop) ?? ROOM_ART}
+          blurRadius={40}
+          resizeMode="cover"
+          style={[fillFrame, styles.roomArt]}
+          accessibilityIgnoresInvertColors
+        />
+        <LinearGradient
+          colors={['rgba(5,5,6,0.55)', 'rgba(5,5,6,0.42)', 'rgba(5,5,6,0.82)', colors.bg]}
+          locations={[0, 0.35, 0.75, 1]}
+          style={StyleSheet.absoluteFill}
+        />
         <ScrollView contentContainerStyle={{ paddingTop: insets.top + space.md, paddingBottom: insets.bottom + space.xxl }}>
           <View style={styles.topBar}>
             <Slate dot>Now screening · {label}</Slate>
@@ -49,6 +68,8 @@ export default function ScreeningRoom({ screening, onClose, onSwitch }) {
             entering={FadeInDown.springify().damping(20).stiffness(140)}
             style={[styles.stage, { width: videoWidth, height: videoHeight }]}
           >
+            {/* YouTube shows each video's own thumbnail; never overlay the
+                production art on it. That art is only the room behind. */}
             {source?.youTubeId ? (
               <YouTubePlayer key={source.youTubeId} videoId={source.youTubeId} width={videoWidth} height={videoHeight} />
             ) : source?.videoUrl ? (
@@ -95,7 +116,9 @@ export default function ScreeningRoom({ screening, onClose, onSwitch }) {
 }
 
 const styles = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: '#000' },
+  backdrop: { flex: 1, backgroundColor: '#000', overflow: 'hidden' },
+  // Oversized so the blur's soft edges stay off-screen.
+  roomArt: { transform: [{ scale: 1.2 }] },
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -111,7 +134,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: 'rgba(243,239,232,0.1)',
   },
-  stage: { alignSelf: 'center', backgroundColor: '#000', overflow: 'hidden' },
+  stage: {
+    alignSelf: 'center',
+    backgroundColor: '#000',
+    overflow: 'hidden',
+    boxShadow: '0px 30px 80px rgba(0,0,0,0.75), 0px 0px 0px 1px rgba(243,239,232,0.08)',
+  },
   soonOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
   soonTitle: { fontFamily: fonts.semibold, fontSize: 26, color: colors.text, letterSpacing: -0.8 },
   info: { alignSelf: 'center', paddingHorizontal: space.xl, paddingTop: space.xl },
