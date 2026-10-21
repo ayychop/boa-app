@@ -35,6 +35,8 @@ import { FormsProvider } from './src/context/FormsContext';
 import { UserProvider, useUser } from './src/context/UserContext';
 import { PremiumProvider } from './src/context/PremiumContext';
 import OnboardingScreen from './src/screens/OnboardingScreen';
+import BoaLogo from './src/components/BoaLogo';
+import { PulseDot } from './src/components/ui';
 import MiniPlayer from './src/components/MiniPlayer';
 import HomeScreen from './src/screens/HomeScreen';
 import RadioScreen from './src/screens/RadioScreen';
@@ -183,11 +185,25 @@ function MainTabs({ narrow }) {
   );
 }
 
+// Shown while fonts and the saved profile load: the splash screen's own
+// layout (gold wordmark on charcoal) with the Vyb dot, so the native splash
+// hands over without a visible change.
+function BootScreen() {
+  return (
+    <View style={{ flex: 1, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center' }}>
+      <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
+        <BoaLogo height={130} />
+        <PulseDot size={8} style={{ marginLeft: 10, marginTop: 4 }} />
+      </View>
+    </View>
+  );
+}
+
 // First run shows the vibe check; after that, straight to the app. Waits for
 // the stored profile so returning listeners never see onboarding flash past.
 function Gate({ narrow }) {
   const { ready, onboarded } = useUser();
-  if (!ready) return <View style={{ flex: 1, backgroundColor: colors.bg }} />;
+  if (!ready) return <BootScreen />;
   return onboarded ? (
     <Animated.View key="app" entering={FadeIn.duration(450)} style={{ flex: 1 }}>
       <MainTabs narrow={narrow} />
@@ -214,7 +230,7 @@ export default function App() {
     InstrumentSerif_400Regular_Italic,
   });
 
-  if (!fontsLoaded) return <View style={{ flex: 1, backgroundColor: colors.bg }} />;
+  if (!fontsLoaded) return <BootScreen />;
 
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.bg }}>

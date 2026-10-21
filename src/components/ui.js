@@ -1,7 +1,17 @@
 import { Image, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import { useEffect } from 'react';
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withRepeat,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { Asset } from 'expo-asset';
+import BoaLogo from './BoaLogo';
 import { colors, fonts, radius, space, type } from '../theme';
 
 const fog = require('../../assets/fog.png');
@@ -160,4 +170,91 @@ const badgeStyles = StyleSheet.create({
     boxShadow: '0px 2px 10px rgba(226,168,75,0.45)',
   },
   badgeText: { fontFamily: fonts.monoMedium, fontSize: 9, letterSpacing: 1.3, color: colors.bg },
+});
+
+/**
+ * The BOA wordmark as a watermark: large, low-opacity, optionally softened.
+ * Never takes touches. Position it with `style` (it's absolutely placed).
+ */
+export function LogoWatermark({ height, opacity = 0.07, blur = 0, color = colors.gold, style }) {
+  return (
+    <View
+      pointerEvents="none"
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+      style={[
+        { position: 'absolute', opacity },
+        // CSS blur on web and Android; iOS has no view blur, where low
+        // opacity alone keeps it in the background.
+        blur ? { filter: `blur(${blur}px)` } : null,
+        style,
+      ]}
+    >
+      <BoaLogo height={height} color={color} />
+    </View>
+  );
+}
+
+const PULSE_EASE = Easing.bezier(0.45, 0, 0.55, 1);
+
+/**
+ * The "Vyb" dot: a small glowing light that breathes, with a faint halo ring
+ * swelling out of it, like an on-air lamp. Still under Reduce Motion.
+ */
+export function PulseDot({ color = colors.gold, size = 7, style }) {
+  const reduceMotion = useReducedMotion();
+  const t = useSharedValue(0);
+
+  useEffect(() => {
+    if (reduceMotion) return;
+    t.value = withRepeat(withTiming(1, { duration: 1800, easing: PULSE_EASE }), -1, true);
+  }, [reduceMotion, t]);
+
+  const core = useAnimatedStyle(() => ({ opacity: 1 - t.value * 0.55 }));
+  const halo = useAnimatedStyle(() => ({
+    opacity: 0.45 * (1 - t.value),
+    transform: [{ scale: 1 + t.value * 1.6 }],
+  }));
+
+  return (
+    <View style={[{ width: size, height: size }, style]} accessibilityElementsHidden importantForAccessibility="no">
+      <Animated.View
+        style={[StyleSheet.absoluteFill, { borderRadius: size, backgroundColor: color }, halo]}
+      />
+      <Animated.View
+        style={[
+          StyleSheet.absoluteFill,
+          { borderRadius: size, backgroundColor: color, boxShadow: `0px 0px ${size * 1.6}px ${color}` },
+          core,
+        ]}
+      />
+    </View>
+  );
+}
+
+/** Empty / waiting state: the BOA mark, a line, and an optional hint. */
+export function EmptyState({ title = 'Nothing here yet', body, style }) {
+  return (
+    <View style={[emptyStyles.wrap, style]}>
+      <BoaLogo height={34} color={colors.gold} />
+      <Text style={emptyStyles.title}>{title}</Text>
+      {body ? <Text style={emptyStyles.body}>{body}</Text> : null}
+    </View>
+  );
+}
+
+const emptyStyles = StyleSheet.create({
+  wrap: {
+    alignItems: 'center',
+    gap: space.sm,
+    paddingVertical: space.xl,
+    paddingHorizontal: space.xl,
+    borderRadius: radius.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    borderStyle: 'dashed',
+    opacity: 0.95,
+  },
+  title: { fontFamily: fonts.semibold, fontSize: 16, color: colors.text, marginTop: space.sm },
+  body: { fontFamily: fonts.regular, fontSize: 13.5, lineHeight: 19, color: colors.textMuted, textAlign: 'center', maxWidth: 300 },
 });

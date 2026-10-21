@@ -4,14 +4,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useIsFocused } from '@react-navigation/native';
 import Animated, {
-  Easing,
   FadeIn,
   FadeInDown,
   FadeOut,
   useAnimatedStyle,
-  useReducedMotion,
   useSharedValue,
-  withRepeat,
   withSequence,
   withSpring,
   withTiming,
@@ -26,14 +23,13 @@ import GlowField, { FogPlane } from '../components/GlowField';
 import Vinyl from '../components/Vinyl';
 import { MINI_PLAYER_SPACE } from '../components/MiniPlayer';
 import Reactions from '../components/Reactions';
-import { GoldBadge } from '../components/ui';
+import { GoldBadge, PulseDot } from '../components/ui';
 import { genreForVibes, useUser } from '../context/UserContext';
 import { usePremium } from '../context/PremiumContext';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, fonts, radius, space } from '../theme';
 
 const TEXT_BLOCK = 150;
-const LIVE_RED = '#F2555A';
 
 function GenrePills({ selected, onSelect }) {
   return (
@@ -59,18 +55,6 @@ function GenrePills({ selected, onSelect }) {
       })}
     </ScrollView>
   );
-}
-
-// A slow breathing dot: the one piece of constant motion on the stage.
-function LiveDot({ color }) {
-  const reduceMotion = useReducedMotion();
-  const o = useSharedValue(1);
-  useEffect(() => {
-    if (reduceMotion) return;
-    o.value = withRepeat(withTiming(0.35, { duration: 1100, easing: Easing.bezier(0.77, 0, 0.175, 1) }), -1, true);
-  }, [reduceMotion, o]);
-  const style = useAnimatedStyle(() => ({ opacity: o.value }));
-  return <Animated.View style={[styles.liveDot, { backgroundColor: color }, style]} />;
 }
 
 // Save-to-library heart. Free listeners hit the paywall; for Premium it fills
@@ -122,7 +106,8 @@ function StationText({ station, track, status, meta, compact, saved, onSave, hif
           </Text>
         ) : (
           <>
-            <LiveDot color={onAir ? colors.live : LIVE_RED} />
+            {/* The Vyb dot: gold while waiting, neon green once it's on air. */}
+            <PulseDot color={onAir ? colors.live : colors.gold} size={7} />
             <Text style={styles.subtitle}>Live Broadcast</Text>
           </>
         )}
@@ -442,7 +427,6 @@ const styles = StyleSheet.create({
   heart: { padding: 4 },
   metaRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm },
   trackRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, maxWidth: '100%' },
-  liveDot: { width: 7, height: 7, borderRadius: 4 },
   subtitle: { fontFamily: fonts.medium, color: colors.textMuted, fontSize: 15, letterSpacing: -0.1, textAlign: 'center', flexShrink: 1 },
   subtitleLead: { color: colors.textFaint },
   meta: { fontFamily: fonts.mono, color: colors.textFaint, fontSize: 10.5, letterSpacing: 1.8, textTransform: 'uppercase', textAlign: 'center' },

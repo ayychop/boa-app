@@ -7,7 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '../context/UserContext';
 import BoaLogo from '../components/BoaLogo';
 import { fillFrame } from '../components/HeroArt';
-import { Button, Fog, Slate, Viewfinder } from '../components/ui';
+import { Button, Fog, LogoWatermark, Slate, Viewfinder } from '../components/ui';
 import { haptics } from '../utils/haptics';
 import { colors, fonts, radius, space, type } from '../theme';
 
@@ -48,7 +48,7 @@ function VibePill({ vibe, selected, onToggle, index }) {
 /** First-run "vibe check": welcome, then pick what you're into. */
 export default function OnboardingScreen() {
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   const { completeOnboarding } = useUser();
   const [step, setStep] = useState(0);
   const [vibes, setVibes] = useState([]);
@@ -65,6 +65,12 @@ export default function OnboardingScreen() {
         style={StyleSheet.absoluteFill}
       />
       <Fog opacity={0.2} />
+      {/* The wordmark, huge and barely there, sitting behind the welcome. */}
+      <LogoWatermark
+        height={Math.round(Math.min(width * 1.15, 1100) / (1398 / 826))}
+        opacity={0.07}
+        style={{ left: (width - Math.min(width * 1.15, 1100)) / 2, bottom: Math.max(height * 0.2, 150) }}
+      />
       <Viewfinder inset={16} />
 
       <View style={[styles.top, { paddingTop: insets.top + space.xl }]}>

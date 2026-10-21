@@ -11,7 +11,7 @@ import { PRICE } from '../components/premium/PremiumScreen';
 import StationLogo from '../components/StationLogo';
 import { VIBES } from './OnboardingScreen';
 import BoaLogo from '../components/BoaLogo';
-import { Button, Fog, GoldBadge, Slate, Tappable, Viewfinder } from '../components/ui';
+import { Button, EmptyState, Fog, GoldBadge, LogoWatermark, Slate, Tappable, Viewfinder } from '../components/ui';
 import useBottomSpace from '../hooks/useBottomSpace';
 import { colors, fonts, radius, space, type } from '../theme';
 
@@ -44,6 +44,8 @@ export default function ProfileScreen({ navigation }) {
       <ScrollView contentContainerStyle={[styles.content, { paddingTop: insets.top + space.xxl, paddingBottom: bottom }]}>
         <View style={styles.card}>
           <Fog opacity={0.28} />
+          {/* Big wordmark behind the avatar: the profile sits on the brand. */}
+          <LogoWatermark height={136} opacity={0.06} style={{ left: -30, top: 70 }} />
           <Viewfinder inset={12} size={12} />
           <BoaLogo height={34} />
           <View style={styles.identity}>
@@ -133,14 +135,13 @@ export default function ProfileScreen({ navigation }) {
             ))}
           </View>
         ) : (
-          <View style={styles.empty}>
-            <Ionicons name="heart-outline" size={22} color={colors.textFaint} />
-            <Text style={[type.bodyMuted, { flex: 1 }]}>
-              {user.isPremium
+          <EmptyState
+            body={
+              user.isPremium
                 ? 'Tap the heart next to a station on Radio to save it here.'
-                : 'Save your favourite stations with BOA Premium.'}
-            </Text>
-          </View>
+                : 'Save your favourite stations with BOA Premium.'
+            }
+          />
         )}
 
         <Slate style={{ marginTop: space.xxl, marginBottom: space.md }}>BOA</Slate>
@@ -252,16 +253,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(226,168,75,0.45)',
     backgroundColor: colors.goldSoft,
-  },
-  empty: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.md,
-    padding: space.lg,
-    borderRadius: radius.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    borderStyle: 'dashed',
   },
   list: {
     borderRadius: radius.lg,

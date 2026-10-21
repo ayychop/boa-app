@@ -24,12 +24,25 @@
     },
     "web": {
       "favicon": "./assets/favicon.png",
-      "backgroundColor": "#0B0B0D"
+      "backgroundColor": "#050506"
     },
-    "backgroundColor": "#0B0B0D",
+    "backgroundColor": "#050506",
     "plugins": [
       "expo-font",
-      "expo-asset"
+      "expo-asset",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 220,
+          "resizeMode": "contain",
+          "backgroundColor": "#050506",
+          "dark": {
+            "image": "./assets/splash-icon.png",
+            "backgroundColor": "#050506"
+          }
+        }
+      ]
     ]
   }
 }

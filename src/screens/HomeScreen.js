@@ -24,7 +24,7 @@ import Poster, { metaLine } from '../components/Poster';
 import { heroArt } from '../components/HeroArt';
 import PodcastCover from '../components/PodcastCover';
 import StationLogo from '../components/StationLogo';
-import { Button, Fog, SectionHeader, Slate, Tappable, Viewfinder } from '../components/ui';
+import { Button, Fog, LogoWatermark, PulseDot, SectionHeader, Slate, Tappable, Viewfinder } from '../components/ui';
 import useBottomSpace from '../hooks/useBottomSpace';
 import { colors, fonts, space, type } from '../theme';
 
@@ -53,11 +53,21 @@ function Hero({ production, width, height }) {
         locations={[0, 0.3, 0.68, 1]}
         style={StyleSheet.absoluteFill}
       />
+      {/* Soft-focus wordmark over the key art: felt more than seen. */}
+      <LogoWatermark
+        height={Math.round(Math.min(width * 0.8, 760) / (1398 / 826))}
+        opacity={0.09}
+        blur={3}
+        style={{ left: (width - Math.min(width * 0.8, 760)) / 2, top: height * 0.22 }}
+      />
       <Viewfinder inset={16} />
 
       <View style={[styles.heroTop, { top: insets.top + space.xl }]}>
         <View>
-          <BoaLogo height={30} />
+          <View style={styles.logoRow}>
+            <BoaLogo height={30} />
+            <PulseDot size={7} style={styles.vybDot} />
+          </View>
           {width >= 600 && (
             <Slate color={colors.gold} style={{ marginTop: 6 }}>
               Best of all networks
@@ -306,6 +316,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'flex-start',
   },
+  logoRow: { flexDirection: 'row', alignItems: 'flex-start' },
+  // Sits like a lamp off the logo's top-right shoulder.
+  vybDot: { marginLeft: 7, marginTop: 2 },
   heroBody: { position: 'absolute', left: space.xl, right: space.xl, bottom: space.xxl, gap: space.md },
   srOnly: { position: 'absolute', width: 1, height: 1, opacity: 0, overflow: 'hidden' },
   heroTitle: { fontFamily: fonts.semibold, fontSize: 54, lineHeight: 56, letterSpacing: -2.6, color: colors.text },
