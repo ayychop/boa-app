@@ -1,6 +1,7 @@
 import { Image, StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Fog, Slate } from './ui';
+import KeyArt from './KeyArt';
 import { colors, fonts, radius } from '../theme';
 
 export function metaLine(p) {
@@ -15,10 +16,21 @@ export default function Poster({ production, width, ratio = 16 / 9, showTitle = 
   const height = Math.round(width / ratio);
   const portrait = ratio < 1;
   const soon = production.status === 'coming-soon';
+  // Art with its own title treatment is shown whole (never cropped into)
+  // and isn't captioned with the title a second time.
+  const titled = !!production.image && production.titleInArt;
 
   return (
     <View style={[styles.frame, { width, height, borderRadius: rounded }]}>
-      {production.image ? (
+      {titled ? (
+        <KeyArt
+          uri={production.image}
+          letterbox={production.imageLetterbox}
+          width={width}
+          height={height}
+          panelY={portrait ? Math.round(height * 0.2) : 0}
+        />
+      ) : production.image ? (
         <Image source={{ uri: production.image }} style={StyleSheet.absoluteFill} resizeMode="cover" />
       ) : (
         <>
@@ -36,16 +48,18 @@ export default function Poster({ production, width, ratio = 16 / 9, showTitle = 
         </>
       )}
 
-      {showTitle && (
+      {showTitle && !(titled && !portrait) && (
         <LinearGradient
           colors={['transparent', 'rgba(5,5,6,0.55)', 'rgba(5,5,6,0.95)']}
           locations={[0.3, 0.65, 1]}
           style={styles.scrim}
         >
           {soon && <Slate color={colors.gold} dot style={{ marginBottom: 6 }}>Coming soon</Slate>}
-          <Text style={[styles.title, { fontSize: Math.max(15, Math.min(26, width / 11)) }]} numberOfLines={2}>
-            {production.title}
-          </Text>
+          {!titled && (
+            <Text style={[styles.title, { fontSize: Math.max(15, Math.min(26, width / 11)) }]} numberOfLines={2}>
+              {production.title}
+            </Text>
+          )}
           {!!metaLine(production) && (
             <Text style={styles.meta} numberOfLines={1}>
               {metaLine(production)}

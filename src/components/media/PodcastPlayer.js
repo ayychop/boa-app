@@ -144,6 +144,11 @@ export default function PodcastPlayer({ podcast, onClose }) {
               )}
 
               <Text style={[type.bodyMuted, { marginTop: space.xl }]}>{podcast.tagline}</Text>
+              {episode.reading && (
+                <Text style={[type.caption, { marginTop: space.sm, color: colors.textFaint }]}>
+                  Sample audio: “{episode.reading.title}” by {episode.reading.author} · {episode.reading.source}
+                </Text>
+              )}
 
               <Slate style={{ marginTop: space.xxl, marginBottom: space.md }}>Episodes</Slate>
               {podcast.episodes.map((ep) => {

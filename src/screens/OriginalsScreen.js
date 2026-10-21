@@ -5,6 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { featuredProduction, productions } from '../data/boaContent';
 import { useMedia } from '../context/MediaContext';
 import Poster, { metaLine } from '../components/Poster';
+import KeyArt from '../components/KeyArt';
 import { Button, Fog, SectionHeader, Slate, Tappable, Viewfinder } from '../components/ui';
 import useBottomSpace from '../hooks/useBottomSpace';
 import { colors, fonts, space, type } from '../theme';
@@ -15,17 +16,34 @@ function Featured({ production, width }) {
   const insets = useSafeAreaInsets();
   const media = useMedia();
   const wide = width >= 900;
-  // Mobile gets a tall cinematic crop; desktop goes full 2.39:1 scope.
-  const height = wide ? Math.round(width / 2.39) + insets.top : Math.round(width * 1.2) + insets.top;
+  const titled = production.titleInArt;
+  const panelWidth = wide ? Math.round(width * 0.5) : width;
+  const panelHeight = Math.round(panelWidth / (16 / 9));
+  // Mobile gets a tall cinematic frame; desktop goes full 2.39:1 scope. With
+  // whole key art on a phone, the frame is the art panel plus the copy.
+  const height = wide
+    ? Math.round(width / 2.39) + insets.top
+    : titled
+      ? insets.top + 64 + panelHeight + 330
+      : Math.round(width * 1.2) + insets.top;
 
   return (
     <View style={{ width, height }}>
-      <Animated.Image
-        entering={FadeInDown.duration(600)}
-        source={{ uri: production.image }}
-        style={StyleSheet.absoluteFill}
-        resizeMode="cover"
-      />
+      <Animated.View entering={FadeInDown.duration(600)} style={StyleSheet.absoluteFill}>
+        {titled ? (
+          <KeyArt
+            uri={production.image}
+            letterbox={production.imageLetterbox}
+            width={width}
+            height={height}
+            panelWidth={panelWidth}
+            panelX={wide ? width - panelWidth - space.xxxl : 0}
+            panelY={wide ? Math.round((height - panelHeight) / 2) : insets.top + 64}
+          />
+        ) : (
+          <Animated.Image source={{ uri: production.image }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+        )}
+      </Animated.View>
       <LinearGradient
         colors={['rgba(5,5,6,0.55)', 'rgba(5,5,6,0)', 'rgba(5,5,6,0.65)', colors.bg]}
         locations={[0, 0.3, 0.7, 1]}
@@ -36,11 +54,14 @@ function Featured({ production, width }) {
         <Slate dot>02 · Productions</Slate>
         <Slate>The slate</Slate>
       </View>
-      <View style={styles.featuredBody}>
+      <View style={[styles.featuredBody, wide && titled && { right: panelWidth + space.xxxl * 2 }]}>
         <Slate color={colors.gold} lines={2}>
           Featured · {metaLine(production)}
         </Slate>
-        <Text style={[type.display, styles.featuredTitle]}>{production.title}</Text>
+        {/* Art with a baked-in title is the title; keep text for screen readers. */}
+        <Text style={titled ? styles.srOnly : [type.display, styles.featuredTitle]} accessibilityRole="header">
+          {production.title}
+        </Text>
         <Text style={[type.bodyMuted, styles.logline]} numberOfLines={wide ? 3 : 4}>
           {production.logline}
         </Text>
@@ -129,6 +150,7 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   featuredTop: { position: 'absolute', left: space.xl + 8, right: space.xl + 8, flexDirection: 'row', justifyContent: 'space-between' },
   featuredBody: { position: 'absolute', left: space.xl, right: space.xl, bottom: space.xl, maxWidth: 680 },
+  srOnly: { position: 'absolute', width: 1, height: 1, opacity: 0, overflow: 'hidden' },
   featuredTitle: { fontSize: 48, lineHeight: 50, marginTop: space.md },
   logline: { marginTop: space.md },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: space.md, marginTop: space.xl },

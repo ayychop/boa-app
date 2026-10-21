@@ -21,6 +21,7 @@ import { useForms } from '../context/FormsContext';
 import BoaLogo from '../components/BoaLogo';
 import Headshot from '../components/Headshot';
 import Poster, { metaLine } from '../components/Poster';
+import KeyArt from '../components/KeyArt';
 import PodcastCover from '../components/PodcastCover';
 import StationLogo from '../components/StationLogo';
 import { Button, Fog, SectionHeader, Slate, Tappable, Viewfinder } from '../components/ui';
@@ -41,10 +42,34 @@ function Hero({ production, width, height }) {
     zoom.value = withRepeat(withTiming(1.09, { duration: 14000, easing: Easing.inOut(Easing.quad) }), -1, true);
   }, [reduceMotion, zoom]);
   const zoomStyle = useAnimatedStyle(() => ({ transform: [{ scale: zoom.value }] }));
+  // Blurred backdrop starts oversized so its soft edge never shows.
+  const backdropZoom = useAnimatedStyle(() => ({ transform: [{ scale: 1.15 * zoom.value }] }));
+
+  // Art with its title baked in is shown whole: full-width panel under the
+  // slate on phones, a panel on the right with the copy beside it on wide
+  // screens.
+  const wide = width >= 900;
+  const panelWidth = wide ? Math.round(Math.min(width * 0.54, height * 0.68 * (16 / 9))) : width;
+  const panelHeight = Math.round(panelWidth / (16 / 9));
+  const art = production.titleInArt ? (
+    <KeyArt
+      uri={production.image}
+      letterbox={production.imageLetterbox}
+      width={width}
+      height={height}
+      panelWidth={panelWidth}
+      panelX={wide ? width - panelWidth - space.xxxl : 0}
+      // Phones: centre the panel in the space between the slate and the copy.
+      panelY={wide ? Math.round((height - panelHeight) / 2) : Math.max(insets.top + 96, Math.round((height - 210 - panelHeight) / 2) + 40)}
+      backdropStyle={backdropZoom}
+    />
+  ) : (
+    <Animated.Image source={{ uri: production.image }} resizeMode="cover" style={[StyleSheet.absoluteFill, zoomStyle]} />
+  );
 
   return (
     <View style={{ width, height, overflow: 'hidden' }}>
-      <Animated.Image source={{ uri: production.image }} resizeMode="cover" style={[StyleSheet.absoluteFill, zoomStyle]} />
+      {art}
       <Fog opacity={0.16} />
       <LinearGradient
         colors={['rgba(5,5,6,0.7)', 'rgba(5,5,6,0.05)', 'rgba(5,5,6,0.55)', colors.bg]}
@@ -68,21 +93,31 @@ function Hero({ production, width, height }) {
         </View>
       </View>
 
-      <Animated.View entering={FadeInDown.delay(150).springify().damping(18)} style={styles.heroBody}>
+      <Animated.View
+        entering={FadeInDown.delay(150).springify().damping(18)}
+        style={[styles.heroBody, wide && production.titleInArt && { right: panelWidth + space.xxxl * 2 }]}
+      >
         <Slate color={colors.gold} lines={2}>
           BOA Original · {metaLine(production)}
         </Slate>
-        <Text style={styles.heroTitle} accessibilityRole="header">
+        {/* When the art already carries the title, don't paint it twice;
+            keep it for screen readers. */}
+        <Text style={production.titleInArt ? styles.srOnly : styles.heroTitle} accessibilityRole="header">
           {production.title}
         </Text>
         <Text style={[type.bodyMuted, { maxWidth: 560 }]} numberOfLines={3}>
           {production.logline}
         </Text>
         <View style={styles.heroActions}>
-          <Button label="Watch Trailer" icon="play" onPress={() => media.openTrailer(production)} />
           {production.episodes[0] && (
-            <Button label="Episode 1" icon="tv-outline" variant="ghost" onPress={() => media.openEpisode(production)} />
+            <Button label="Episode 1" icon="play" onPress={() => media.openEpisode(production)} />
           )}
+          <Button
+            label="Watch Trailer"
+            icon="film-outline"
+            variant={production.episodes[0] ? 'ghost' : 'primary'}
+            onPress={() => media.openTrailer(production)}
+          />
         </View>
       </Animated.View>
     </View>
@@ -152,7 +187,7 @@ export default function HomeScreen({ navigation }) {
         <View style={styles.section}>
           <SectionHeader
             index="01"
-            kicker="R&B · Hip Hop"
+            kicker="Ghana · R&B · Hip Hop"
             title="Trending on BOA Radio"
             action="Open radio"
             onAction={() => navigation.navigate('Radio')}
@@ -295,6 +330,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   heroBody: { position: 'absolute', left: space.xl, right: space.xl, bottom: space.xxl, gap: space.md },
+  srOnly: { position: 'absolute', width: 1, height: 1, opacity: 0, overflow: 'hidden' },
   heroTitle: { fontFamily: fonts.semibold, fontSize: 54, lineHeight: 56, letterSpacing: -2.6, color: colors.text },
   heroActions: { flexDirection: 'row', flexWrap: 'wrap', gap: space.md, marginTop: space.sm },
   section: { marginTop: space.xxl },

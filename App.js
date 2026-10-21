@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import { DarkTheme, NavigationContainer, useIsFocused } from '@react-navigation/native';
 import { BottomTabBar, createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -142,6 +142,7 @@ function TabBarBackground() {
 }
 
 export default function App() {
+  const narrow = useWindowDimensions().width < 380;
   const [fontsLoaded] = useFonts({
     Manrope_300Light,
     Manrope_400Regular,
@@ -178,7 +179,9 @@ export default function App() {
                       elevation: 0,
                     },
                     tabBarBackground: () => <TabBarBackground />,
-                    tabBarLabelStyle: { fontFamily: fonts.semibold, fontSize: 10.5, letterSpacing: 0.2 },
+                    // Five tabs: step the labels down on narrow phones so
+                    // "BOA Originals" fits without truncating.
+                    tabBarLabelStyle: { fontFamily: fonts.semibold, fontSize: narrow ? 9.5 : 10, letterSpacing: -0.1 },
                     tabBarIcon: ({ focused, color, size }) => (
                       <TabIcon name={route.name} focused={focused} color={color} size={size} />
                     ),
@@ -187,7 +190,7 @@ export default function App() {
                 >
                   <Tab.Screen name="Home" component={Home} />
                   <Tab.Screen name="Radio" component={Radio} />
-                  <Tab.Screen name="Originals" component={Originals} options={{ title: 'Originals' }} />
+                  <Tab.Screen name="Originals" component={Originals} options={{ title: 'BOA Originals' }} />
                   <Tab.Screen name="Talent" component={Talent} />
                   <Tab.Screen name="Profile" component={Profile} />
                 </Tab.Navigator>

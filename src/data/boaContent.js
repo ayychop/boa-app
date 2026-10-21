@@ -29,8 +29,15 @@ export const productions = [
     featured: true,
     logline:
       'Five friends navigate daily life in Northwest London, juggling pressures from the streets, financial struggles, and differing aspirations for the future. Through flashbacks and personal reflections, Joe examines how their environment shapes his mindset and choices.',
-    // No poster on the site yet; the official trailer's thumbnail stands in.
-    image: ytThumb('1Luf9F3wl-k', 'maxresdefault'),
+    // Cover art is Episode 1's custom YouTube thumbnail. YouTube only holds it
+    // at 640x480 (sddefault; maxresdefault 404s for this video), letterboxed
+    // to 16:9, so 16:9 frames crop the bars away exactly.
+    // TODO: swap for the 1280x720+ original artwork file from BOA.
+    image: ytThumb('SnQglPC9S2M', 'sddefault'),
+    // Black bars top and bottom of the 4:3 file, as a fraction of its height
+    // (60px of 480), and the art carries its own "MIND STATES UK" title.
+    imageLetterbox: 0.125,
+    titleInArt: true,
     trailerYouTubeId: '1Luf9F3wl-k', // "Mind States UK - Official Trailer"
     // Episode 1 is published on YouTube, not as a video file.
     episodes: [
@@ -39,7 +46,7 @@ export const productions = [
         title: 'Episode 1',
         youTubeId: 'SnQglPC9S2M',
         videoUrl: null,
-        image: ytThumb('SnQglPC9S2M'),
+        image: ytThumb('SnQglPC9S2M', 'sddefault'),
       },
     ],
   },
@@ -57,8 +64,8 @@ export const productions = [
   },
   // The site lists these two as untitled "Coming Soon" slots.
   {
-    id: 'mind-states-3',
-    title: 'Mind States 3',
+    id: 'mind-states-ep3',
+    title: 'Mind States EP3',
     format: 'Series',
     genres: ['Crime', 'Drama', 'Thriller'],
     year: null,
@@ -69,8 +76,8 @@ export const productions = [
     episodes: [],
   },
   {
-    id: 'mind-states-4',
-    title: 'Mind States 4',
+    id: 'mind-states-ep4',
+    title: 'Mind States EP4',
     format: 'Series',
     genres: ['Crime', 'Drama', 'Thriller'],
     year: null,
