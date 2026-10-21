@@ -12,6 +12,8 @@ import Animated, {
   useReducedMotion,
   useSharedValue,
   withRepeat,
+  withSequence,
+  withSpring,
   withTiming,
 } from 'react-native-reanimated';
 import { fetchStationsByTag, GENRES } from '../api/radio';
@@ -23,6 +25,11 @@ import RecordCarousel, { carouselItemWidth } from '../components/RecordCarousel'
 import GlowField, { FogPlane } from '../components/GlowField';
 import Vinyl from '../components/Vinyl';
 import { MINI_PLAYER_SPACE } from '../components/MiniPlayer';
+import Reactions from '../components/Reactions';
+import { GoldBadge } from '../components/ui';
+import { genreForVibes, useUser } from '../context/UserContext';
+import { usePremium } from '../context/PremiumContext';
+import { Ionicons } from '@expo/vector-icons';
 import { colors, fonts, radius, space } from '../theme';
 
 const TEXT_BLOCK = 150;
@@ -66,7 +73,32 @@ function LiveDot({ color }) {
   return <Animated.View style={[styles.liveDot, { backgroundColor: color }, style]} />;
 }
 
-function StationText({ station, track, status, meta, compact }) {
+// Save-to-library heart. Free listeners hit the paywall; for Premium it fills
+// in with a pop.
+function SaveHeart({ saved, onPress }) {
+  const scale = useSharedValue(1);
+  const style = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+  const press = () => {
+    scale.value = withSequence(withTiming(0.78, { duration: 80 }), withSpring(1, { duration: 450, dampingRatio: 0.4 }));
+    onPress();
+  };
+  return (
+    <Pressable
+      onPress={press}
+      hitSlop={12}
+      accessibilityRole="button"
+      accessibilityState={{ selected: saved }}
+      accessibilityLabel={saved ? 'Remove from My Library' : 'Save station'}
+      style={styles.heart}
+    >
+      <Animated.View style={style}>
+        <Ionicons name={saved ? 'heart' : 'heart-outline'} size={26} color={saved ? colors.gold : colors.textMuted} />
+      </Animated.View>
+    </Pressable>
+  );
+}
+
+function StationText({ station, track, status, meta, compact, saved, onSave, hifi }) {
   const onAir = status === 'playing';
   return (
     <Animated.View
@@ -75,9 +107,12 @@ function StationText({ station, track, status, meta, compact }) {
       exiting={FadeOut.duration(120)}
       style={styles.textBlock}
     >
-      <Text style={[styles.name, compact && styles.nameCompact]} numberOfLines={2} accessibilityRole="header">
-        {station.name}
-      </Text>
+      <View style={styles.nameRow}>
+        <Text style={[styles.name, compact && styles.nameCompact, { flexShrink: 1 }]} numberOfLines={2} accessibilityRole="header">
+          {station.name}
+        </Text>
+        <SaveHeart saved={saved} onPress={onSave} />
+      </View>
       {/* Keyed on the title so a new track crossfades in. */}
       <Animated.View key={track || 'live'} entering={FadeIn.duration(350)} style={styles.trackRow}>
         {track ? (
@@ -92,9 +127,12 @@ function StationText({ station, track, status, meta, compact }) {
           </>
         )}
       </Animated.View>
-      <Text style={styles.meta} numberOfLines={1}>
-        {meta}
-      </Text>
+      <View style={styles.metaRow}>
+        {hifi && <GoldBadge label="HI-FI" />}
+        <Text style={styles.meta} numberOfLines={1}>
+          {meta}
+        </Text>
+      </View>
     </Animated.View>
   );
 }
@@ -116,11 +154,14 @@ function Notice({ title, body, action, onAction }) {
 export default function RadioScreen({ route, navigation }) {
   const insets = useSafeAreaInsets();
   const player = usePlayer();
+  const user = useUser();
+  const { requirePremium } = usePremium();
   const isFocused = useIsFocused();
   // Carousel position, shared with the parallax layers behind it.
   const scrollX = useSharedValue(0);
   const [glows, setGlows] = useState({});
-  const [genre, setGenre] = useState(GENRES[0].tag);
+  // Open on the genre their onboarding vibes point to.
+  const [genre, setGenre] = useState(() => genreForVibes(user.vibes) ?? GENRES[0].tag);
   const [index, setIndex] = useState(0);
   const [data, setData] = useState({ status: 'loading', stations: [] });
   const [layout, setLayout] = useState(null);
@@ -288,6 +329,11 @@ export default function RadioScreen({ route, navigation }) {
           {active && (
             <StationText
               station={active}
+              saved={user.isSaved(active.id)}
+              hifi={user.isPremium}
+              onSave={() =>
+                requirePremium(() => user.toggleSaved(active), 'Upgrade to BOA Premium to save your favourite stations.')
+              }
               track={trackFor(active)}
               status={statusFor(active)}
               meta={metaFor(active)}
@@ -345,6 +391,9 @@ export default function RadioScreen({ route, navigation }) {
         }}
       >
         {content}
+        {isFocused && player.current?.kind === 'radio' && player.status === 'playing' && (
+          <Reactions style={{ right: space.lg, bottom: tabBarHeight + MINI_PLAYER_SPACE - space.xs }} />
+        )}
         {data.status === 'ready' && !player.current && stations.length > 0 && (
           <Text style={[styles.hint, { bottom: tabBarHeight + MINI_PLAYER_SPACE / 2 - 6 }]}>Swipe to browse · Tap the record to play</Text>
         )}
@@ -389,6 +438,9 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   nameCompact: { fontSize: 30, lineHeight: 34, letterSpacing: -0.9 },
+  nameRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm, maxWidth: '100%' },
+  heart: { padding: 4 },
+  metaRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm },
   trackRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, maxWidth: '100%' },
   liveDot: { width: 7, height: 7, borderRadius: 4 },
   subtitle: { fontFamily: fonts.medium, color: colors.textMuted, fontSize: 15, letterSpacing: -0.1, textAlign: 'center', flexShrink: 1 },

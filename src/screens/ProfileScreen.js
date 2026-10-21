@@ -1,12 +1,22 @@
 import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { founders, SITE_URL } from '../data/boaContent';
 import { useForms } from '../context/FormsContext';
+import { useUser } from '../context/UserContext';
+import { usePremium } from '../context/PremiumContext';
+import { usePlayer } from '../context/PlayerContext';
+import { PRICE } from '../components/premium/PremiumScreen';
+import StationLogo from '../components/StationLogo';
+import { VIBES } from './OnboardingScreen';
 import BoaLogo from '../components/BoaLogo';
-import { Button, Fog, Slate, Viewfinder } from '../components/ui';
+import { Button, Fog, GoldBadge, Slate, Tappable, Viewfinder } from '../components/ui';
 import useBottomSpace from '../hooks/useBottomSpace';
 import { colors, fonts, radius, space, type } from '../theme';
+
+// No accounts yet, so the profile has a placeholder name.
+const LISTENER_NAME = 'BOA Listener';
 
 const KIND_LABEL = { getSeen: 'Talent application', contact: 'Message to BOA' };
 
@@ -14,10 +24,13 @@ function when(iso) {
   return new Date(iso).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
 
-export default function ProfileScreen() {
+export default function ProfileScreen({ navigation }) {
   const insets = useSafeAreaInsets();
   const bottom = useBottomSpace(space.xxl);
   const forms = useForms();
+  const user = useUser();
+  const player = usePlayer();
+  const { openPremium } = usePremium();
 
   const actions = [
     { icon: 'person-add-outline', label: 'Get seen', detail: 'Submit as talent', onPress: forms.openGetSeen },
@@ -32,18 +45,105 @@ export default function ProfileScreen() {
         <View style={styles.card}>
           <Fog opacity={0.28} />
           <Viewfinder inset={12} size={12} />
-          <BoaLogo height={40} />
-          <Slate style={{ marginTop: space.lg }} dot>
-            Your account
-          </Slate>
-          <Text style={[type.h1, { marginTop: space.sm }]}>
-            Sign-in is <Text style={type.serif}>on its way.</Text>
-          </Text>
-          <Text style={[type.bodyMuted, { marginTop: space.sm }]}>
-            Saved stations, watch history and your talent submissions will live here.
-          </Text>
+          <BoaLogo height={34} />
+          <View style={styles.identity}>
+            <View style={[styles.avatar, user.isPremium && styles.avatarPremium]}>
+              <Ionicons name="person" size={26} color={user.isPremium ? colors.bg : colors.textMuted} />
+            </View>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <View style={styles.nameRow}>
+                <Text style={styles.name} numberOfLines={1}>
+                  {LISTENER_NAME}
+                </Text>
+                {user.isPremium && <GoldBadge label="PREMIUM" icon="diamond" />}
+              </View>
+              <Text style={styles.nameSub}>Sign-in is on its way · saved on this device</Text>
+            </View>
+          </View>
+          {user.vibes.length > 0 && (
+            <View style={styles.vibes}>
+              {user.vibes.map((v) => (
+                <View key={v} style={styles.vibe}>
+                  <Text style={styles.vibeText}>{VIBES.find((x) => x.id === v)?.label ?? v}</Text>
+                </View>
+              ))}
+            </View>
+          )}
         </View>
 
+        {user.isPremium ? (
+          <Pressable onPress={openPremium} accessibilityRole="button" style={({ pressed }) => [styles.premiumActive, pressed && { opacity: 0.85 }]}>
+            <Ionicons name="diamond" size={18} color={colors.gold} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.linkText}>BOA Premium is active</Text>
+              <Text style={styles.linkDetail}>Saving, Hi-Fi, early access and downloads unlocked</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
+          </Pressable>
+        ) : (
+          <Tappable onPress={openPremium} accessibilityRole="button" accessibilityLabel="Go Premium" style={styles.banner}>
+            <LinearGradient
+              colors={[colors.gold, '#C98A2E', colors.goldDeep]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={StyleSheet.absoluteFill}
+            />
+            <Fog opacity={0.18} />
+            <View style={styles.bannerIcon}>
+              <Ionicons name="diamond" size={22} color={colors.gold} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.bannerKicker}>BOA PREMIUM · {PRICE}/MONTH</Text>
+              <Text style={styles.bannerTitle}>Go Premium</Text>
+              <Text style={styles.bannerBody}>Save stations, Hi-Fi audio, ad-free, early access.</Text>
+            </View>
+            <Ionicons name="arrow-forward" size={20} color={colors.bg} />
+          </Tappable>
+        )}
+
+        <Slate style={{ marginTop: space.xxl, marginBottom: space.md }}>My Library</Slate>
+        {user.saved.length ? (
+          <View style={styles.list}>
+            {user.saved.map((station) => (
+              <Pressable
+                key={station.id}
+                onPress={() => {
+                  player.play(station);
+                  navigation.navigate('Radio', { station });
+                }}
+                accessibilityRole="button"
+                accessibilityLabel={`Play ${station.name}`}
+                style={({ pressed }) => [styles.link, pressed && { backgroundColor: colors.surfaceRaised }]}
+              >
+                <StationLogo station={station} size={40} rounded={20} fit="cover" />
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={styles.linkText} numberOfLines={1}>
+                    {station.name}
+                  </Text>
+                  <Text style={styles.linkDetail} numberOfLines={1}>
+                    {[station.country, station.bitrate ? `${station.bitrate} kbps` : null].filter(Boolean).join(' · ') || 'Live radio'}
+                  </Text>
+                </View>
+                {player.current?.id === station.id && player.isPlaying ? (
+                  <Ionicons name="pulse" size={18} color={colors.gold} />
+                ) : (
+                  <Ionicons name="play-circle-outline" size={22} color={colors.textMuted} />
+                )}
+              </Pressable>
+            ))}
+          </View>
+        ) : (
+          <View style={styles.empty}>
+            <Ionicons name="heart-outline" size={22} color={colors.textFaint} />
+            <Text style={[type.bodyMuted, { flex: 1 }]}>
+              {user.isPremium
+                ? 'Tap the heart next to a station on Radio to save it here.'
+                : 'Save your favourite stations with BOA Premium.'}
+            </Text>
+          </View>
+        )}
+
+        <Slate style={{ marginTop: space.xxl, marginBottom: space.md }}>BOA</Slate>
         <View style={styles.list}>
           {actions.map((a) => (
             <Pressable
@@ -110,8 +210,60 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
   },
-  list: {
+  identity: { flexDirection: 'row', alignItems: 'center', gap: space.md, marginTop: space.xl },
+  avatar: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surfaceRaised,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+  },
+  avatarPremium: { backgroundColor: colors.gold, borderColor: colors.gold, boxShadow: '0px 6px 20px rgba(226,168,75,0.45)' },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  name: { fontFamily: fonts.semibold, fontSize: 22, letterSpacing: -0.6, color: colors.text, flexShrink: 1 },
+  nameSub: { fontFamily: fonts.medium, fontSize: 12, color: colors.textFaint, marginTop: 3 },
+  vibes: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: space.lg },
+  vibe: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: radius.pill, backgroundColor: colors.goldSoft },
+  vibeText: { fontFamily: fonts.semibold, fontSize: 12, color: colors.gold },
+  banner: {
     marginTop: space.xl,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    padding: space.lg,
+    borderRadius: radius.lg,
+    overflow: 'hidden',
+    boxShadow: '0px 12px 34px rgba(226,168,75,0.3)',
+  },
+  bannerIcon: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg },
+  bannerKicker: { fontFamily: fonts.monoMedium, fontSize: 9.5, letterSpacing: 1.4, color: 'rgba(5,5,6,0.7)' },
+  bannerTitle: { fontFamily: fonts.bold, fontSize: 20, letterSpacing: -0.5, color: colors.bg, marginTop: 2 },
+  bannerBody: { fontFamily: fonts.medium, fontSize: 12.5, color: 'rgba(5,5,6,0.75)', marginTop: 2 },
+  premiumActive: {
+    marginTop: space.xl,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    padding: space.lg,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: 'rgba(226,168,75,0.45)',
+    backgroundColor: colors.goldSoft,
+  },
+  empty: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    padding: space.lg,
+    borderRadius: radius.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    borderStyle: 'dashed',
+  },
+  list: {
     borderRadius: radius.lg,
     overflow: 'hidden',
     borderWidth: StyleSheet.hairlineWidth,

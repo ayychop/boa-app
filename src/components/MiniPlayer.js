@@ -19,6 +19,8 @@ import { podcastById } from '../data/podcasts';
 import PodcastCover from './PodcastCover';
 import { describePlayback } from '../audio/status';
 import useNowPlaying from '../hooks/useNowPlaying';
+import { useUser } from '../context/UserContext';
+import { GoldBadge } from './ui';
 import StationLogo from './StationLogo';
 import { colors, fonts, radius, space } from '../theme';
 
@@ -42,6 +44,7 @@ export default function MiniPlayer({ onOpenRadio }) {
   const { current, status, trackTitle, isPlaying, toggle } = usePlayer();
   const media = useMedia();
   const reduceMotion = useReducedMotion();
+  const { isPremium } = useUser();
   const nowPlaying = useNowPlaying(current, current?.kind === 'radio');
   const swell = useSharedValue(1);
   const halo = useSharedValue(0);
@@ -102,9 +105,12 @@ export default function MiniPlayer({ onOpenRadio }) {
               <StationLogo station={current} size={42} rounded={21} fit="cover" />
             )}
             <View style={styles.body}>
-              <Text style={styles.title} numberOfLines={1}>
-                {current.name}
-              </Text>
+              <View style={styles.titleRow}>
+                <Text style={[styles.title, { flexShrink: 1 }]} numberOfLines={1}>
+                  {current.name}
+                </Text>
+                {isPremium && <GoldBadge label="HI-FI" />}
+              </View>
               <Text style={styles.subtitle} numberOfLines={1}>
                 {subtitle}
               </Text>
@@ -174,6 +180,7 @@ const styles = StyleSheet.create({
   progressFill: { height: '100%' },
   info: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: space.md },
   body: { flex: 1, minWidth: 0 },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   title: { fontFamily: fonts.bold, color: colors.text, fontSize: 15, letterSpacing: -0.3 },
   subtitle: { fontFamily: fonts.medium, color: colors.textMuted, fontSize: 12.5, marginTop: 1 },
   button: {

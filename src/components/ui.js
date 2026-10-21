@@ -79,6 +79,7 @@ export function Button({ label, icon, onPress, variant = 'primary', disabled, st
   return (
     <Tappable
       onPress={disabled ? undefined : onPress}
+      disabled={!!disabled}
       accessibilityRole="button"
       accessibilityState={{ disabled: !!disabled }}
       style={[styles.button, primary ? styles.primary : styles.ghost, disabled && { opacity: 0.45 }, style]}
@@ -135,4 +136,28 @@ const styles = StyleSheet.create({
   },
   action: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingBottom: 3 },
   actionText: { fontFamily: fonts.semibold, fontSize: 13, color: colors.gold },
+});
+
+/** Small gold pill: "PREMIUM" next to a name, "HI-FI" on players. */
+export function GoldBadge({ label, icon, style }) {
+  return (
+    <View style={[badgeStyles.badge, style]} accessibilityLabel={label}>
+      {icon && <Ionicons name={icon} size={10} color={colors.bg} />}
+      <Text style={badgeStyles.badgeText}>{label}</Text>
+    </View>
+  );
+}
+
+const badgeStyles = StyleSheet.create({
+  badge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 7,
+    paddingVertical: 2.5,
+    borderRadius: radius.pill,
+    backgroundColor: colors.gold,
+    boxShadow: '0px 2px 10px rgba(226,168,75,0.45)',
+  },
+  badgeText: { fontFamily: fonts.monoMedium, fontSize: 9, letterSpacing: 1.3, color: colors.bg },
 });

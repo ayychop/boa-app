@@ -7,6 +7,8 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, {
   Easing,
+  FadeIn,
+  FadeOut,
   useAnimatedStyle,
   useReducedMotion,
   useSharedValue,
@@ -30,6 +32,9 @@ import { InstrumentSerif_400Regular_Italic } from '@expo-google-fonts/instrument
 import { PlayerProvider } from './src/context/PlayerContext';
 import { MediaProvider } from './src/context/MediaContext';
 import { FormsProvider } from './src/context/FormsContext';
+import { UserProvider, useUser } from './src/context/UserContext';
+import { PremiumProvider } from './src/context/PremiumContext';
+import OnboardingScreen from './src/screens/OnboardingScreen';
 import MiniPlayer from './src/components/MiniPlayer';
 import HomeScreen from './src/screens/HomeScreen';
 import RadioScreen from './src/screens/RadioScreen';
@@ -141,6 +146,60 @@ function TabBarBackground() {
   );
 }
 
+function MainTabs({ narrow }) {
+  return (
+    <NavigationContainer theme={navTheme}>
+      <StatusBar style="light" />
+      <Tab.Navigator
+        initialRouteName="Home"
+        tabBar={(props) => <FloatingTabBar {...props} />}
+        screenOptions={({ route }) => ({
+          headerShown: false,
+          tabBarActiveTintColor: colors.gold,
+          tabBarInactiveTintColor: colors.textFaint,
+          tabBarStyle: {
+            backgroundColor: 'transparent',
+            borderTopColor: colors.border,
+            borderTopWidth: StyleSheet.hairlineWidth,
+            elevation: 0,
+          },
+          tabBarBackground: () => <TabBarBackground />,
+          // Five tabs: step the labels down on narrow phones so
+          // "BOA Originals" fits without truncating.
+          tabBarLabelStyle: { fontFamily: fonts.semibold, fontSize: narrow ? 9.5 : 10, letterSpacing: -0.1 },
+          tabBarIcon: ({ focused, color, size }) => (
+            <TabIcon name={route.name} focused={focused} color={color} size={size} />
+          ),
+        })}
+        screenListeners={{ tabPress: () => haptics.selection() }}
+      >
+        <Tab.Screen name="Home" component={Home} />
+        <Tab.Screen name="Radio" component={Radio} />
+        <Tab.Screen name="Originals" component={Originals} options={{ title: 'BOA Originals' }} />
+        <Tab.Screen name="Talent" component={Talent} />
+        <Tab.Screen name="Profile" component={Profile} />
+      </Tab.Navigator>
+    </NavigationContainer>
+  );
+}
+
+// First run shows the vibe check; after that, straight to the app. Waits for
+// the stored profile so returning listeners never see onboarding flash past.
+function Gate({ narrow }) {
+  const { ready, onboarded } = useUser();
+  if (!ready) return <View style={{ flex: 1, backgroundColor: colors.bg }} />;
+  return onboarded ? (
+    <Animated.View key="app" entering={FadeIn.duration(450)} style={{ flex: 1 }}>
+      <MainTabs narrow={narrow} />
+    </Animated.View>
+  ) : (
+    <Animated.View key="onboarding" exiting={FadeOut.duration(300)} style={{ flex: 1 }}>
+      <StatusBar style="light" />
+      <OnboardingScreen />
+    </Animated.View>
+  );
+}
+
 export default function App() {
   const narrow = useWindowDimensions().width < 380;
   const [fontsLoaded] = useFonts({
@@ -160,44 +219,17 @@ export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.bg }}>
       <SafeAreaProvider>
-        <PlayerProvider>
-          <MediaProvider>
-            <FormsProvider>
-              <NavigationContainer theme={navTheme}>
-                <StatusBar style="light" />
-                <Tab.Navigator
-                  initialRouteName="Home"
-                  tabBar={(props) => <FloatingTabBar {...props} />}
-                  screenOptions={({ route }) => ({
-                    headerShown: false,
-                    tabBarActiveTintColor: colors.gold,
-                    tabBarInactiveTintColor: colors.textFaint,
-                    tabBarStyle: {
-                      backgroundColor: 'transparent',
-                      borderTopColor: colors.border,
-                      borderTopWidth: StyleSheet.hairlineWidth,
-                      elevation: 0,
-                    },
-                    tabBarBackground: () => <TabBarBackground />,
-                    // Five tabs: step the labels down on narrow phones so
-                    // "BOA Originals" fits without truncating.
-                    tabBarLabelStyle: { fontFamily: fonts.semibold, fontSize: narrow ? 9.5 : 10, letterSpacing: -0.1 },
-                    tabBarIcon: ({ focused, color, size }) => (
-                      <TabIcon name={route.name} focused={focused} color={color} size={size} />
-                    ),
-                  })}
-                  screenListeners={{ tabPress: () => haptics.selection() }}
-                >
-                  <Tab.Screen name="Home" component={Home} />
-                  <Tab.Screen name="Radio" component={Radio} />
-                  <Tab.Screen name="Originals" component={Originals} options={{ title: 'BOA Originals' }} />
-                  <Tab.Screen name="Talent" component={Talent} />
-                  <Tab.Screen name="Profile" component={Profile} />
-                </Tab.Navigator>
-              </NavigationContainer>
-            </FormsProvider>
-          </MediaProvider>
-        </PlayerProvider>
+        <UserProvider>
+          <PlayerProvider>
+            <MediaProvider>
+              <PremiumProvider>
+                <FormsProvider>
+                  <Gate narrow={narrow} />
+                </FormsProvider>
+              </PremiumProvider>
+            </MediaProvider>
+          </PlayerProvider>
+        </UserProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );
