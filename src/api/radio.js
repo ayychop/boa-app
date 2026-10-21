@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { Image, Platform } from 'react-native';
+import { CURATED_GHANA, CURATED_RNB_HIPHOP } from '../data/trendingStations';
 
 // radio-browser.info asks clients to pick a mirror from the live server list
 // rather than hard-coding one. These are only used if that lookup fails.
@@ -233,33 +234,38 @@ async function loadStations(tag, options) {
 
 // --- Tier 1: curated, guaranteed in-app streams ----------------------------
 
-// Trending draws from exactly two pools: stations broadcasting from Ghana,
-// and stations tagged both R&B and Hip Hop. Nothing else qualifies.
+// Trending is music-only: R&B / Hip Hop, plus exactly one station from Ghana.
 const RNB_TAGS = new Set(['rnb', 'r&b', 'r & b', 'r n b', 'rhythm and blues']);
 const HIPHOP_TAGS = new Set(['hip hop', 'hiphop', 'hip-hop', 'rap']);
+// Anything with these in its name or tags carries presenters or talk.
+const TALK = /talk|news|sports?\b|radio show|podcast|dj set|live show/i;
+// Tags that suggest continuous music; used to rank directory candidates.
+const MUSIC_TAGS = new Set(['music', 'continuous music', 'non-stop', 'nonstop', 'automated', 'rnb', 'r&b', 'hip hop', 'hiphop', 'hip-hop', 'soul', 'urban']);
 // Playback probes buffer real audio, so they run a few at a time: eight live
 // streams loading at once (often on one host) starve each other and time out.
 const TIER1_TIMEOUT_MS = 8000;
 const TIER1_CONCURRENCY = 3;
 
-const tagSet = (station) => new Set(station.tags.split(',').map((t) => t.trim().toLowerCase()));
+const tagList = (station) => station.tags.split(',').map((t) => t.trim().toLowerCase()).filter(Boolean);
 const isGhana = (station) => station.countrycode === 'GH';
 const isRnbHipHop = (station) => {
-  const tags = [...tagSet(station)];
+  const tags = tagList(station);
   return tags.some((t) => RNB_TAGS.has(t)) && tags.some((t) => HIPHOP_TAGS.has(t));
 };
+const isMusicOnly = (station) => !TALK.test(`${station.name} ${station.tags}`);
+const musicScore = (station) => tagList(station).filter((t) => MUSIC_TAGS.has(t)).length;
 
 // Tier 1 judges the URL the app actually plays (url_resolved). Anything that
 // is still a playlist (.m3u/.pls/...) or HLS there would need another hop or
 // an external player, so it's a "deep link" stream and is skipped. A station
 // whose directory link was a playlist that radio-browser already resolved to
 // a direct MP3 is fine: we play the MP3, and probePlayback proves it.
-function isTier1(station) {
+function isTier1(station, { minBitrate = 128 } = {}) {
   if (!hasValidStreamUrl(station)) return false;
   if (/\.(m3u8?|pls|asx|xspf)(\?|$)/i.test(station.url_resolved)) return false;
   if (station.ssl_error) return false;
   // MP3 is the one codec every browser and both native players decode.
-  if (station.codec !== 'MP3' || (station.bitrate || 0) < 128) return false;
+  if (station.codec !== 'MP3' || (station.bitrate || 0) < minBitrate) return false;
   // Keyword-stuffed directory names ("# TOP 100 CLUB CHARTS - ...").
   const name = station.name.trim();
   if (/^[\W_]/.test(name) || name.length > 40) return false;
@@ -328,52 +334,61 @@ async function search(params) {
   return data;
 }
 
+// Curated picks resolved to live directory records, in list order. They were
+// vetted from their song metadata rather than bitrate, so 96 kbps is allowed;
+// everything else about Tier 1 still applies.
+async function resolveCurated(list, genre) {
+  const { data } = await apiGet('/json/stations/byuuid', { params: { uuids: list.map((c) => c.uuid).join(',') } });
+  const byId = new Map(data.map((s) => [s.stationuuid, s]));
+  return list
+    .map((c) => byId.get(c.uuid) && { ...byId.get(c.uuid), favicon: c.logo ?? byId.get(c.uuid).favicon, _genre: genre })
+    .filter((s) => s && isMusicOnly(s) && isTier1(s, { minBitrate: 96 }));
+}
+
+// Directory fallback when curated stations are down: same filters, ranked
+// by music-signalling tags, then votes.
+const rankForMusic = (list) => list.sort((a, b) => musicScore(b) - musicScore(a) || b.votes - a.votes);
+
 async function loadTier1(limit) {
-  const [ghana, ...tagged] = await Promise.all([
-    search({ countrycode: 'GH' }).catch(() => []),
-    ...['rnb', 'r&b', 'hip hop', 'hiphop', 'hip-hop'].map((tag) => search({ tag, tagExact: true }).catch(() => [])),
+  const rnbWanted = limit - 1;
+  const [curatedRnb, curatedGhana] = await Promise.all([
+    resolveCurated(CURATED_RNB_HIPHOP, 'rnb').catch(() => []),
+    resolveCurated(CURATED_GHANA, null).catch(() => []),
   ]);
-  // Each pool ranked by votes; `genre` is the Radio tab chip to open on.
-  const pools = [
-    ghana
-      .filter((s) => isGhana(s) && isTier1(s))
-      .sort((a, b) => b.votes - a.votes)
-      .map((s) => ({ ...s, _genre: null })),
-    tagged
-      .flat()
-      .filter((s) => isRnbHipHop(s) && isTier1(s))
-      .sort((a, b) => b.votes - a.votes)
-      .map((s) => ({ ...s, _genre: 'rnb' })),
-  ];
-  const seen = new Set();
-  const mixed = [];
-  // "TMM 2" and "TMM 2 (HQ)" are one station at two bitrates.
-  const nameKey = (name) =>
-    name
-      .toLowerCase()
-      .replace(/\(.*?\)|\b(hq|hd|\d+\s?k(bps)?|mp3|aac)\b/g, '')
-      .replace(/[^a-z0-9]+/g, ' ')
-      .trim();
-  // Alternate Ghana / R&B-Hip Hop so the row mixes both.
-  for (let i = 0; i < Math.max(...pools.map((l) => l.length)); i++) {
-    for (const list of pools) {
-      const s = list[i];
-      const key = s && nameKey(s.name);
-      if (!s || seen.has(s.url_resolved) || seen.has(key)) continue;
-      seen.add(s.url_resolved);
-      seen.add(key);
-      mixed.push(s);
-    }
+  let [rnb, ghana] = await Promise.all([
+    takeVerified(curatedRnb, rnbWanted, playsInApp, TIER1_CONCURRENCY),
+    takeVerified(curatedGhana, 1, playsInApp, TIER1_CONCURRENCY),
+  ]);
+
+  const used = new Set([...rnb, ...ghana].map((s) => s.stationuuid));
+  if (rnb.length < rnbWanted) {
+    const tagged = await Promise.all(
+      ['rnb', 'r&b', 'hip hop', 'hiphop', 'hip-hop'].map((tag) => search({ tag, tagExact: true }).catch(() => [])),
+    );
+    const pool = rankForMusic(
+      [...new Map(tagged.flat().map((s) => [s.stationuuid, s])).values()].filter(
+        (s) => !used.has(s.stationuuid) && isRnbHipHop(s) && isMusicOnly(s) && isTier1(s),
+      ),
+    ).map((s) => ({ ...s, _genre: 'rnb' }));
+    const need = rnbWanted - rnb.length;
+    rnb = rnb.concat(await takeVerified(pool.slice(0, need * 4), need, playsInApp, TIER1_CONCURRENCY));
   }
-  const verified = await takeVerified(mixed.slice(0, limit * 4), limit, playsInApp, TIER1_CONCURRENCY);
-  return verified.map((s) => ({ ...normalize(s, !!s.has_extended_info), genre: s._genre, tier: 1 }));
+  if (!ghana.length) {
+    const pool = rankForMusic((await search({ countrycode: 'GH' }).catch(() => [])).filter((s) => isGhana(s) && isMusicOnly(s) && isTier1(s)));
+    ghana = await takeVerified(pool.slice(0, 8), 1, playsInApp, TIER1_CONCURRENCY);
+  }
+
+  // R&B / Hip Hop leads; the one Ghanaian station sits third.
+  const row = [...rnb.slice(0, 2), ...ghana.slice(0, 1), ...rnb.slice(2)];
+  return row.map((s) => ({ ...normalize(s, !!s.has_extended_info), genre: s._genre, tier: 1 }));
 }
 
 /**
- * Home's "Trending on BOA Radio": only Ghanaian stations and stations tagged
- * both R&B and Hip Hop, and only ones proven to play inside the app: direct
- * HTTPS MP3 at 128 kbps or better, with real artwork, each test-played
- * before it's returned.
+ * Home's "Trending on BOA Radio": continuous-music stations only. R&B / Hip
+ * Hop plus exactly one Ghanaian station, from a curated list (see
+ * data/trendingStations.js) topped up from the directory, with talk-heavy
+ * stations filtered out. Every one is test-played in-app, with working
+ * artwork, before it's returned.
  */
 export function fetchTier1Stations({ limit = 5 } = {}) {
   const key = `tier1|${limit}`;

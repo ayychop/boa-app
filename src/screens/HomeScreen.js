@@ -164,7 +164,7 @@ export default function HomeScreen({ navigation }) {
         <View style={styles.section}>
           <SectionHeader
             index="01"
-            kicker="Ghana · R&B · Hip Hop"
+            kicker="R&B · Hip Hop · Ghana"
             title="Trending on BOA Radio"
             action="Open radio"
             onAction={() => navigation.navigate('Radio')}
