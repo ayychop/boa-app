@@ -5,7 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { featuredProduction, productions } from '../data/boaContent';
 import { useMedia } from '../context/MediaContext';
 import Poster, { metaLine } from '../components/Poster';
-import KeyArt from '../components/KeyArt';
+import { heroArt } from '../components/HeroArt';
 import { Button, Fog, SectionHeader, Slate, Tappable, Viewfinder } from '../components/ui';
 import useBottomSpace from '../hooks/useBottomSpace';
 import { colors, fonts, space, type } from '../theme';
@@ -16,33 +16,15 @@ function Featured({ production, width }) {
   const insets = useSafeAreaInsets();
   const media = useMedia();
   const wide = width >= 900;
-  const titled = production.titleInArt;
-  const panelWidth = wide ? Math.round(width * 0.5) : width;
-  const panelHeight = Math.round(panelWidth / (16 / 9));
-  // Mobile gets a tall cinematic frame; desktop goes full 2.39:1 scope. With
-  // whole key art on a phone, the frame is the art panel plus the copy.
-  const height = wide
-    ? Math.round(width / 2.39) + insets.top
-    : titled
-      ? insets.top + 64 + panelHeight + 330
-      : Math.round(width * 1.2) + insets.top;
+  // Desktop goes full 2.39:1 scope. Phones get a tall frame for the 9:16
+  // poster, deep enough that its title clears the copy underneath.
+  const height = wide ? Math.round(width / 2.39) + insets.top : Math.round(width * 1.68) + insets.top;
+  const { node: art, titleInFrame } = heroArt(production, width, height);
 
   return (
-    <View style={{ width, height }}>
+    <View style={{ width, height, overflow: 'hidden' }}>
       <Animated.View entering={FadeInDown.duration(600)} style={StyleSheet.absoluteFill}>
-        {titled ? (
-          <KeyArt
-            uri={production.image}
-            letterbox={production.imageLetterbox}
-            width={width}
-            height={height}
-            panelWidth={panelWidth}
-            panelX={wide ? width - panelWidth - space.xxxl : 0}
-            panelY={wide ? Math.round((height - panelHeight) / 2) : insets.top + 64}
-          />
-        ) : (
-          <Animated.Image source={{ uri: production.image }} style={StyleSheet.absoluteFill} resizeMode="cover" />
-        )}
+        {art}
       </Animated.View>
       <LinearGradient
         colors={['rgba(5,5,6,0.55)', 'rgba(5,5,6,0)', 'rgba(5,5,6,0.65)', colors.bg]}
@@ -54,12 +36,13 @@ function Featured({ production, width }) {
         <Slate dot>02 · Productions</Slate>
         <Slate>The slate</Slate>
       </View>
-      <View style={[styles.featuredBody, wide && titled && { right: panelWidth + space.xxxl * 2 }]}>
+      <View style={styles.featuredBody}>
         <Slate color={colors.gold} lines={2}>
           Featured · {metaLine(production)}
         </Slate>
-        {/* Art with a baked-in title is the title; keep text for screen readers. */}
-        <Text style={titled ? styles.srOnly : [type.display, styles.featuredTitle]} accessibilityRole="header">
+        {/* When the art's own title is in frame it is the title; keep the
+            text for screen readers. */}
+        <Text style={titleInFrame ? styles.srOnly : [type.display, styles.featuredTitle]} accessibilityRole="header">
           {production.title}
         </Text>
         <Text style={[type.bodyMuted, styles.logline]} numberOfLines={wide ? 3 : 4}>
@@ -80,7 +63,7 @@ function EpisodeCard({ production, episode, width }) {
   const media = useMedia();
   return (
     <Tappable onPress={() => media.openEpisode(production, episode)} accessibilityRole="button" accessibilityLabel={`Play ${episode.title}`}>
-      <Poster production={{ ...production, image: episode.image, status: 'available' }} width={width} showTitle={false} />
+      <Poster production={{ ...production, backdrop: episode.image, status: 'available' }} width={width} showTitle={false} />
       <View style={styles.episodeCaption}>
         <Slate>Ep 01</Slate>
         <Text style={styles.episodeTitle}>{episode.title}</Text>

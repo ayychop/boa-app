@@ -1,7 +1,7 @@
 import { Image, StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Fog, Slate } from './ui';
-import KeyArt from './KeyArt';
+import { fillFrame, toSource } from './HeroArt';
 import { colors, fonts, radius } from '../theme';
 
 export function metaLine(p) {
@@ -16,22 +16,16 @@ export default function Poster({ production, width, ratio = 16 / 9, showTitle = 
   const height = Math.round(width / ratio);
   const portrait = ratio < 1;
   const soon = production.status === 'coming-soon';
-  // Art with its own title treatment is shown whole (never cropped into)
-  // and isn't captioned with the title a second time.
-  const titled = !!production.image && production.titleInArt;
+  // Tall cards use the portrait poster, landscape ones the backdrop. Both
+  // crop cleanly with `cover` (the baked-in title spans the width and sits
+  // mid-frame), so it isn't captioned with the title a second time.
+  const art = toSource(portrait ? production.poster ?? production.backdrop ?? production.image : production.backdrop ?? production.image ?? production.poster);
+  const titled = !!art && !!production.titleInArt;
 
   return (
     <View style={[styles.frame, { width, height, borderRadius: rounded }]}>
-      {titled ? (
-        <KeyArt
-          uri={production.image}
-          letterbox={production.imageLetterbox}
-          width={width}
-          height={height}
-          panelY={portrait ? Math.round(height * 0.2) : 0}
-        />
-      ) : production.image ? (
-        <Image source={{ uri: production.image }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+      {art ? (
+        <Image source={art} style={fillFrame} resizeMode="cover" />
       ) : (
         <>
           <LinearGradient

@@ -16,8 +16,6 @@ export const brand = {
   email: 'hello@boanetworks.com',
 };
 
-const ytThumb = (id, quality = 'hqdefault') => `https://i.ytimg.com/vi/${id}/${quality}.jpg`;
-
 export const productions = [
   {
     id: 'mind-states-uk',
@@ -29,14 +27,10 @@ export const productions = [
     featured: true,
     logline:
       'Five friends navigate daily life in Northwest London, juggling pressures from the streets, financial struggles, and differing aspirations for the future. Through flashbacks and personal reflections, Joe examines how their environment shapes his mindset and choices.',
-    // Cover art is Episode 1's custom YouTube thumbnail. YouTube only holds it
-    // at 640x480 (sddefault; maxresdefault 404s for this video), letterboxed
-    // to 16:9, so 16:9 frames crop the bars away exactly.
-    // TODO: swap for the 1280x720+ original artwork file from BOA.
-    image: ytThumb('SnQglPC9S2M', 'sddefault'),
-    // Black bars top and bottom of the 4:3 file, as a fraction of its height
-    // (60px of 480), and the art carries its own "MIND STATES UK" title.
-    imageLetterbox: 0.125,
+    // High-res key art supplied by BOA. Both carry the "MIND STATES UK" title
+    // treatment (and BOA / YouTube marks along the bottom edge).
+    poster: require('../../assets/images/mind-states-poster.jpg'), // 1440x2560, 9:16: portrait cards
+    backdrop: require('../../assets/images/mind-states-backdrop.jpg'), // 1080x1080: hero and landscape
     titleInArt: true,
     trailerYouTubeId: '1Luf9F3wl-k', // "Mind States UK - Official Trailer"
     // Episode 1 is published on YouTube, not as a video file.
@@ -46,7 +40,7 @@ export const productions = [
         title: 'Episode 1',
         youTubeId: 'SnQglPC9S2M',
         videoUrl: null,
-        image: ytThumb('SnQglPC9S2M', 'sddefault'),
+        image: require('../../assets/images/mind-states-backdrop.jpg'),
       },
     ],
   },

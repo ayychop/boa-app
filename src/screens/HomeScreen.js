@@ -21,7 +21,7 @@ import { useForms } from '../context/FormsContext';
 import BoaLogo from '../components/BoaLogo';
 import Headshot from '../components/Headshot';
 import Poster, { metaLine } from '../components/Poster';
-import KeyArt from '../components/KeyArt';
+import { heroArt } from '../components/HeroArt';
 import PodcastCover from '../components/PodcastCover';
 import StationLogo from '../components/StationLogo';
 import { Button, Fog, SectionHeader, Slate, Tappable, Viewfinder } from '../components/ui';
@@ -42,30 +42,7 @@ function Hero({ production, width, height }) {
     zoom.value = withRepeat(withTiming(1.09, { duration: 14000, easing: Easing.inOut(Easing.quad) }), -1, true);
   }, [reduceMotion, zoom]);
   const zoomStyle = useAnimatedStyle(() => ({ transform: [{ scale: zoom.value }] }));
-  // Blurred backdrop starts oversized so its soft edge never shows.
-  const backdropZoom = useAnimatedStyle(() => ({ transform: [{ scale: 1.15 * zoom.value }] }));
-
-  // Art with its title baked in is shown whole: full-width panel under the
-  // slate on phones, a panel on the right with the copy beside it on wide
-  // screens.
-  const wide = width >= 900;
-  const panelWidth = wide ? Math.round(Math.min(width * 0.54, height * 0.68 * (16 / 9))) : width;
-  const panelHeight = Math.round(panelWidth / (16 / 9));
-  const art = production.titleInArt ? (
-    <KeyArt
-      uri={production.image}
-      letterbox={production.imageLetterbox}
-      width={width}
-      height={height}
-      panelWidth={panelWidth}
-      panelX={wide ? width - panelWidth - space.xxxl : 0}
-      // Phones: centre the panel in the space between the slate and the copy.
-      panelY={wide ? Math.round((height - panelHeight) / 2) : Math.max(insets.top + 96, Math.round((height - 210 - panelHeight) / 2) + 40)}
-      backdropStyle={backdropZoom}
-    />
-  ) : (
-    <Animated.Image source={{ uri: production.image }} resizeMode="cover" style={[StyleSheet.absoluteFill, zoomStyle]} />
-  );
+  const { node: art, titleInFrame } = heroArt(production, width, height, zoomStyle);
 
   return (
     <View style={{ width, height, overflow: 'hidden' }}>
@@ -95,14 +72,14 @@ function Hero({ production, width, height }) {
 
       <Animated.View
         entering={FadeInDown.delay(150).springify().damping(18)}
-        style={[styles.heroBody, wide && production.titleInArt && { right: panelWidth + space.xxxl * 2 }]}
+        style={styles.heroBody}
       >
         <Slate color={colors.gold} lines={2}>
           BOA Original · {metaLine(production)}
         </Slate>
-        {/* When the art already carries the title, don't paint it twice;
-            keep it for screen readers. */}
-        <Text style={production.titleInArt ? styles.srOnly : styles.heroTitle} accessibilityRole="header">
+        {/* When the art's own title is in frame, don't paint it twice; keep
+            it for screen readers. */}
+        <Text style={titleInFrame ? styles.srOnly : styles.heroTitle} accessibilityRole="header">
           {production.title}
         </Text>
         <Text style={[type.bodyMuted, { maxWidth: 560 }]} numberOfLines={3}>
