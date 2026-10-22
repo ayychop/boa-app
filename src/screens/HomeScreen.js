@@ -45,11 +45,16 @@ function Hero({ production, width, height, clearRight, bottomInset = 0 }) {
     zoom.value = withRepeat(withTiming(1.09, { duration: 14000, easing: Easing.inOut(Easing.quad) }), -1, true);
   }, [reduceMotion, zoom]);
   const zoomStyle = useAnimatedStyle(() => ({ transform: [{ scale: zoom.value }] }));
-  const { node: art, titleInFrame } = heroArt(production, width, height, zoomStyle);
+  const { node: art, titleInFrame, titleBottom } = heroArt(production, width, height, zoomStyle);
+  // Lift the poster so its baked-in title clears the text block below it.
+  // The Ken Burns zoom pushes the title down a little, so allow for that too.
+  const [bodyTop, setBodyTop] = useState(null);
+  const zoomDrift = reduceMotion || titleBottom == null ? 0 : (titleBottom - height / 2) * 0.09;
+  const lift = titleBottom != null && bodyTop != null ? Math.min(0, bodyTop - space.xl - titleBottom - zoomDrift) : 0;
 
   return (
     <View style={{ width, height, overflow: 'hidden' }}>
-      {art}
+      <View style={[StyleSheet.absoluteFill, { transform: [{ translateY: lift }] }]}>{art}</View>
       <Fog opacity={0.16} />
       <LinearGradient
         colors={['rgba(5,5,6,0.7)', 'rgba(5,5,6,0.05)', 'rgba(5,5,6,0.55)', colors.bg]}
@@ -88,6 +93,7 @@ function Hero({ production, width, height, clearRight, bottomInset = 0 }) {
       <Animated.View
         entering={FadeInDown.delay(150).springify().damping(18)}
         style={[styles.heroBody, { bottom: space.xxl + bottomInset }]}
+        onLayout={(e) => setBodyTop(e.nativeEvent.layout.y)}
       >
         <Slate color={colors.gold} lines={2}>
           BOA Original · {metaLine(production)}

@@ -12,7 +12,7 @@ const DisplayContext = createContext(null);
 
 /**
  * How the app fills a big screen. Unfolded devices (foldables, dual screens,
- * tablets: 768pt and up) choose Full Screen (the phone layout, wider) or
+ * tablets: 640pt and up) choose Full Screen (the phone layout, wider) or
  * Split View (two panes); the choice is saved. Zen Mode is the screensaver
  * on top of either: a clock and what's playing, until the next tap.
  */

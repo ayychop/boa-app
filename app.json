@@ -21,7 +21,12 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "package": "com.boanetsteam.boaapp"
+      "package": "com.boanetsteam.boaapp",
+      "permissions": [
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png",
@@ -50,7 +55,9 @@
           "android": {
             "kotlinVersion": "2.0.21",
             "enableProguardInReleaseBuilds": false,
-            "enableR8InReleaseBuilds": false
+            "enableR8InReleaseBuilds": false,
+            "enableMinifyInReleaseBuilds": false,
+            "usesCleartextTraffic": true
           }
         }
       ],
@@ -64,6 +71,11 @@
       ],
       "expo-status-bar"
     ],
-    "owner": "boanets-team"
+    "owner": "boanets-team",
+    "extra": {
+      "eas": {
+        "projectId": "f08c9a51-4138-4a1f-a97e-74994582a693"
+      }
+    }
   }
 }

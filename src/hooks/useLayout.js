@@ -2,8 +2,9 @@ import { useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Tablets, unfolded foldables, dual screens and phones on their side switch
-// to two-column layouts at this window width.
-export const WIDE = 768;
+// to two-column layouts at this window width. 640 rather than 768 so the
+// inner screen of a Galaxy Z Fold (~673pt) counts as unfolded.
+export const WIDE = 640;
 // Phones in landscape: the tab bar and mini player slim down below this.
 export const SHORT = 500;
 

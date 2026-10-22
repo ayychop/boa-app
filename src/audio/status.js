@@ -6,7 +6,7 @@ export function describePlayback(status, trackTitle, retry = 0) {
     case 'loading':
       return retry ? `Reconnecting… (${retry}/${MAX_RETRIES})` : 'Tuning in…';
     case 'playing':
-      return trackTitle || 'Live now';
+      return trackTitle || 'Live Broadcast';
     case 'paused':
       return trackTitle ? `Paused · ${trackTitle}` : 'Paused';
     case 'error':

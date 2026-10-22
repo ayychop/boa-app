@@ -1,9 +1,12 @@
 import axios from 'axios';
+import { Platform } from 'react-native';
+import { fetchTrackMetadata } from './icy';
 
 // "Now playing" before you press play. radio-browser doesn't carry track
 // data, so ask the station's own streaming server through the public status
 // endpoints the common server packages expose (CORS-enabled, so this also
-// works on web). Roughly a third of stations answer one of these.
+// works on web). Roughly a third of stations answer one of these. On native,
+// stations that don't fall back to the ICY metadata in the stream itself.
 
 const TIMEOUT = 5000;
 // origin -> strategy name that worked, or false if none did (retry later).
@@ -60,6 +63,13 @@ const STRATEGIES = {
     const { data } = await axios.get(`${url.origin}/stats`, { params: { sid: 1, json: 1 }, timeout: TIMEOUT });
     if (!data || typeof data !== 'object' || !('songtitle' in data)) return undefined;
     return clean(data.songtitle) || null;
+  },
+  // Any ICY server: StreamTitle from the stream. Browsers can't read it
+  // (CORS hides the header and blocks the request header), so native only.
+  async icy(url) {
+    if (Platform.OS === 'web') return undefined;
+    const title = await fetchTrackMetadata(url.href);
+    return title === undefined ? undefined : clean(title) || null;
   },
 };
 

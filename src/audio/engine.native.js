@@ -4,6 +4,7 @@ import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 // ({ kind: 'radio' }) or on-demand audio such as podcast episodes
 // ({ kind: 'podcast' }); see engine.js for the shared contract.
 let player = null;
+let ready = null;
 let current = null;
 let state = { status: 'idle', title: null, position: 0, duration: 0, rate: 1, retry: 0 };
 let attempts = 0;
@@ -28,7 +29,11 @@ function emit(patch) {
 
 function onStatus(s) {
   // Only while we're trying to play; a stale error after pause is ignored.
-  if (s.error) return (state.status === 'loading' || state.status === 'playing') && fail(gen);
+  if (s.error) {
+    if (state.status !== 'loading' && state.status !== 'playing') return;
+    console.warn(`[audio] playback error for ${current?.streamUrl}: ${s.error}`);
+    return fail(gen);
+  }
   if (!isLive(current)) {
     emit({ position: s.currentTime, ...(s.duration > 0 && { duration: s.duration }) });
   }
@@ -47,23 +52,31 @@ function onStatus(s) {
   }
 }
 
+// Android drops play() without a word while the phone is on silent/vibrate
+// unless playsInSilentMode is already set, so the mode must land first.
 function getPlayer() {
-  if (!player) {
-    setAudioModeAsync({
+  if (!ready) {
+    ready = setAudioModeAsync({
       playsInSilentMode: true,
       shouldPlayInBackground: true,
       interruptionMode: 'doNotMix',
-    }).catch(() => {});
-    player = createAudioPlayer(null, { updateInterval: 1000 });
-    player.addListener('playbackStatusUpdate', onStatus);
+    })
+      .catch((err) => console.warn('[audio] setAudioModeAsync failed', err))
+      .then(() => {
+        player = createAudioPlayer(null, { updateInterval: 1000 });
+        player.addListener('playbackStatusUpdate', onStatus);
+        return player;
+      });
   }
-  return player;
+  return ready;
 }
 
 function armConnectTimeout(attempt) {
   clearTimeout(connectTimer);
   connectTimer = setTimeout(() => {
-    if (state.status === 'loading') fail(attempt);
+    if (state.status !== 'loading') return;
+    console.warn(`[audio] no audio from ${current?.streamUrl} after ${CONNECT_TIMEOUT_MS / 1000}s`);
+    fail(attempt);
   }, CONNECT_TIMEOUT_MS);
 }
 
@@ -101,9 +114,15 @@ async function connect(item, { retry = false, resumeAt = 0 }) {
     // status already shows the reconnect attempt
   } else if (switching) emit({ status: 'loading', title: null, position: 0, duration: item.duration || 0, retry: 0 });
   else emit({ status: 'loading', retry: 0 });
+  if (!/^https?:\/\//i.test(item.streamUrl || '')) {
+    console.warn(`[audio] not an http(s) stream: ${item.streamUrl}`);
+    failedGen = attempt;
+    return emit({ status: 'error', retry: 0 });
+  }
   try {
-    const p = getPlayer();
     armConnectTimeout(attempt);
+    const p = await getPlayer();
+    if (attempt !== gen) return; // paused or switched while setting up
     if (!switching && !retry && !isLive(item)) {
       if (state.status === 'ended') await p.seekTo(0);
       p.play();
@@ -114,13 +133,19 @@ async function connect(item, { retry = false, resumeAt = 0 }) {
     p.setPlaybackRate(isLive(item) ? 1 : state.rate);
     if (resumeAt > 0) await p.seekTo(resumeAt);
     p.play();
-    p.setActiveForLockScreen(
+  } catch (err) {
+    console.warn(`[audio] couldn't start ${item.streamUrl}`, err);
+    return fail(attempt);
+  }
+  // Lock-screen controls are a nicety; never let them stop playback.
+  try {
+    player.setActiveForLockScreen(
       true,
       { title: item.name, artist: item.artist || 'BOA Radio', artworkUrl: item.logo || undefined },
       { showSeekForward: !isLive(item), showSeekBackward: !isLive(item) },
     );
-  } catch {
-    fail(attempt);
+  } catch (err) {
+    console.warn('[audio] lock screen controls unavailable', err);
   }
 }
 
@@ -155,5 +180,6 @@ export function subscribe(fn) {
   return () => listeners.delete(fn);
 }
 
-// expo-audio doesn't surface ICY stream titles, so state.title stays null.
+// expo-audio doesn't surface ICY stream titles, so state.title stays null;
+// the UI gets them from useNowPlaying (api/nowPlaying.js + api/icy.js).
 export const supportsTrackTitles = false;
