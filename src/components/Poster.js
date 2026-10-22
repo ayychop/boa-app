@@ -22,6 +22,11 @@ export default function Poster({ production, width, ratio = 16 / 9, showTitle = 
   const art = toSource(portrait ? production.poster ?? production.backdrop ?? production.image : production.backdrop ?? production.image ?? production.poster);
   const titled = !!art && !!production.titleInArt;
 
+  const caption = showTitle && !(titled && !portrait);
+  // Placeholder art carries the brand line at the top, but only on a card
+  // tall enough to hold it clear of the caption below.
+  const brandLine = !art && height >= (caption ? 150 : 70);
+
   return (
     <View style={[styles.frame, { width, height, borderRadius: rounded }]}>
       {art ? (
@@ -43,31 +48,47 @@ export default function Poster({ production, width, ratio = 16 / 9, showTitle = 
             style={StyleSheet.absoluteFill}
           />
           <Fog opacity={0.3} />
-          <View style={styles.placeholderTop}>
-            <Slate color={colors.gold}>Best of all networks</Slate>
-            <Slate style={{ opacity: 0.6, marginTop: 6 }}>{portrait ? 'Poster · 2:3' : 'Still · 16:9'}</Slate>
-          </View>
         </>
       )}
-
-      {showTitle && !(titled && !portrait) && (
+      {caption && (
         <LinearGradient
           colors={['transparent', 'rgba(5,5,6,0.55)', 'rgba(5,5,6,0.95)']}
           locations={[0.3, 0.65, 1]}
-          style={styles.scrim}
-        >
-          {soon && <Slate color={colors.gold} dot style={{ marginBottom: 6 }}>Coming soon</Slate>}
-          {!titled && (
-            <Text style={[styles.title, { fontSize: Math.max(15, Math.min(26, width / 11)) }]} numberOfLines={2}>
-              {production.title}
-            </Text>
+          style={StyleSheet.absoluteFill}
+        />
+      )}
+
+      {/* Brand line and caption share one column, so however small the
+          card, they stack instead of overlapping. */}
+      {(brandLine || caption) && (
+        <View style={styles.content} pointerEvents="none">
+          {brandLine ? (
+            <Slate color={colors.gold} lines={2}>
+              Best of all networks
+            </Slate>
+          ) : (
+            <View />
           )}
-          {!!metaLine(production) && (
-            <Text style={styles.meta} numberOfLines={1}>
-              {metaLine(production)}
-            </Text>
+          {caption && (
+            <View>
+              {soon && (
+                <Slate color={colors.gold} dot style={{ marginBottom: 6 }}>
+                  Coming soon
+                </Slate>
+              )}
+              {!titled && (
+                <Text style={[styles.title, { fontSize: Math.max(15, Math.min(26, width / 11)) }]} numberOfLines={2}>
+                  {production.title}
+                </Text>
+              )}
+              {!!metaLine(production) && (
+                <Text style={styles.meta} numberOfLines={1}>
+                  {metaLine(production)}
+                </Text>
+              )}
+            </View>
           )}
-        </LinearGradient>
+        </View>
       )}
     </View>
   );
@@ -80,8 +101,7 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
   },
-  placeholderTop: { position: 'absolute', top: 14, left: 14, right: 14 },
-  scrim: { ...StyleSheet.absoluteFillObject, justifyContent: 'flex-end', padding: 14 },
+  content: { ...StyleSheet.absoluteFillObject, padding: 14, justifyContent: 'space-between' },
   title: { fontFamily: fonts.semibold, color: colors.text, letterSpacing: -0.6 },
   meta: { fontFamily: fonts.medium, fontSize: 11.5, color: colors.textMuted, marginTop: 3 },
 });
