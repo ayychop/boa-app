@@ -43,6 +43,12 @@
           }
         }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "f08c9a51-4138-4a1f-a97e-74994582a693"
+      }
+    },
+    "owner": "boanets-team"
   }
 }
