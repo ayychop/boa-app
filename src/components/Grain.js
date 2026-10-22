@@ -1,6 +1,14 @@
 import { useEffect } from 'react';
 import { Image, Platform, StyleSheet, View } from 'react-native';
-import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
+import Animated, {
+  cancelAnimation,
+  Easing,
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withRepeat,
+  withTiming,
+} from 'react-native-reanimated';
 import { Asset } from 'expo-asset';
 
 const grainTile = require('../../assets/grain.png');
@@ -9,16 +17,10 @@ const TILE = 128;
 // Film grain jumps rather than glides: 8 positions a cycle, ~12 per second.
 const FRAMES = 8;
 const CYCLE = 660;
-const OFFSETS = [
-  [0, 0],
-  [-37, -71],
-  [-83, -19],
-  [-11, -103],
-  [-59, -47],
-  [-97, -89],
-  [-23, -29],
-  [-71, -113],
-];
+// Where the texture jumps to on each frame (pt), as flat number arrays so
+// the per-frame lookup on the UI thread is a plain index.
+const OFFSET_X = [0, -37, -83, -11, -59, -97, -23, -71];
+const OFFSET_Y = [0, -71, -19, -103, -47, -89, -29, -113];
 
 function Tiles({ width, height }) {
   const plane = { position: 'absolute', left: 0, top: 0, width: width + TILE, height: height + TILE };
@@ -40,10 +42,11 @@ export default function Grain({ width, height, opacity = 0.05 }) {
   useEffect(() => {
     if (reduceMotion) return;
     t.value = withRepeat(withTiming(1, { duration: CYCLE, easing: Easing.linear }), -1, false);
+    return () => cancelAnimation(t);
   }, [reduceMotion, t]);
   const style = useAnimatedStyle(() => {
-    const [x, y] = OFFSETS[Math.min(FRAMES - 1, Math.floor(t.value * FRAMES))];
-    return { transform: [{ translateX: x }, { translateY: y }] };
+    const i = Math.min(FRAMES - 1, Math.max(0, Math.floor(t.value * FRAMES)));
+    return { transform: [{ translateX: OFFSET_X[i] }, { translateY: OFFSET_Y[i] }] };
   });
   return (
     <View pointerEvents="none" style={[StyleSheet.absoluteFill, { opacity, overflow: 'hidden' }]}>

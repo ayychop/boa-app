@@ -75,6 +75,17 @@ export function getStationGlow(station) {
 export const FALLBACK_GLOW = '#2A1F10';
 
 /**
+ * A colour that's already known, without starting any extraction: the
+ * station's `brandColor`, else a logo colour extracted earlier this session.
+ * Resolves to null otherwise (and for the warm fallback).
+ */
+export function cachedGlow(station) {
+  if (station?.brandColor) return Promise.resolve(station.brandColor);
+  const pending = station && cache.get(station.id);
+  return pending ? pending.then((c) => c ?? null) : Promise.resolve(null);
+}
+
+/**
  * The glow behind a station's record, in priority order: the station's own
  * `brandColor` (curated data), the most vibrant colour in its logo, then
  * the warm gold fallback. Always resolves to a colour.

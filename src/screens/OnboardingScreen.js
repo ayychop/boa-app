@@ -86,19 +86,22 @@ function Spotlight({ width, height }) {
   );
 }
 
-// Inner shadow: clear in the middle, near-black at the corners.
+// Inner shadow: clear in the middle, near-black at the corners. Wrapped in
+// a view so it can never take a touch on any platform.
 function Vignette({ width, height }) {
   return (
-    <Svg width={width} height={height} style={StyleSheet.absoluteFill} pointerEvents="none">
-      <Defs>
-        <RadialGradient id="vig" cx={width / 2} cy={height * 0.55} r={Math.hypot(width, height) * 0.6} gradientUnits="userSpaceOnUse">
-          <Stop offset="0.35" stopColor="#000" stopOpacity={0} />
-          <Stop offset="0.75" stopColor="#000" stopOpacity={0.55} />
-          <Stop offset="1" stopColor="#000" stopOpacity={0.92} />
-        </RadialGradient>
-      </Defs>
-      <Rect width={width} height={height} fill="url(#vig)" />
-    </Svg>
+    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+      <Svg width={width} height={height}>
+        <Defs>
+          <RadialGradient id="vig" cx={width / 2} cy={height * 0.55} r={Math.hypot(width, height) * 0.6} gradientUnits="userSpaceOnUse">
+            <Stop offset="0.35" stopColor="#000" stopOpacity={0} />
+            <Stop offset="0.75" stopColor="#000" stopOpacity={0.55} />
+            <Stop offset="1" stopColor="#000" stopOpacity={0.92} />
+          </RadialGradient>
+        </Defs>
+        <Rect width={width} height={height} fill="url(#vig)" />
+      </Svg>
+    </View>
   );
 }
 
@@ -142,22 +145,16 @@ export default function OnboardingScreen() {
             <Text style={styles.headline}>
               What's your <Text style={[type.serif, styles.serifInline]}>vibe?</Text>
             </Text>
-            <Text style={[type.bodyMuted, styles.lede]}>Pick as many as you like. We'll set the app up around them.</Text>
+            <Text style={[type.bodyMuted, styles.lede]}>Pick as many as you like and we'll set the app up around them.</Text>
             <View style={styles.pills}>
               {VIBES.map((v, i) => (
                 <VibePill key={v.id} vibe={v} index={i} selected={vibes.includes(v.id)} onToggle={toggle} />
               ))}
             </View>
-            <Button
-              label={vibes.length ? "Let's go" : 'Pick at least one'}
-              icon="arrow-forward"
-              disabled={!vibes.length}
-              onPress={() => completeOnboarding(vibes)}
-              style={styles.cta}
-            />
-            <Pressable onPress={() => completeOnboarding([])} hitSlop={10} style={styles.skip} accessibilityRole="button">
-              <Text style={styles.skipText}>Skip for now</Text>
-            </Pressable>
+            {/* Always live: with nothing picked it simply starts with the
+                full mix. */}
+            <Button label="Get started" icon="arrow-forward" onPress={() => completeOnboarding(vibes)} style={styles.cta} />
+            <Text style={styles.hint}>{vibes.length ? `${vibes.length} picked` : 'Nothing picked? You get the full mix.'}</Text>
           </Animated.View>
         </View>
       </ScrollView>
@@ -191,6 +188,5 @@ const styles = StyleSheet.create({
   },
   pillOn: { backgroundColor: colors.gold, borderColor: colors.gold, boxShadow: '0px 8px 24px rgba(226,168,75,0.35)' },
   pillText: { fontFamily: fonts.semibold, fontSize: 15, color: colors.text },
-  skip: { alignSelf: 'center', marginTop: space.lg, paddingVertical: 6 },
-  skipText: { fontFamily: fonts.medium, fontSize: 13, color: colors.textFaint },
+  hint: { alignSelf: 'center', marginTop: space.md, fontFamily: fonts.medium, fontSize: 13, color: colors.textFaint },
 });

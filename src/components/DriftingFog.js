@@ -1,6 +1,14 @@
 import { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
-import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
+import Animated, {
+  cancelAnimation,
+  Easing,
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withRepeat,
+  withTiming,
+} from 'react-native-reanimated';
 import Smoke from './Smoke';
 
 // Each layer is drawn at a quarter of its size and scaled up. Smoke has no
@@ -20,6 +28,7 @@ function FogLayer({ width, height, opacity, duration, variant, reverse }) {
   useEffect(() => {
     if (reduceMotion) return;
     t.value = withRepeat(withTiming(1, { duration, easing: Easing.linear }), -1, false);
+    return () => cancelAnimation(t);
   }, [reduceMotion, duration, t]);
   const w = width * OVERHANG;
   const h = height * OVERHANG;

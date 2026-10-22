@@ -1,16 +1,16 @@
-import { Component, useEffect, useState } from 'react';
+import { Component, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
-import { StatusBar } from 'expo-status-bar';
+import { setStatusBarHidden } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
 import Animated, {
+  cancelAnimation,
   Easing,
-  FadeIn,
-  FadeOut,
   useAnimatedStyle,
   useReducedMotion,
   useSharedValue,
+  withDelay,
   withRepeat,
   withTiming,
 } from 'react-native-reanimated';
@@ -18,7 +18,7 @@ import { usePlayer } from '../../context/PlayerContext';
 import { formatRemaining, useSleepRemaining } from '../../context/SleepTimerContext';
 import useNowPlaying from '../../hooks/useNowPlaying';
 import { podcastById } from '../../data/podcasts';
-import { FALLBACK_GLOW, glowFor } from '../../api/stationColor';
+import { cachedGlow } from '../../api/stationColor';
 import { parseHex, shiftHex } from '../../utils/color';
 import { SleepButton } from '../SleepTimerMenu';
 import DriftingFog from '../DriftingFog';
@@ -71,15 +71,19 @@ function dateLine(date) {
   }
 }
 
-/** The station's glow colour as a valid hex, or null for the house tone. */
+/**
+ * The station's glow colour as a valid hex, or null for the house tone. Only
+ * a colour already known (curated, or extracted earlier by the radio screen)
+ * is used: Zen Mode never starts native image work of its own.
+ */
 function useAmbientColor(current) {
   const [color, setColor] = useState(null);
   useEffect(() => {
     let alive = true;
     setColor(null);
     if (current?.kind === 'radio') {
-      glowFor(current)
-        .then((c) => alive && setColor(c !== FALLBACK_GLOW && parseHex(c) ? c : null))
+      cachedGlow(current)
+        .then((c) => alive && setColor(parseHex(c) ? c : null))
         .catch(() => {});
     }
     return () => {
@@ -141,6 +145,7 @@ function MeshGradient({ color, width, height }) {
   useEffect(() => {
     if (reduceMotion) return;
     clock.value = withRepeat(withTiming(1, { duration: MESH_LOOP, easing: Easing.linear }), -1, false);
+    return () => cancelAnimation(clock);
   }, [reduceMotion, clock]);
   const base = parseHex(color) ? color : HOUSE_TONE;
   return (
@@ -167,11 +172,7 @@ function MeshGradient({ color, width, height }) {
 function Atmosphere({ color, width, height }) {
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-      {/* Keyed by colour so a new station's mesh fades in over the old. The
-          fade sits on its own view, never on one the mesh animates. */}
-      <Animated.View key={color ?? 'house'} entering={FadeIn.duration(2400)} style={StyleSheet.absoluteFill}>
-        <MeshGradient color={color} width={width} height={height} />
-      </Animated.View>
+      <MeshGradient color={color} width={width} height={height} />
       <DriftingFog width={width} height={height} opacity={0.7} />
       <Grain width={width} height={height} opacity={0.04} />
       {/* Vignette: the edges fall away to black so the clock sits in light. */}
@@ -243,12 +244,41 @@ function Clock({ width, height, short }) {
 }
 
 function Screensaver({ onExit }) {
-  const window = useWindowDimensions();
-  // Lay out against the space Zen Mode really covers, which on Android can
-  // differ from the window (edge-to-edge, system bars).
-  const [frame, setFrame] = useState(null);
-  const { width, height } = frame ?? window;
+  const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
+  const reduceMotion = useReducedMotion();
+  // Fades are plain opacity on the UI thread: no layout animations, which
+  // are the riskiest thing to run while views mount and unmount.
+  const shown = useSharedValue(0);
+  const hint = useSharedValue(0);
+  const leaving = useRef(false);
+
+  useEffect(() => {
+    shown.value = withTiming(1, { duration: reduceMotion ? 400 : 1800, easing: DIM });
+    hint.value = withDelay(1600, withTiming(1, { duration: 1200 }));
+    try {
+      setStatusBarHidden(true, 'fade');
+    } catch {}
+    return () => {
+      cancelAnimation(shown);
+      cancelAnimation(hint);
+      try {
+        setStatusBarHidden(false, 'fade');
+      } catch {}
+    };
+  }, [reduceMotion, shown, hint]);
+
+  // Fade out, then wake. The timer, not an animation callback, does the
+  // waking, so a tap always gets you out.
+  const wake = () => {
+    if (leaving.current) return;
+    leaving.current = true;
+    shown.value = withTiming(0, { duration: 300 });
+    setTimeout(onExit, 300);
+  };
+
+  const screenStyle = useAnimatedStyle(() => ({ opacity: shown.value }));
+  const hintStyle = useAnimatedStyle(() => ({ opacity: hint.value }));
   const { current } = usePlayer();
   const ambient = useAmbientColor(current);
   const short = height < 500;
@@ -263,15 +293,9 @@ function Screensaver({ onExit }) {
   const safeHeight = height - insets.top - insets.bottom;
 
   return (
-    <Animated.View
-      entering={FadeIn.duration(1800).easing(DIM)}
-      exiting={FadeOut.duration(400)}
-      style={styles.screen}
-      onLayout={(e) => setFrame(e.nativeEvent.layout)}
-    >
-      <StatusBar hidden />
+    <Animated.View style={[styles.screen, screenStyle]}>
       <Atmosphere color={ambient} width={width} height={height} />
-      <Pressable style={StyleSheet.absoluteFill} onPress={onExit} accessibilityRole="button" accessibilityLabel="Exit Zen Mode" />
+      <Pressable style={StyleSheet.absoluteFill} onPress={wake} accessibilityRole="button" accessibilityLabel="Exit Zen Mode" />
 
       <View pointerEvents="none" style={[styles.safe, safe]}>
         <Clock width={safeWidth} height={safeHeight} short={short} />
@@ -284,7 +308,7 @@ function Screensaver({ onExit }) {
         {short ? (
           <View />
         ) : (
-          <Animated.Text entering={FadeIn.delay(1600).duration(1200)} pointerEvents="none" style={styles.hint}>
+          <Animated.Text pointerEvents="none" style={[styles.hint, hintStyle]}>
             Tap anywhere to wake
           </Animated.Text>
         )}
@@ -339,8 +363,6 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontVariant: ['tabular-nums'],
     textAlign: 'center',
-    textShadowColor: 'rgba(0,0,0,0.45)',
-    textShadowRadius: 40,
   },
   period: { position: 'absolute', left: '100%', marginLeft: space.sm, fontFamily: fonts.serif, color: colors.gold },
   nowRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: space.md, maxWidth: 560 },

@@ -8,7 +8,6 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, {
   Easing,
   FadeIn,
-  FadeOut,
   useAnimatedStyle,
   useReducedMotion,
   useSharedValue,
@@ -205,19 +204,19 @@ function MainTabs({ narrow }) {
   );
 }
 
-// First run shows the vibe check (the intro's "Get started" leads into
-// it); after that, straight to the app. Waits for
-// the stored profile so returning listeners never see onboarding flash past.
+// One screen at a time: each one unmounts before the next mounts, and the
+// next fades in on its own. Returning listeners go straight to the app.
 function Gate({ narrow }) {
   const { ready, onboarded } = useUser();
-  // The intro covers this while the profile loads.
+  // The profile almost always loads during the boot loader; if not, this
+  // holds on the stage colour for the moment it takes.
   if (!ready) return <View style={{ flex: 1, backgroundColor: colors.bg }} />;
   return onboarded ? (
     <Animated.View key="app" entering={FadeIn.duration(450)} style={{ flex: 1 }}>
       <MainTabs narrow={narrow} />
     </Animated.View>
   ) : (
-    <Animated.View key="onboarding" exiting={FadeOut.duration(300)} style={{ flex: 1 }}>
+    <Animated.View key="onboarding" entering={FadeIn.duration(450)} style={{ flex: 1 }}>
       <StatusBar style="light" />
       <OnboardingScreen />
     </Animated.View>
@@ -248,18 +247,12 @@ export default function App() {
   );
 }
 
-// The intro sits over the app, which mounts behind it at once so it's ready
-// (profile loaded, first screen drawn) by the time the intro lifts. It needs
-// the stored profile to know whether this is a first run.
-function Boot() {
-  const { ready, onboarded } = useUser();
-  const [done, setDone] = useState(false);
-  const finish = useCallback(() => setDone(true), []);
-  if (done) return null;
-  return <Intro firstRun={ready ? !onboarded : null} onDone={finish} />;
-}
-
 function Root({ narrow }) {
+  // The boot loader plays first, on its own; the app (the vibe check on a
+  // first run) mounts once it has gone. The providers mount straight away,
+  // so the stored profile loads while the boot loader plays.
+  const [booted, setBooted] = useState(false);
+  const finishBoot = useCallback(() => setBooted(true), []);
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.bg }}>
       <SafeAreaProvider>
@@ -270,14 +263,13 @@ function Root({ narrow }) {
                 <MediaProvider>
                   <PremiumProvider>
                     <FormsProvider>
-                      <Gate narrow={narrow} />
+                      {booted ? <Gate narrow={narrow} /> : <Intro onDone={finishBoot} />}
                     </FormsProvider>
                   </PremiumProvider>
                 </MediaProvider>
               </DisplayProvider>
             </SleepTimerProvider>
           </PlayerProvider>
-          <Boot />
         </UserProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

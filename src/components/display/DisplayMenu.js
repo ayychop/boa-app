@@ -39,6 +39,8 @@ export function DisplayButton() {
   );
 }
 
+const ZEN_AFTER_CLOSE = 360;
+
 export default function DisplayMenu({ open, onClose }) {
   const { layout, setLayout, enterZen } = useDisplay();
   const choose = (next) => {
@@ -73,7 +75,9 @@ export default function DisplayMenu({ open, onClose }) {
             detail="A screensaver: the time and what's playing. Tap to wake."
             onPress={() => {
               onClose();
-              enterZen();
+              // Zen Mode starts once this sheet's window has fully closed
+              // (its slide-out takes 240ms), never while both are on screen.
+              setTimeout(enterZen, ZEN_AFTER_CLOSE);
             }}
           />
         </View>
