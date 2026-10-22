@@ -25,6 +25,9 @@ import GlowField, { FogPlane } from '../components/GlowField';
 import Vinyl from '../components/Vinyl';
 import { useMiniPlayerSpace } from '../components/MiniPlayer';
 import useLayout from '../hooks/useLayout';
+import { useDisplay, useIdle } from '../context/DisplayContext';
+import { DISPLAY_BUTTON_SPACE } from '../components/display/DisplayMenu';
+import StationLogo from '../components/StationLogo';
 import Reactions from '../components/Reactions';
 import { GoldBadge, PulseDot } from '../components/ui';
 import { genreForVibes, useUser } from '../context/UserContext';
@@ -33,9 +36,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors, fonts, radius, space } from '../theme';
 
 const TEXT_BLOCK = 150;
+// Untouched this long while a station plays, the Radio tab drifts into Zen.
+const ZEN_AFTER = 15000;
+const QUEUE_LENGTH = 6;
 
-// One scrolling row on phones; in the wide layout's info column they wrap so
-// every genre is in view.
+// One scrolling row in the full-width layout; in Split View's side pane they
+// wrap so every genre is in view.
 function GenrePills({ selected, onSelect, wrap }) {
   const pills = GENRES.map((g) => {
     const active = g.tag === selected;
@@ -126,6 +132,42 @@ function StationText({ station, track, status, meta, compact, saved, onSave, hif
         </Text>
       </View>
     </Animated.View>
+  );
+}
+
+// Split View's side pane: the records after this one, tap to jump ahead.
+function UpNext({ stations, index, playingId, onPick }) {
+  const next = stations.slice(index + 1, index + 1 + QUEUE_LENGTH);
+  return (
+    <View style={styles.queue}>
+      <Text style={styles.queueTitle}>Up next</Text>
+      {next.length === 0 ? (
+        <Text style={styles.queueEmpty}>That's the last record in this genre.</Text>
+      ) : (
+        next.map((station, i) => (
+          <Animated.View key={station.id} entering={FadeInDown.delay(i * 40).springify().damping(20)}>
+            <Pressable
+              onPress={() => onPick(index + 1 + i)}
+              accessibilityRole="button"
+              accessibilityLabel={`Go to ${station.name}`}
+              style={({ pressed }) => [styles.queueRow, pressed && { backgroundColor: 'rgba(243,239,232,0.06)' }]}
+            >
+              <Text style={styles.queueNum}>{String(index + 2 + i).padStart(2, '0')}</Text>
+              <StationLogo station={station} size={40} rounded={20} fit="cover" />
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={styles.queueName} numberOfLines={1}>
+                  {station.name}
+                </Text>
+                <Text style={styles.queueMeta} numberOfLines={1}>
+                  {[station.country, station.bitrate ? `${station.bitrate} kbps` : null].filter(Boolean).join(' · ') || 'Live radio'}
+                </Text>
+              </View>
+              {station.id === playingId && <PulseDot color={colors.live} size={7} />}
+            </Pressable>
+          </Animated.View>
+        ))
+      )}
+    </View>
   );
 }
 
@@ -288,20 +330,22 @@ export default function RadioScreen({ route, navigation }) {
   const bottomPad = tabBarHeight + miniPlayerSpace;
   const stage = layout && { width: layout.width, height: layout.height - bottomPad };
 
-  // Wide screens split in two at the centre (a dual screen's hinge): the
-  // record on the left, genres and track info on the right.
-  const { wide, short } = useLayout();
-  const recordWidth = stage ? (wide ? stage.width / 2 : stage.width) : 0;
+  // Split View halves the screen at the centre (a dual screen's hinge): the
+  // record and its track info on the left, genres and what's next on the
+  // right.
+  const display = useDisplay();
+  const { split, unfolded } = display;
+  const { short } = useLayout();
+  const recordWidth = stage ? (split ? stage.width / 2 : stage.width) : 0;
 
-  // On phones the record fills ~70% of the width, but never so tall that the
-  // name and track line get pushed under the mini player. Side by side, it
-  // only has to fit its own column.
-  const discSize = !stage
-    ? 0
-    : wide
-      ? Math.round(Math.min(recordWidth * 0.72, (stage.height - 40) * 0.9, 440))
-      : Math.round(Math.min(stage.width * 0.7, (stage.height - TEXT_BLOCK) * 0.86, 440));
+  // The record fills ~70% of its column, but never so tall that the name
+  // and track line get pushed under the mini player.
+  const discSize = stage ? Math.max(0, Math.round(Math.min(recordWidth * 0.7, (stage.height - TEXT_BLOCK) * 0.86, 440))) : 0;
   const compact = recordWidth < 420;
+
+  // Screensaver: a station on air and nobody touching the screen.
+  const onAir = player.current?.kind === 'radio' && player.status === 'playing';
+  useIdle(ZEN_AFTER, isFocused && onAir && !display.zen, display.enterZen);
 
   const statusFor = (station) => (player.current?.id === station.id ? player.status : null);
 
@@ -352,8 +396,8 @@ export default function RadioScreen({ route, navigation }) {
           width={recordWidth}
           height={discSize + 40}
           discSize={discSize}
-          // Side by side, neighbours would sit under the track info.
-          peek={!wide}
+          // In Split View, neighbours would slide under the side pane.
+          peek={!split}
           renderItem={(station, i) => (
             <Vinyl
               station={station}
@@ -409,13 +453,19 @@ export default function RadioScreen({ route, navigation }) {
     );
   }
 
-  const pills = <GenrePills selected={genre} onSelect={setGenre} wrap={wide && !short} />;
+  const pills = <GenrePills selected={genre} onSelect={setGenre} wrap={split && !short} />;
 
   return (
     <View style={styles.screen}>
       {stage && <FogPlane x={scrollX} width={stage.width} span={itemWidth * stations.length} />}
 
-      <View style={[styles.header, { paddingTop: insets.top + space.lg }]}>
+      <View
+        style={[
+          styles.header,
+          { paddingTop: insets.top + space.lg },
+          unfolded && { paddingRight: space.xl + DISPLAY_BUTTON_SPACE },
+        ]}
+      >
         <Text style={styles.title}>Radio</Text>
         {data.status === 'ready' && stations.length > 0 && (
           <Text style={styles.counter}>
@@ -424,7 +474,7 @@ export default function RadioScreen({ route, navigation }) {
           </Text>
         )}
       </View>
-      {!wide && pills}
+      {!split && pills}
 
       <View
         style={[styles.stage, { paddingBottom: bottomPad }]}
@@ -433,24 +483,28 @@ export default function RadioScreen({ route, navigation }) {
           setLayout((l) => (l && l.width === width && l.height === height ? l : { width, height }));
         }}
       >
-        {wide ? (
-          <View style={styles.split}>
-            <View style={styles.column}>{record}</View>
-            <View style={[styles.column, styles.infoColumn]}>
-              {pills}
+        {split ? (
+          <Animated.View key="split" entering={FadeIn.duration(360)} style={styles.split}>
+            <View style={styles.column}>
+              {record}
               {info}
             </View>
-          </View>
+            <Animated.View entering={FadeInDown.springify().damping(20).stiffness(150)} style={[styles.column, styles.sideColumn]}>
+              {pills}
+              {data.status === 'ready' && (
+                <UpNext stations={stations} index={index} playingId={player.current?.id} onPick={setIndex} />
+              )}
+            </Animated.View>
+          </Animated.View>
         ) : (
-          <>
+          <Animated.View key="full" entering={FadeIn.duration(360)} style={styles.full}>
             {record}
             {info}
-          </>
+          </Animated.View>
         )}
         {isFocused && player.current?.kind === 'radio' && player.status === 'playing' && (
-          // Side by side, they go on the record's half (where the swipe hint
-          // sat) so they never cover the track info.
-          <Reactions style={[wide ? { left: space.lg } : { right: space.lg }, { bottom: bottomPad - space.xs }]} />
+          // In Split View they stay on the record's half, clear of the queue.
+          <Reactions style={[split ? { left: space.lg } : { right: space.lg }, { bottom: bottomPad - space.xs }]} />
         )}
         {data.status === 'ready' && !player.current && stations.length > 0 && (
           <Text
@@ -458,7 +512,7 @@ export default function RadioScreen({ route, navigation }) {
               styles.hint,
               { bottom: tabBarHeight + miniPlayerSpace / 2 - 6 },
               // Under the record, not across the hinge.
-              wide && { left: 0, width: recordWidth, textAlign: 'center' },
+              split && { left: 0, width: recordWidth, textAlign: 'center' },
             ]}
           >
             Swipe to browse · Tap the record to play</Text>
@@ -490,7 +544,15 @@ const styles = StyleSheet.create({
   // Two equal halves, so the gap between them is the screen's centre line.
   split: { flex: 1, flexDirection: 'row', alignSelf: 'stretch' },
   column: { flex: 1, minWidth: 0, alignItems: 'center', justifyContent: 'center' },
-  infoColumn: { gap: space.lg },
+  full: { alignItems: 'center' },
+  sideColumn: { justifyContent: 'flex-start', gap: space.xl, paddingTop: space.lg },
+  queue: { alignSelf: 'stretch', paddingHorizontal: space.xl, gap: 2 },
+  queueTitle: { fontFamily: fonts.mono, fontSize: 10.5, letterSpacing: 2.3, textTransform: 'uppercase', color: colors.textMuted, marginBottom: space.sm },
+  queueEmpty: { fontFamily: fonts.medium, fontSize: 13.5, color: colors.textFaint },
+  queueRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: 8, paddingHorizontal: space.sm, borderRadius: radius.md },
+  queueNum: { fontFamily: fonts.mono, fontSize: 11, color: colors.textFaint, width: 20 },
+  queueName: { fontFamily: fonts.semibold, fontSize: 15, color: colors.text, letterSpacing: -0.2 },
+  queueMeta: { fontFamily: fonts.medium, fontSize: 12, color: colors.textFaint, marginTop: 2 },
   textSlot: { height: TEXT_BLOCK, alignSelf: 'stretch' },
   textBlock: {
     position: 'absolute',

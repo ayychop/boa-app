@@ -34,6 +34,9 @@ import { MediaProvider } from './src/context/MediaContext';
 import { FormsProvider } from './src/context/FormsContext';
 import { UserProvider, useUser } from './src/context/UserContext';
 import { PremiumProvider } from './src/context/PremiumContext';
+import { SleepTimerProvider } from './src/context/SleepTimerContext';
+import { DisplayProvider } from './src/context/DisplayContext';
+import { DisplayButton } from './src/components/display/DisplayMenu';
 import OnboardingScreen from './src/screens/OnboardingScreen';
 import BoaLogo from './src/components/BoaLogo';
 import { PulseDot } from './src/components/ui';
@@ -191,6 +194,7 @@ function MainTabs({ narrow }) {
         <Tab.Screen name="Talent" component={Talent} />
         <Tab.Screen name="Profile" component={Profile} />
       </Tab.Navigator>
+      <DisplayButton />
     </NavigationContainer>
   );
 }
@@ -247,13 +251,17 @@ export default function App() {
       <SafeAreaProvider>
         <UserProvider>
           <PlayerProvider>
-            <MediaProvider>
-              <PremiumProvider>
-                <FormsProvider>
-                  <Gate narrow={narrow} />
-                </FormsProvider>
-              </PremiumProvider>
-            </MediaProvider>
+            <SleepTimerProvider>
+              <DisplayProvider>
+                <MediaProvider>
+                  <PremiumProvider>
+                    <FormsProvider>
+                      <Gate narrow={narrow} />
+                    </FormsProvider>
+                  </PremiumProvider>
+                </MediaProvider>
+              </DisplayProvider>
+            </SleepTimerProvider>
           </PlayerProvider>
         </UserProvider>
       </SafeAreaProvider>

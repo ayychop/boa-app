@@ -10,6 +10,8 @@ import BottomSheet from '../components/BottomSheet';
 import { Button, Fog, Slate, Tappable } from '../components/ui';
 import useBottomSpace from '../hooks/useBottomSpace';
 import useLayout from '../hooks/useLayout';
+import { useDisplay } from '../context/DisplayContext';
+import { DISPLAY_BUTTON_SPACE } from '../components/display/DisplayMenu';
 import { colors, fonts, radius, space, type } from '../theme';
 
 const FILTERS = [
@@ -30,19 +32,50 @@ function toColumns(people, count) {
   return cols.map((c) => c.items);
 }
 
-function TalentCard({ person, width, onPress, delay }) {
+function TalentCard({ person, width, onPress, delay, selected }) {
   return (
     <Animated.View entering={FadeInDown.delay(delay).springify().damping(18)} layout={LinearTransition.springify().damping(20)}>
       <Tappable onPress={() => onPress(person)} accessibilityRole="button" accessibilityLabel={`${person.name}, ${person.role}`}>
         <Headshot person={person} width={width} ratio={person.ratio} />
         <View style={styles.caption}>
           <Slate>{person.role}</Slate>
-          <Text style={styles.name} numberOfLines={1}>
+          <Text style={[styles.name, selected && { color: colors.gold }]} numberOfLines={1}>
             {person.name}
           </Text>
         </View>
       </Tappable>
     </Animated.View>
+  );
+}
+
+function ProfileActions({ person, onEnquire, style }) {
+  return (
+    <View style={[styles.sheetActions, style]}>
+      <Button label="View Profile" icon="person-outline" onPress={() => Linking.openURL(person.profileUrl)} style={{ flex: 1 }} />
+      <Button label="Enquire" icon="mail-outline" variant="ghost" onPress={onEnquire} style={{ flex: 1 }} />
+    </View>
+  );
+}
+
+// Split View's right pane: whoever is picked in the grid, large.
+function ProfilePane({ person, width, bottom, onEnquire }) {
+  const insets = useSafeAreaInsets();
+  const photoWidth = Math.min(width - space.xl * 2, 380);
+  return (
+    <ScrollView
+      contentContainerStyle={{ paddingTop: insets.top + space.xl + DISPLAY_BUTTON_SPACE, paddingHorizontal: space.xl, paddingBottom: bottom }}
+      showsVerticalScrollIndicator={false}
+    >
+      <Animated.View key={person.id} entering={FadeIn.duration(320)} style={styles.profile}>
+        <Headshot person={person} width={photoWidth} ratio={person.ratio} />
+        <Slate color={person.tint} style={{ marginTop: space.xl }}>
+          {person.role}
+        </Slate>
+        <Text style={[type.display, { marginTop: space.sm }]}>{person.name}</Text>
+        <Slate style={{ marginTop: space.sm }}>BOA Network roster</Slate>
+        <ProfileActions person={person} onEnquire={onEnquire} style={styles.paneActions} />
+      </Animated.View>
+    </ScrollView>
   );
 }
 
@@ -54,10 +87,16 @@ export default function TalentScreen({ route, navigation }) {
   const [selected, setSelected] = useState(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const forms = useForms();
+  // Split View shows the pick in the side pane instead of a sheet.
+  const { split } = useDisplay();
 
   const open = (person) => {
     setSelected(person);
-    setSheetOpen(true);
+    if (!split) setSheetOpen(true);
+  };
+  const enquire = (person) => {
+    setSheetOpen(false);
+    forms.openContact({ subject: `Booking enquiry: ${person.name}` });
   };
 
   // Home's "Our Talent" row deep-links here with a person to open.
@@ -69,77 +108,95 @@ export default function TalentScreen({ route, navigation }) {
     navigation.setParams({ talentId: undefined });
   }, [focusId, navigation]);
 
-  const contentWidth = Math.min(width, 1200);
+  const pane = split ? width / 2 : width;
+  const contentWidth = Math.min(pane, 1200);
   const columns = contentWidth < 640 ? 2 : contentWidth < 1000 ? 3 : 4;
   const colWidth = Math.floor((contentWidth - space.xl * 2 - GAP * (columns - 1)) / columns);
   const visible = talent.filter(FILTERS.find((f) => f.id === filter).test);
   const grid = toColumns(visible, columns);
+  const profile = selected ?? visible[0] ?? talent[0];
+
+  const browse = (
+    <ScrollView contentContainerStyle={{ paddingBottom: bottom }} showsVerticalScrollIndicator={false}>
+      <View
+        style={[
+          styles.hero,
+          { paddingTop: insets.top + space.xxl, paddingHorizontal: (pane - contentWidth) / 2 + space.xl },
+        ]}
+      >
+        <Fog opacity={0.22} />
+        <LinearGradient colors={['transparent', colors.bg]} locations={[0.5, 1]} style={StyleSheet.absoluteFill} />
+        <Slate dot>03 · Talent</Slate>
+        <Text style={[type.display, { marginTop: space.md }]}>
+          The <Text style={[type.serif, styles.serifBig]}>roster.</Text>
+        </Text>
+        <Text style={[type.bodyMuted, styles.lede]}>
+          Actors and models we believe in. Most of them came through an open call. None of them came through a favour.
+        </Text>
+        <View style={styles.filters}>
+          {FILTERS.map((f) => {
+            const active = f.id === filter;
+            const count = talent.filter(f.test).length;
+            return (
+              <Pressable
+                key={f.id}
+                onPress={() => setFilter(f.id)}
+                accessibilityRole="button"
+                accessibilityState={{ selected: active }}
+                style={({ pressed }) => [styles.filter, active && styles.filterActive, pressed && { opacity: 0.7 }]}
+              >
+                <Text style={[styles.filterText, active && styles.filterTextActive]}>{f.label}</Text>
+                <Text style={[styles.filterCount, active && { color: colors.bg }]}>{count}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+        <Slate style={{ marginTop: space.lg }}>Showing {visible.length} people</Slate>
+      </View>
+
+      <View style={[styles.grid, { width: contentWidth, gap: GAP }]}>
+        {grid.map((col, c) => (
+          <View key={c} style={{ width: colWidth, gap: space.lg }}>
+            {col.map((person, i) => (
+              <TalentCard
+                key={person.id}
+                person={person}
+                width={colWidth}
+                onPress={open}
+                selected={split && person.id === profile.id}
+                delay={(i * columns + c) * 55}
+              />
+            ))}
+          </View>
+        ))}
+      </View>
+
+      <Animated.View entering={FadeIn.delay(300)} style={styles.cta}>
+        <Text style={[type.h1, { textAlign: 'center' }]}>
+          The next face here could be <Text style={type.serif}>yours.</Text>
+        </Text>
+        <Text style={[type.bodyMuted, { textAlign: 'center', marginTop: space.sm }]}>
+          No agent. No followers. No fee. Send us what you have and a real person will watch it.
+        </Text>
+        <Button label="Get seen" icon="arrow-forward" onPress={forms.openGetSeen} style={{ marginTop: space.xl }} />
+      </Animated.View>
+    </ScrollView>
+  );
+
+  if (split) {
+    return (
+      <Animated.View key="split" entering={FadeIn.duration(360)} style={[styles.screen, styles.split]}>
+        <View style={{ width: pane }}>{browse}</View>
+        <Animated.View entering={FadeInDown.springify().damping(20).stiffness(150)} style={[styles.pane, { width: pane }]}>
+          <ProfilePane person={profile} width={pane} bottom={bottom} onEnquire={() => enquire(profile)} />
+        </Animated.View>
+      </Animated.View>
+    );
+  }
 
   return (
-    <View style={styles.screen}>
-      <ScrollView contentContainerStyle={{ paddingBottom: bottom }} showsVerticalScrollIndicator={false}>
-        <View
-          style={[
-            styles.hero,
-            { paddingTop: insets.top + space.xxl, paddingHorizontal: (width - contentWidth) / 2 + space.xl },
-          ]}
-        >
-          <Fog opacity={0.22} />
-          <LinearGradient colors={['transparent', colors.bg]} locations={[0.5, 1]} style={StyleSheet.absoluteFill} />
-          <Slate dot>03 · Talent</Slate>
-          <Text style={[type.display, { marginTop: space.md }]}>
-            The <Text style={[type.serif, styles.serifBig]}>roster.</Text>
-          </Text>
-          <Text style={[type.bodyMuted, styles.lede]}>
-            Actors and models we believe in. Most of them came through an open call. None of them came through a favour.
-          </Text>
-          <View style={styles.filters}>
-            {FILTERS.map((f) => {
-              const active = f.id === filter;
-              const count = talent.filter(f.test).length;
-              return (
-                <Pressable
-                  key={f.id}
-                  onPress={() => setFilter(f.id)}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: active }}
-                  style={({ pressed }) => [styles.filter, active && styles.filterActive, pressed && { opacity: 0.7 }]}
-                >
-                  <Text style={[styles.filterText, active && styles.filterTextActive]}>{f.label}</Text>
-                  <Text style={[styles.filterCount, active && { color: colors.bg }]}>{count}</Text>
-                </Pressable>
-              );
-            })}
-          </View>
-          <Slate style={{ marginTop: space.lg }}>Showing {visible.length} people</Slate>
-        </View>
-
-        <View style={[styles.grid, { width: contentWidth, gap: GAP }]}>
-          {grid.map((col, c) => (
-            <View key={c} style={{ width: colWidth, gap: space.lg }}>
-              {col.map((person, i) => (
-                <TalentCard
-                  key={person.id}
-                  person={person}
-                  width={colWidth}
-                  onPress={open}
-                  delay={(i * columns + c) * 55}
-                />
-              ))}
-            </View>
-          ))}
-        </View>
-
-        <Animated.View entering={FadeIn.delay(300)} style={styles.cta}>
-          <Text style={[type.h1, { textAlign: 'center' }]}>
-            The next face here could be <Text style={type.serif}>yours.</Text>
-          </Text>
-          <Text style={[type.bodyMuted, { textAlign: 'center', marginTop: space.sm }]}>
-            No agent. No followers. No fee. Send us what you have and a real person will watch it.
-          </Text>
-          <Button label="Get seen" icon="arrow-forward" onPress={forms.openGetSeen} style={{ marginTop: space.xl }} />
-        </Animated.View>
-      </ScrollView>
+    <Animated.View key="full" entering={FadeIn.duration(360)} style={styles.screen}>
+      {browse}
 
       <BottomSheet open={sheetOpen} onClose={() => setSheetOpen(false)}>
         {selected && (
@@ -154,28 +211,20 @@ export default function TalentScreen({ route, navigation }) {
                 <Slate style={{ marginTop: 8 }}>BOA Network roster</Slate>
               </View>
             </View>
-            <View style={styles.sheetActions}>
-              <Button label="View Profile" icon="person-outline" onPress={() => Linking.openURL(selected.profileUrl)} style={{ flex: 1 }} />
-              <Button
-                label="Enquire"
-                icon="mail-outline"
-                variant="ghost"
-                onPress={() => {
-                  setSheetOpen(false);
-                  forms.openContact({ subject: `Booking enquiry: ${selected.name}` });
-                }}
-                style={{ flex: 1 }}
-              />
-            </View>
+            <ProfileActions person={selected} onEnquire={() => enquire(selected)} />
           </View>
         )}
       </BottomSheet>
-    </View>
+    </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
+  split: { flexDirection: 'row' },
+  pane: { borderLeftWidth: StyleSheet.hairlineWidth, borderLeftColor: colors.border },
+  profile: { alignItems: 'flex-start' },
+  paneActions: { alignSelf: 'stretch', marginTop: space.xl },
   hero: { paddingHorizontal: space.xl, paddingBottom: space.xl, overflow: 'hidden' },
   serifBig: { fontSize: 50, letterSpacing: -1 },
   lede: { marginTop: space.md, maxWidth: 520 },

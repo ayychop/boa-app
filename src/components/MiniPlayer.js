@@ -22,6 +22,8 @@ import useNowPlaying from '../hooks/useNowPlaying';
 import { useUser } from '../context/UserContext';
 import { GoldBadge } from './ui';
 import StationLogo from './StationLogo';
+import { SleepButton } from './SleepTimerMenu';
+import { useSleepRemaining } from '../context/SleepTimerContext';
 import useLayout from '../hooks/useLayout';
 import { colors, fonts, radius, space } from '../theme';
 
@@ -61,6 +63,7 @@ export default function MiniPlayer({ onOpenRadio }) {
   const { isPremium } = useUser();
   const nowPlaying = useNowPlaying(current, current?.kind === 'radio');
   const m = useMetrics();
+  const sleepLeft = useSleepRemaining();
   const swell = useSharedValue(1);
   const halo = useSharedValue(0);
 
@@ -84,9 +87,10 @@ export default function MiniPlayer({ onOpenRadio }) {
   if (!current) return null;
 
   const podcast = current.kind === 'podcast' ? podcastById(current.podcastId) : null;
-  const subtitle = podcast
+  const baseSubtitle = podcast
     ? `${podcast.title}${status === 'paused' ? ' · Paused' : ''}`
     : describePlayback(status, trackTitle || nowPlaying, retry) || 'Live radio';
+  const subtitle = sleepLeft ? `Sleep in ${Math.ceil(sleepLeft / 60000)} min · ${baseSubtitle}` : baseSubtitle;
   const open = () => (podcast ? media.openPodcast(podcast, { autoplay: false }) : onOpenRadio());
 
   return (
@@ -131,6 +135,7 @@ export default function MiniPlayer({ onOpenRadio }) {
               </Text>
             </View>
           </Pressable>
+          <SleepButton size={m.button - 6} />
           <Pressable
             onPress={() => toggle()}
             hitSlop={8}

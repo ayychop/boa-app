@@ -1,9 +1,16 @@
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
+import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { featuredProduction, productions } from '../data/boaContent';
 import { useMedia } from '../context/MediaContext';
+import { usePlayer } from '../context/PlayerContext';
+import { useDisplay } from '../context/DisplayContext';
+import { DISPLAY_BUTTON_SPACE } from '../components/display/DisplayMenu';
+import YouTubePlayer from '../components/media/YouTubePlayer';
+import VideoPlayer from '../components/media/VideoPlayer';
 import Poster, { metaLine } from '../components/Poster';
 import { heroArt } from '../components/HeroArt';
 import { Button, Fog, SectionHeader, Slate, Tappable, Viewfinder } from '../components/ui';
@@ -13,7 +20,7 @@ import { colors, fonts, space, type } from '../theme';
 
 const GAP = 14;
 
-function Featured({ production, width }) {
+function Featured({ production, width, clearRight }) {
   const insets = useSafeAreaInsets();
   const media = useMedia();
   const wide = width >= 900;
@@ -33,7 +40,9 @@ function Featured({ production, width }) {
         style={StyleSheet.absoluteFill}
       />
       <Viewfinder inset={16} />
-      <View style={[styles.featuredTop, { top: insets.top + space.xl }]}>
+      <View
+        style={[styles.featuredTop, { top: insets.top + space.xl }, clearRight && { right: space.xl + 8 + DISPLAY_BUTTON_SPACE }]}
+      >
         <Slate dot>02 · Productions</Slate>
         <Slate>The slate</Slate>
       </View>
@@ -73,19 +82,158 @@ function EpisodeCard({ production, episode, width }) {
   );
 }
 
+// Everything watchable, in slate order: each production's episodes, then its
+// trailer; productions with neither are listed as coming soon.
+const CATALOGUE = productions.flatMap((p) => {
+  const items = p.episodes.map((episode) => ({ key: episode.id, production: p, kind: 'episode', episode, label: episode.title }));
+  if (p.trailerYouTubeId) items.push({ key: `${p.id}-trailer`, production: p, kind: 'trailer', label: 'Official trailer' });
+  if (!items.length) items.push({ key: p.id, production: p, kind: 'soon', label: 'Coming soon' });
+  return items;
+});
+
+function sourceFor(item) {
+  if (item.kind === 'trailer') return { youTubeId: item.production.trailerYouTubeId };
+  if (item.kind === 'episode') return item.episode.videoUrl ? { videoUrl: item.episode.videoUrl } : { youTubeId: item.episode.youTubeId };
+  return null;
+}
+
+const thumbOf = (item) =>
+  item.kind === 'episode' ? { ...item.production, backdrop: item.episode.image, status: 'available' } : item.production;
+
+// Split View's left pane: the screening room, inline. Nothing plays until
+// it's asked to (and live audio pauses when it is).
+function InlineScreening({ item, playing, onPlay, width, bottom }) {
+  const insets = useSafeAreaInsets();
+  const videoWidth = width - space.xl * 2;
+  const videoHeight = Math.round((videoWidth * 9) / 16);
+  const source = sourceFor(item);
+  const { production } = item;
+  return (
+    <ScrollView contentContainerStyle={{ paddingTop: insets.top + space.xl, paddingHorizontal: space.xl, paddingBottom: bottom }}>
+      <Slate dot>Now screening · {item.label}</Slate>
+      <View style={[styles.screen16x9, { width: videoWidth, height: videoHeight }]}>
+        {playing && source?.youTubeId ? (
+          <YouTubePlayer key={source.youTubeId} videoId={source.youTubeId} width={videoWidth} height={videoHeight} />
+        ) : playing && source?.videoUrl ? (
+          <VideoPlayer uri={source.videoUrl} poster={production.image} width={videoWidth} height={videoHeight} />
+        ) : (
+          <Pressable
+            onPress={source ? onPlay : undefined}
+            disabled={!source}
+            accessibilityRole="button"
+            accessibilityLabel={source ? `Play ${production.title}, ${item.label}` : `${production.title}, coming soon`}
+          >
+            <Poster production={thumbOf(item)} width={videoWidth} showTitle={false} rounded={0} />
+            <View style={styles.playOverlay}>
+              {source ? (
+                <View style={styles.playButton}>
+                  <Ionicons name="play" size={30} color={colors.bg} style={{ marginLeft: 4 }} />
+                </View>
+              ) : (
+                <Text style={styles.soonTitle}>
+                  Coming <Text style={type.serif}>soon</Text>
+                </Text>
+              )}
+            </View>
+          </Pressable>
+        )}
+      </View>
+      <Animated.View key={item.key} entering={FadeIn.duration(300)}>
+        <Text style={[type.h1, { marginTop: space.xl }]}>{production.title}</Text>
+        {!!metaLine(production) && <Slate style={{ marginTop: 10 }}>{metaLine(production)}</Slate>}
+        {production.logline && <Text style={[type.bodyMuted, { marginTop: space.lg }]}>{production.logline}</Text>}
+      </Animated.View>
+    </ScrollView>
+  );
+}
+
+// Split View's right pane: the whole slate as a list.
+function EpisodeList({ selected, onSelect, width, bottom }) {
+  const insets = useSafeAreaInsets();
+  let lastProduction = null;
+  return (
+    <ScrollView
+      contentContainerStyle={{ paddingTop: insets.top + space.xl + DISPLAY_BUTTON_SPACE, paddingBottom: bottom }}
+      showsVerticalScrollIndicator={false}
+    >
+      <SectionHeader index="01" kicker="The slate" title="Episodes" />
+      <View style={styles.list}>
+        {CATALOGUE.map((item, i) => {
+          const header = item.production !== lastProduction;
+          lastProduction = item.production;
+          const active = item.key === selected.key;
+          const soon = item.kind === 'soon';
+          return (
+            <Animated.View key={item.key} entering={FadeInDown.delay(i * 45).springify().damping(20)}>
+              {header && <Slate style={styles.listGroup}>{item.production.title}</Slate>}
+              <Pressable
+                onPress={() => onSelect(item)}
+                accessibilityRole="button"
+                accessibilityState={{ selected: active }}
+                accessibilityLabel={`${item.production.title}, ${item.label}`}
+                style={({ pressed }) => [styles.listRow, active && styles.listRowActive, pressed && { opacity: 0.75 }]}
+              >
+                <Poster production={thumbOf(item)} width={Math.min(132, width * 0.3)} showTitle={false} rounded={8} />
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={[styles.listTitle, soon && { color: colors.textFaint }]} numberOfLines={1}>
+                    {item.label}
+                  </Text>
+                  <Text style={styles.listMeta} numberOfLines={1}>
+                    {soon ? 'Not out yet' : item.kind === 'trailer' ? 'Trailer' : metaLine(item.production) || 'Episode'}
+                  </Text>
+                </View>
+                {active && !soon && <Ionicons name="play-circle" size={22} color={colors.gold} />}
+              </Pressable>
+            </Animated.View>
+          );
+        })}
+      </View>
+    </ScrollView>
+  );
+}
+
+function SplitOriginals({ width, bottom }) {
+  const player = usePlayer();
+  const [selected, setSelected] = useState(CATALOGUE[0]);
+  const [playing, setPlaying] = useState(false);
+  const pane = width / 2;
+  // Never talk over the film: audio pauses when a video starts.
+  const play = () => {
+    if (player.isPlaying) player.pause();
+    setPlaying(true);
+  };
+  const select = (item) => {
+    setSelected(item);
+    if (item.kind === 'soon') setPlaying(false);
+    else play();
+  };
+  return (
+    <Animated.View key="split" entering={FadeIn.duration(360)} style={[styles.screen, styles.split]}>
+      <View style={{ width: pane }}>
+        <InlineScreening item={selected} playing={playing} onPlay={play} width={pane} bottom={bottom} />
+      </View>
+      <Animated.View entering={FadeInDown.springify().damping(20).stiffness(150)} style={{ width: pane }}>
+        <EpisodeList selected={selected} onSelect={select} width={pane} bottom={bottom} />
+      </Animated.View>
+    </Animated.View>
+  );
+}
+
 export default function OriginalsScreen() {
   const { width } = useLayout();
   const media = useMedia();
   const bottom = useBottomSpace(space.xxl);
+  const { split, unfolded } = useDisplay();
+  if (split) return <SplitOriginals width={width} bottom={bottom} />;
   const contentWidth = Math.min(width, 1200);
   const columns = contentWidth < 640 ? 2 : contentWidth < 1000 ? 3 : 4;
   const posterWidth = Math.floor((contentWidth - space.xl * 2 - GAP * (columns - 1)) / columns);
   const featured = featuredProduction;
 
   return (
-    <View style={styles.screen}>
+    <Animated.View key="full" entering={FadeIn.duration(360)} style={styles.screen}>
       <ScrollView contentContainerStyle={{ paddingBottom: bottom }} showsVerticalScrollIndicator={false}>
-        <Featured production={featured} width={width} />
+        <Featured production={featured} width={width} clearRight={unfolded} />
 
         <View style={[styles.block, { width: contentWidth }]}>
           <SectionHeader index="01" kicker={featured.title} title="Episodes" />
@@ -126,12 +274,45 @@ export default function OriginalsScreen() {
           </Text>
         </View>
       </ScrollView>
-    </View>
+    </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
+  split: { flexDirection: 'row' },
+  screen16x9: {
+    marginTop: space.md,
+    backgroundColor: '#000',
+    overflow: 'hidden',
+    borderRadius: 12,
+    boxShadow: '0px 30px 80px rgba(0,0,0,0.75), 0px 0px 0px 1px rgba(243,239,232,0.08)',
+  },
+  playOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(5,5,6,0.25)' },
+  playButton: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.gold,
+    boxShadow: '0px 10px 30px rgba(226,168,75,0.45)',
+  },
+  soonTitle: { fontFamily: fonts.semibold, fontSize: 26, color: colors.text, letterSpacing: -0.8 },
+  list: { paddingHorizontal: space.lg, marginTop: space.sm },
+  listGroup: { marginTop: space.lg, marginBottom: space.sm, paddingHorizontal: space.sm },
+  listRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    padding: space.sm,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  listRowActive: { backgroundColor: 'rgba(226,168,75,0.08)', borderColor: 'rgba(226,168,75,0.35)' },
+  listTitle: { fontFamily: fonts.semibold, fontSize: 15, color: colors.text },
+  listMeta: { fontFamily: fonts.medium, fontSize: 12, color: colors.textFaint, marginTop: 3 },
   featuredTop: { position: 'absolute', left: space.xl + 8, right: space.xl + 8, flexDirection: 'row', justifyContent: 'space-between' },
   featuredBody: { position: 'absolute', left: space.xl, right: space.xl, bottom: space.xl, maxWidth: 680 },
   srOnly: { position: 'absolute', width: 1, height: 1, opacity: 0, overflow: 'hidden' },

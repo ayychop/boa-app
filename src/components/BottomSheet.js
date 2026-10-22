@@ -3,6 +3,7 @@ import { KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, View } fr
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { interpolate, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { GestureDetector, GestureHandlerRootView, usePanGesture } from 'react-native-gesture-handler';
+import { BlurView } from 'expo-blur';
 import { scheduleOnRN } from 'react-native-worklets';
 import useLayout from '../hooks/useLayout';
 import { colors, radius, space } from '../theme';
@@ -18,8 +19,9 @@ const OFFSCREEN = 900;
  * scrolling and text selection to the content.
  * On wide screens (tablets, unfolded foldables) it rises to the centre as a
  * card instead of stretching along the bottom edge.
+ * `glass` swaps the solid panel for frosted dark glass, for short menus.
  */
-export default function BottomSheet({ open, onClose, children, dragAnywhere = true }) {
+export default function BottomSheet({ open, onClose, children, dragAnywhere = true, glass = false }) {
   const insets = useSafeAreaInsets();
   const { wide } = useLayout();
   // A centred card clears the home indicator on its own.
@@ -70,13 +72,15 @@ export default function BottomSheet({ open, onClose, children, dragAnywhere = tr
         >
           {dragAnywhere ? (
             <GestureDetector gesture={pan}>
-              <Animated.View style={[styles.sheet, wide && styles.card, { paddingBottom: bottomPad }, sheetStyle]}>
+              <Animated.View style={[styles.sheet, wide && styles.card, glass && styles.glass, { paddingBottom: bottomPad }, sheetStyle]}>
+                {glass && <Glass />}
                 <View style={styles.grabber} />
                 {children}
               </Animated.View>
             </GestureDetector>
           ) : (
-            <Animated.View style={[styles.sheet, wide && styles.card, { paddingBottom: bottomPad }, sheetStyle]}>
+            <Animated.View style={[styles.sheet, wide && styles.card, glass && styles.glass, { paddingBottom: bottomPad }, sheetStyle]}>
+              {glass && <Glass />}
               <GestureDetector gesture={pan}>
                 <View style={styles.handleZone}>
                   <View style={styles.grabber} />
@@ -88,6 +92,15 @@ export default function BottomSheet({ open, onClose, children, dragAnywhere = tr
         </KeyboardAvoidingView>
       </GestureHandlerRootView>
     </Modal>
+  );
+}
+
+function Glass() {
+  return (
+    <>
+      <BlurView intensity={90} tint="dark" experimentalBlurMethod="dimezisBlurView" style={StyleSheet.absoluteFill} />
+      <View pointerEvents="none" style={styles.glassTint} />
+    </>
   );
 }
 
@@ -109,6 +122,8 @@ const styles = StyleSheet.create({
     boxShadow: '0px -20px 60px rgba(0,0,0,0.6)',
   },
   card: { maxHeight: '100%', borderRadius: radius.xl, boxShadow: '0px 30px 80px rgba(0,0,0,0.6)' },
+  glass: { backgroundColor: 'transparent', borderColor: 'rgba(255,255,255,0.16)' },
+  glassTint: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(14,14,17,0.55)' },
   // Taller than the grabber itself so it's easy to catch.
   handleZone: { marginTop: -space.md, paddingTop: space.md, cursor: 'grab' },
   grabber: {

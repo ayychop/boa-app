@@ -1,4 +1,4 @@
-import { Children, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
@@ -27,11 +27,13 @@ import StationLogo from '../components/StationLogo';
 import { Button, Fog, LogoWatermark, PulseDot, SectionHeader, Slate, Tappable, Viewfinder } from '../components/ui';
 import useBottomSpace from '../hooks/useBottomSpace';
 import useLayout from '../hooks/useLayout';
+import { useDisplay } from '../context/DisplayContext';
+import { DISPLAY_BUTTON_SPACE } from '../components/display/DisplayMenu';
 import { colors, fonts, space, type } from '../theme';
 
 const METAL = ['#F2F2F4', '#8A8A90', '#FAFAFB', '#5E5E64', '#D9D9DD'];
 
-function Hero({ production, width, height }) {
+function Hero({ production, width, height, clearRight, bottomInset = 0 }) {
   const insets = useSafeAreaInsets();
   const media = useMedia();
   const reduceMotion = useReducedMotion();
@@ -63,7 +65,9 @@ function Hero({ production, width, height }) {
       />
       <Viewfinder inset={16} />
 
-      <View style={[styles.heroTop, { top: insets.top + space.xl }]}>
+      <View
+        style={[styles.heroTop, { top: insets.top + space.xl }, clearRight && { right: space.xl + 8 + DISPLAY_BUTTON_SPACE }]}
+      >
         <View>
           <View style={styles.logoRow}>
             <BoaLogo height={30} />
@@ -83,7 +87,7 @@ function Hero({ production, width, height }) {
 
       <Animated.View
         entering={FadeInDown.delay(150).springify().damping(18)}
-        style={styles.heroBody}
+        style={[styles.heroBody, { bottom: space.xxl + bottomInset }]}
       >
         <Slate color={colors.gold} lines={2}>
           BOA Original · {metaLine(production)}
@@ -120,20 +124,6 @@ function Row({ children }) {
   );
 }
 
-// Two sections side by side on wide screens, stacked on phones. The halves
-// are equal, so the gutter between them falls on the screen's centre line
-// (a dual screen's hinge); each row scrolls inside its own half.
-function Pair({ wide, children }) {
-  if (!wide) return children;
-  return (
-    <View style={styles.pair}>
-      {Children.map(children, (child) => (
-        <View style={styles.half}>{child}</View>
-      ))}
-    </View>
-  );
-}
-
 function TrendingStation({ station, onPress, live }) {
   return (
     <Tappable onPress={() => onPress(station)} style={styles.station} accessibilityRole="button" accessibilityLabel={`Play ${station.name}`}>
@@ -154,7 +144,11 @@ function TrendingStation({ station, onPress, live }) {
 }
 
 export default function HomeScreen({ navigation }) {
-  const { width, height, wide } = useLayout();
+  const { width, height } = useLayout();
+  const insets = useSafeAreaInsets();
+  // Split View: the hero holds the left pane, the rows scroll on the right.
+  const { split, unfolded } = useDisplay();
+  const paneWidth = split ? width / 2 : width;
   const bottom = useBottomSpace(space.xxl);
   const player = usePlayer();
   const media = useMedia();
@@ -179,155 +173,174 @@ export default function HomeScreen({ navigation }) {
   };
 
   const heroHeight = Math.min(Math.max(height * 0.78, 520), 820);
-  const columnWidth = wide ? width / 2 : width;
-  const posterWidth = Math.min(Math.round(columnWidth * 0.72), 340);
+  const posterWidth = Math.min(Math.round(paneWidth * 0.72), 340);
 
-  return (
-    <View style={styles.screen}>
-      <ScrollView contentContainerStyle={{ paddingBottom: bottom }} showsVerticalScrollIndicator={false}>
-        <Hero production={featuredProduction} width={width} height={heroHeight} />
-
-        <Pair wide={wide}>
-          <View style={styles.section}>
-            <SectionHeader
-              index="01"
-              kicker="R&B · Hip Hop · Ghana"
-              title="Trending on BOA Radio"
-              action="Open radio"
-              onAction={() => navigation.navigate('Radio')}
-            />
-            {trending === null ? (
-              <View style={styles.tuning}>
-                <ActivityIndicator color={colors.textMuted} />
-                <Slate>Tuning the premium stations…</Slate>
-              </View>
-            ) : trending.length === 0 ? (
-              <Text style={[type.bodyMuted, { paddingHorizontal: space.xl }]}>Stations are off air right now.</Text>
-            ) : (
-              <Row>
-                {trending.map((s, i) => (
-                  <Animated.View key={s.id} entering={FadeIn.delay(i * 70)}>
-                    <TrendingStation
-                      station={s}
-                      onPress={playStation}
-                      live={player.current?.id === s.id && player.isPlaying}
-                    />
-                  </Animated.View>
-                ))}
-              </Row>
-            )}
+  const sections = (
+    <>
+      <View style={styles.section}>
+        <SectionHeader
+          index="01"
+          kicker="R&B · Hip Hop · Ghana"
+          title="Trending on BOA Radio"
+          action="Open radio"
+          onAction={() => navigation.navigate('Radio')}
+        />
+        {trending === null ? (
+          <View style={styles.tuning}>
+            <ActivityIndicator color={colors.textMuted} />
+            <Slate>Tuning the premium stations…</Slate>
           </View>
+        ) : trending.length === 0 ? (
+          <Text style={[type.bodyMuted, { paddingHorizontal: space.xl }]}>Stations are off air right now.</Text>
+        ) : (
+          <Row>
+            {trending.map((s, i) => (
+              <Animated.View key={s.id} entering={FadeIn.delay(i * 70)}>
+                <TrendingStation
+                  station={s}
+                  onPress={playStation}
+                  live={player.current?.id === s.id && player.isPlaying}
+                />
+              </Animated.View>
+            ))}
+          </Row>
+        )}
+      </View>
 
-          <View style={styles.section}>
-            <SectionHeader
-              index="02"
-              kicker="Productions"
-              title="BOA Originals"
-              action="See all"
-              onAction={() => navigation.navigate('Originals')}
-            />
-            <Row>
-              {productions.slice(0, 5).map((p) => (
-                <Tappable key={p.id} onPress={() => navigation.navigate('Originals')} accessibilityRole="button" accessibilityLabel={p.title}>
-                  <Poster production={p} width={posterWidth} ratio={16 / 9} />
-                </Tappable>
-              ))}
-            </Row>
-          </View>
-        </Pair>
+      <View style={styles.section}>
+        <SectionHeader
+          index="02"
+          kicker="Productions"
+          title="BOA Originals"
+          action="See all"
+          onAction={() => navigation.navigate('Originals')}
+        />
+        <Row>
+          {productions.slice(0, 5).map((p) => (
+            <Tappable key={p.id} onPress={() => navigation.navigate('Originals')} accessibilityRole="button" accessibilityLabel={p.title}>
+              <Poster production={p} width={posterWidth} ratio={16 / 9} />
+            </Tappable>
+          ))}
+        </Row>
+      </View>
 
-        <Pair wide={wide}>
-          <View style={styles.section}>
-            <SectionHeader index="03" kicker="Mindset · Mood · Motivation · Tech" title="BOA Podcasts" />
-            <Row>
-              {podcasts.map((pod, i) => {
-                const live = player.current?.podcastId === pod.id && player.isPlaying;
-                return (
-                  <Animated.View key={pod.id} entering={FadeIn.delay(i * 70)}>
-                    <Tappable
-                      onPress={() => media.openPodcast(pod)}
-                      style={styles.podcast}
-                      accessibilityRole="button"
-                      accessibilityLabel={`${pod.title} podcast`}
-                    >
-                      <PodcastCover podcast={pod} size={148} rounded={18} />
-                      {live && (
-                        <View style={[styles.liveBadge, styles.podLive]}>
-                          <View style={styles.liveDot} />
-                          <Text style={styles.liveText}>PLAYING</Text>
-                        </View>
-                      )}
-                      <Text style={styles.podTitle} numberOfLines={1}>
-                        {pod.title}
-                      </Text>
-                      <Text style={styles.personRole} numberOfLines={1}>
-                        {pod.category} · {pod.author}
-                      </Text>
-                    </Tappable>
-                  </Animated.View>
-                );
-              })}
-            </Row>
-          </View>
-
-          <View style={styles.section}>
-            <SectionHeader
-              index="04"
-              kicker="The roster"
-              title="Our Talent"
-              action="See all"
-              onAction={() => navigation.navigate('Talent')}
-            />
-            <Row>
-              {talent.map((person) => (
+      <View style={styles.section}>
+        <SectionHeader index="03" kicker="Mindset · Mood · Motivation · Tech" title="BOA Podcasts" />
+        <Row>
+          {podcasts.map((pod, i) => {
+            const live = player.current?.podcastId === pod.id && player.isPlaying;
+            return (
+              <Animated.View key={pod.id} entering={FadeIn.delay(i * 70)}>
                 <Tappable
-                  key={person.id}
-                  onPress={() => navigation.navigate('Talent', { talentId: person.id })}
-                  style={styles.person}
+                  onPress={() => media.openPodcast(pod)}
+                  style={styles.podcast}
                   accessibilityRole="button"
-                  accessibilityLabel={`${person.name}, ${person.role}`}
+                  accessibilityLabel={`${pod.title} podcast`}
                 >
-                  <Headshot person={person} width={96} round />
-                  <Text style={styles.personName} numberOfLines={1}>
-                    {person.name}
+                  <PodcastCover podcast={pod} size={148} rounded={18} />
+                  {live && (
+                    <View style={[styles.liveBadge, styles.podLive]}>
+                      <View style={styles.liveDot} />
+                      <Text style={styles.liveText}>PLAYING</Text>
+                    </View>
+                  )}
+                  <Text style={styles.podTitle} numberOfLines={1}>
+                    {pod.title}
                   </Text>
                   <Text style={styles.personRole} numberOfLines={1}>
-                    {person.role}
+                    {pod.category} · {pod.author}
                   </Text>
                 </Tappable>
-              ))}
-            </Row>
-          </View>
-        </Pair>
+              </Animated.View>
+            );
+          })}
+        </Row>
+      </View>
 
-        <View style={styles.mission}>
-          <Fog opacity={0.28} />
-          <Viewfinder inset={12} size={12} />
-          <Slate dot>05 · The mission</Slate>
-          <Text style={[type.h1, { marginTop: space.md }]}>
-            Talent is everywhere. <Text style={type.serif}>Opportunity is not.</Text>
-          </Text>
-          <Text style={[type.bodyMuted, { marginTop: space.md }]}>
-            BOA Network exists to close that gap with real roles, on real productions, for people who were never handed a
-            way in.
-          </Text>
-          <View style={styles.barriers}>
-            {['Ethnicity', 'Connections', 'Clout', 'Money'].map((b, i) => (
-              <View key={b} style={styles.barrier}>
-                <Slate>Not a barrier · 0{i + 1}</Slate>
-                <Text style={styles.barrierText}>{b}</Text>
-              </View>
-            ))}
-          </View>
-          <Button label="Get seen" icon="arrow-forward" onPress={forms.openGetSeen} style={{ alignSelf: 'flex-start', marginTop: space.xl }} />
+      <View style={styles.section}>
+        <SectionHeader
+          index="04"
+          kicker="The roster"
+          title="Our Talent"
+          action="See all"
+          onAction={() => navigation.navigate('Talent')}
+        />
+        <Row>
+          {talent.map((person) => (
+            <Tappable
+              key={person.id}
+              onPress={() => navigation.navigate('Talent', { talentId: person.id })}
+              style={styles.person}
+              accessibilityRole="button"
+              accessibilityLabel={`${person.name}, ${person.role}`}
+            >
+              <Headshot person={person} width={96} round />
+              <Text style={styles.personName} numberOfLines={1}>
+                {person.name}
+              </Text>
+              <Text style={styles.personRole} numberOfLines={1}>
+                {person.role}
+              </Text>
+            </Tappable>
+          ))}
+        </Row>
+      </View>
+
+      <View style={styles.mission}>
+        <Fog opacity={0.28} />
+        <Viewfinder inset={12} size={12} />
+        <Slate dot>05 · The mission</Slate>
+        <Text style={[type.h1, { marginTop: space.md }]}>
+          Talent is everywhere. <Text style={type.serif}>Opportunity is not.</Text>
+        </Text>
+        <Text style={[type.bodyMuted, { marginTop: space.md }]}>
+          BOA Network exists to close that gap with real roles, on real productions, for people who were never handed a
+          way in.
+        </Text>
+        <View style={styles.barriers}>
+          {['Ethnicity', 'Connections', 'Clout', 'Money'].map((b, i) => (
+            <View key={b} style={styles.barrier}>
+              <Slate>Not a barrier · 0{i + 1}</Slate>
+              <Text style={styles.barrierText}>{b}</Text>
+            </View>
+          ))}
         </View>
+        <Button label="Get seen" icon="arrow-forward" onPress={forms.openGetSeen} style={{ alignSelf: 'flex-start', marginTop: space.xl }} />
+      </View>
+    </>
+  );
+
+  if (split) {
+    return (
+      <Animated.View key="split" entering={FadeIn.duration(360)} style={[styles.screen, styles.split]}>
+        <View style={{ width: paneWidth }}>
+          <Hero production={featuredProduction} width={paneWidth} height={height} bottomInset={bottom - space.xxl} />
+        </View>
+        <Animated.ScrollView
+          entering={FadeInDown.springify().damping(20).stiffness(150)}
+          style={{ width: paneWidth }}
+          contentContainerStyle={{ paddingTop: insets.top + space.xl, paddingBottom: bottom }}
+          showsVerticalScrollIndicator={false}
+        >
+          {sections}
+        </Animated.ScrollView>
+      </Animated.View>
+    );
+  }
+
+  return (
+    <Animated.View key="full" entering={FadeIn.duration(360)} style={styles.screen}>
+      <ScrollView contentContainerStyle={{ paddingBottom: bottom }} showsVerticalScrollIndicator={false}>
+        <Hero production={featuredProduction} width={width} height={heroHeight} clearRight={unfolded} />
+        {sections}
       </ScrollView>
-    </View>
+    </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
+  split: { flexDirection: 'row' },
   heroTop: {
     position: 'absolute',
     left: space.xl + 8,
@@ -344,8 +357,6 @@ const styles = StyleSheet.create({
   heroTitle: { fontFamily: fonts.semibold, fontSize: 54, lineHeight: 56, letterSpacing: -2.6, color: colors.text },
   heroActions: { flexDirection: 'row', flexWrap: 'wrap', gap: space.md, marginTop: space.sm },
   section: { marginTop: space.xxl },
-  pair: { flexDirection: 'row' },
-  half: { flex: 1, minWidth: 0, overflow: 'hidden' },
   rowContent: { paddingHorizontal: space.xl, gap: 14 },
   station: { width: 104, alignItems: 'center' },
   ring: { width: 98, height: 98, borderRadius: 49, alignItems: 'center', justifyContent: 'center', boxShadow: '0px 10px 24px rgba(0,0,0,0.5)' },
