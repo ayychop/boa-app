@@ -1,4 +1,5 @@
-import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
+import { AppState, Platform } from 'react-native';
+import { createAudioPlayer, requestNotificationPermissionsAsync, setAudioModeAsync } from 'expo-audio';
 
 // Native audio engine: a single expo-audio player. Items are live radio
 // ({ kind: 'radio' }) or on-demand audio such as podcast episodes
@@ -137,16 +138,58 @@ async function connect(item, { retry = false, resumeAt = 0 }) {
     console.warn(`[audio] couldn't start ${item.streamUrl}`, err);
     return fail(attempt);
   }
-  // Lock-screen controls are a nicety; never let them stop playback.
+  showOnLockScreen(item);
+}
+
+// Lock-screen controls (Android's media notification, which also keeps
+// playback alive in the background). Switching them on can start a service,
+// and Android throws, natively and uncatchably from here, if an app starts a
+// service while it's in the background. So they are only ever switched on
+// while the app is in the foreground. In the background (a reconnect, or
+// play/next from the lock screen) the existing controls just get the new
+// metadata, or wait for the app to come back.
+let lockScreenOn = false;
+let pendingLockScreen = null;
+let appStateSub = null;
+let askedForNotifications = false;
+
+const lockScreenMetadata = (item) => ({
+  title: item.name,
+  artist: item.artist || 'BOA Radio',
+  artworkUrl: item.logo || undefined,
+});
+
+function showOnLockScreen(item) {
+  if (!player) return;
   try {
-    player.setActiveForLockScreen(
-      true,
-      { title: item.name, artist: item.artist || 'BOA Radio', artworkUrl: item.logo || undefined },
-      { showSeekForward: !isLive(item), showSeekBackward: !isLive(item) },
-    );
+    if (AppState.currentState === 'active') {
+      pendingLockScreen = null;
+      player.setActiveForLockScreen(true, lockScreenMetadata(item), {
+        showSeekForward: !isLive(item),
+        showSeekBackward: !isLive(item),
+      });
+      lockScreenOn = true;
+      askForNotifications();
+    } else if (lockScreenOn) {
+      player.updateLockScreenMetadata(lockScreenMetadata(item));
+    } else {
+      pendingLockScreen = item;
+      appStateSub ??= AppState.addEventListener('change', (next) => {
+        if (next === 'active' && pendingLockScreen && pendingLockScreen === current) showOnLockScreen(pendingLockScreen);
+      });
+    }
   } catch (err) {
+    // A nicety; never let it stop playback.
     console.warn('[audio] lock screen controls unavailable', err);
   }
+}
+
+// Android 13+ only shows the media notification with permission. Asked once,
+// in the foreground, after playback has started; the answer never blocks it.
+function askForNotifications() {
+  if (askedForNotifications || Platform.OS !== 'android' || Platform.Version < 33) return;
+  askedForNotifications = true;
+  requestNotificationPermissionsAsync().catch(() => {});
 }
 
 export async function pause() {

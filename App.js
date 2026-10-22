@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, useWindowDimensions, View } from 'react-native';
+import { Platform, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { DarkTheme, NavigationContainer, useIsFocused } from '@react-navigation/native';
 import { BottomTabBar, createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -159,15 +159,23 @@ function TabBarBackground() {
   );
 }
 
+// Android's gesture bar needs about this much clear space even on the rare
+// device that reports no bottom inset in edge-to-edge mode.
+const ANDROID_MIN_BOTTOM_INSET = 16;
+
 function MainTabs({ narrow }) {
   const insets = useSafeAreaInsets();
   const { side, short } = useLayout();
+  // The tab bar pads itself by this, so its icons and labels always sit
+  // above the system gesture bar or navigation buttons.
+  const bottomInset = Math.max(insets.bottom, Platform.OS === 'android' ? ANDROID_MIN_BOTTOM_INSET : 0);
   return (
     <NavigationContainer theme={navTheme}>
       <StatusBar style="light" />
       <Tab.Navigator
         initialRouteName="Home"
         tabBar={(props) => <FloatingTabBar {...props} />}
+        safeAreaInsets={{ bottom: bottomInset }}
         screenOptions={({ route }) => ({
           headerShown: false,
           tabBarActiveTintColor: colors.gold,
@@ -181,7 +189,7 @@ function MainTabs({ narrow }) {
             paddingRight: side,
             // Landscape phones: a slim bar (labels sit beside the icons) so
             // it takes as little of the short screen as it can.
-            ...(short && { height: 40 + insets.bottom }),
+            ...(short && { height: 40 + bottomInset }),
           },
           tabBarBackground: () => <TabBarBackground />,
           // Five tabs: step the labels down on narrow phones so
