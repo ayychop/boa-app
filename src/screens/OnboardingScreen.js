@@ -3,9 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } fr
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
   Easing,
-  FadeIn,
   FadeInDown,
-  FadeOut,
   useAnimatedStyle,
   useReducedMotion,
   useSharedValue,
@@ -18,7 +16,7 @@ import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '../context/UserContext';
 import BoaLogo from '../components/BoaLogo';
-import { Button, LogoWatermark, Slate, Viewfinder } from '../components/ui';
+import { Button, Slate, Viewfinder } from '../components/ui';
 import { haptics } from '../utils/haptics';
 import { colors, fonts, radius, space, type } from '../theme';
 
@@ -104,12 +102,11 @@ function Vignette({ width, height }) {
   );
 }
 
-/** First-run "vibe check": welcome, then pick what you're into. */
+/** First-run "vibe check": pick what you're into. The intro welcomes you first. */
 export default function OnboardingScreen() {
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const { completeOnboarding } = useUser();
-  const [step, setStep] = useState(0);
   const [vibes, setVibes] = useState([]);
 
   const toggle = (id) => setVibes((v) => (v.includes(id) ? v.filter((x) => x !== id) : [...v, id]));
@@ -117,23 +114,18 @@ export default function OnboardingScreen() {
 
   return (
     <View style={styles.screen}>
-      {/* Cinematic stage: a gold spotlight breathing behind the copy, the
-          wordmark as a ghost, and a vignette crushing the edges to black. */}
+      {/* Cinematic stage: a gold spotlight breathing behind the copy and a
+          vignette crushing the edges to black. */}
       <Spotlight width={width} height={height} />
-      <LogoWatermark
-        height={Math.round(Math.min(width * 1.15, 1100) / (1398 / 826))}
-        opacity={0.03}
-        style={{ left: (width - Math.min(width * 1.15, 1100)) / 2, bottom: Math.max(height * 0.2, 150) }}
-      />
       <Vignette width={width} height={height} />
       <Viewfinder inset={16} />
 
       <View style={[styles.top, { paddingTop: insets.top + space.xl }]}>
         <BoaLogo height={30} />
-        <View style={styles.dots} accessibilityLabel={`Step ${step + 1} of 2`}>
-          {[0, 1].map((i) => (
-            <View key={i} style={[styles.dot, i === step && styles.dotOn]} />
-          ))}
+        {/* Step one was the intro's welcome. */}
+        <View style={styles.dots} accessibilityLabel="Step 2 of 2">
+          <View style={styles.dot} />
+          <View style={[styles.dot, styles.dotOn]} />
         </View>
       </View>
 
@@ -145,46 +137,28 @@ export default function OnboardingScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={{ width: contentWidth }}>
-          {step === 0 ? (
-            <Animated.View key="welcome" entering={FadeIn.duration(500)} exiting={FadeOut.duration(160)}>
-              <Slate dot color={colors.text}>Scene 01 · Take 01</Slate>
-              <Animated.Text entering={FadeInDown.delay(100).springify().damping(18)} style={styles.headline}>
-                Welcome to BOA.
-              </Animated.Text>
-              <Animated.Text entering={FadeInDown.delay(200).springify().damping(18)} style={[type.serif, styles.serifLine]}>
-                Best of all networks.
-              </Animated.Text>
-              <Animated.Text entering={FadeInDown.delay(300).springify().damping(18)} style={[type.bodyMuted, styles.lede]}>
-                Radio, originals, podcasts and the talent behind them, all in one place.
-              </Animated.Text>
-              <Animated.View entering={FadeInDown.delay(420).springify().damping(18)}>
-                <Button label="Get started" icon="arrow-forward" onPress={() => setStep(1)} style={styles.cta} />
-              </Animated.View>
-            </Animated.View>
-          ) : (
-            <Animated.View key="vibes" entering={FadeInDown.springify().damping(20)}>
-              <Slate dot color={colors.text}>The vibe check</Slate>
-              <Text style={styles.headline}>
-                What's your <Text style={[type.serif, styles.serifInline]}>vibe?</Text>
-              </Text>
-              <Text style={[type.bodyMuted, styles.lede]}>Pick as many as you like. We'll set the app up around them.</Text>
-              <View style={styles.pills}>
-                {VIBES.map((v, i) => (
-                  <VibePill key={v.id} vibe={v} index={i} selected={vibes.includes(v.id)} onToggle={toggle} />
-                ))}
-              </View>
-              <Button
-                label={vibes.length ? "Let's go" : 'Pick at least one'}
-                icon="arrow-forward"
-                disabled={!vibes.length}
-                onPress={() => completeOnboarding(vibes)}
-                style={styles.cta}
-              />
-              <Pressable onPress={() => completeOnboarding([])} hitSlop={10} style={styles.skip} accessibilityRole="button">
-                <Text style={styles.skipText}>Skip for now</Text>
-              </Pressable>
-            </Animated.View>
-          )}
+          <Animated.View key="vibes" entering={FadeInDown.springify().damping(20)}>
+            <Slate dot color={colors.text}>The vibe check</Slate>
+            <Text style={styles.headline}>
+              What's your <Text style={[type.serif, styles.serifInline]}>vibe?</Text>
+            </Text>
+            <Text style={[type.bodyMuted, styles.lede]}>Pick as many as you like. We'll set the app up around them.</Text>
+            <View style={styles.pills}>
+              {VIBES.map((v, i) => (
+                <VibePill key={v.id} vibe={v} index={i} selected={vibes.includes(v.id)} onToggle={toggle} />
+              ))}
+            </View>
+            <Button
+              label={vibes.length ? "Let's go" : 'Pick at least one'}
+              icon="arrow-forward"
+              disabled={!vibes.length}
+              onPress={() => completeOnboarding(vibes)}
+              style={styles.cta}
+            />
+            <Pressable onPress={() => completeOnboarding([])} hitSlop={10} style={styles.skip} accessibilityRole="button">
+              <Text style={styles.skipText}>Skip for now</Text>
+            </Pressable>
+          </Animated.View>
         </View>
       </ScrollView>
     </View>
@@ -200,7 +174,6 @@ const styles = StyleSheet.create({
   scroll: { flex: 1 },
   body: { flexGrow: 1, justifyContent: 'flex-end', alignItems: 'center' },
   headline: { fontFamily: fonts.semibold, fontSize: 46, lineHeight: 50, letterSpacing: -2, color: colors.text, marginTop: space.md },
-  serifLine: { fontSize: 40, lineHeight: 46, marginTop: 2 },
   serifInline: { fontSize: 50, letterSpacing: -1 },
   lede: { marginTop: space.md, maxWidth: 420 },
   cta: { marginTop: space.xl, alignSelf: 'stretch' },

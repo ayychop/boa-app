@@ -23,6 +23,7 @@ export const radius = { sm: 8, md: 12, lg: 18, xl: 26, pill: 999 };
 export const space = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32, xxxl: 48 };
 
 export const fonts = {
+  extralight: 'Manrope_200ExtraLight',
   light: 'Manrope_300Light',
   regular: 'Manrope_400Regular',
   medium: 'Manrope_500Medium',

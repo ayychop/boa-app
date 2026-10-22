@@ -27,7 +27,7 @@ function toColumns(people, count) {
   people.forEach((p) => {
     const col = cols.reduce((a, b) => (b.height < a.height ? b : a));
     col.items.push(p);
-    col.height += 1 / p.ratio + 0.28; // + caption
+    col.height += 1 / p.ratio;
   });
   return cols.map((c) => c.items);
 }
@@ -36,13 +36,12 @@ function TalentCard({ person, width, onPress, delay, selected }) {
   return (
     <Animated.View entering={FadeInDown.delay(delay).springify().damping(18)} layout={LinearTransition.springify().damping(20)}>
       <Tappable onPress={() => onPress(person)} accessibilityRole="button" accessibilityLabel={`${person.name}, ${person.role}`}>
-        <Headshot person={person} width={width} ratio={person.ratio} />
-        <View style={styles.caption}>
-          <Slate>{person.role}</Slate>
-          <Text style={[styles.name, selected && { color: colors.gold }]} numberOfLines={1}>
-            {person.name}
-          </Text>
-        </View>
+        <Headshot
+          person={person}
+          width={width}
+          ratio={person.ratio}
+          caption={{ kicker: person.role, title: person.name, highlight: selected }}
+        />
       </Tappable>
     </Animated.View>
   );
@@ -244,8 +243,6 @@ const styles = StyleSheet.create({
   filterTextActive: { color: colors.bg },
   filterCount: { fontFamily: fonts.mono, fontSize: 11, color: colors.textFaint },
   grid: { flexDirection: 'row', alignSelf: 'center', paddingHorizontal: space.xl },
-  caption: { paddingTop: 10, gap: 4 },
-  name: { fontFamily: fonts.semibold, fontSize: 16, color: colors.text, letterSpacing: -0.3 },
   cta: { alignItems: 'center', paddingHorizontal: space.xl, paddingTop: space.xxxl * 1.5, maxWidth: 620, alignSelf: 'center' },
   sheet: { paddingHorizontal: space.xl, gap: space.xl },
   sheetHead: { flexDirection: 'row', alignItems: 'center', gap: space.lg },

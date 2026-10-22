@@ -1,6 +1,9 @@
-import { Image, StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react';
+import { Image, Platform, StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
 import { Fog, Slate } from './ui';
+import { withAlpha } from '../utils/color';
 import { colors, fonts } from '../theme';
 
 function initials(name) {
@@ -12,17 +15,44 @@ function initials(name) {
 }
 
 /**
- * Talent frame. Until real headshots exist it mirrors the site's tinted
- * placeholder, with serif initials so each person still reads as distinct.
+ * Frosted glass plate along the foot of the frame, so the caption reads over
+ * smoke or a photo alike. Real blur on iOS and web; Android gets the same
+ * frosted tint without a live blur, which would cost too much in a grid.
  */
-export default function Headshot({ person, width, ratio = 4 / 5, round = false, label = true }) {
+function GlassCaption({ kicker, title, highlight, compact, onHeight }) {
+  return (
+    <View style={[styles.glass, compact && styles.glassCompact]} onLayout={(e) => onHeight(e.nativeEvent.layout.height)}>
+      {Platform.OS === 'android' ? null : <BlurView intensity={28} tint="dark" style={StyleSheet.absoluteFill} />}
+      <LinearGradient
+        colors={['rgba(243,239,232,0.14)', 'rgba(243,239,232,0.05)']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 0.6, y: 1 }}
+        style={[StyleSheet.absoluteFill, Platform.OS === 'android' && { backgroundColor: 'rgba(12,12,14,0.55)' }]}
+      />
+      <Slate lines={2}>{kicker}</Slate>
+      <Text style={[styles.glassTitle, compact && { fontSize: 14 }, highlight && { color: colors.gold }]} numberOfLines={2}>
+        {title}
+      </Text>
+    </View>
+  );
+}
+
+/**
+ * Talent frame. Until real headshots exist it mirrors the site's tinted
+ * placeholder, with serif initials so each person still reads as distinct,
+ * and smoke that fills the frame edge to edge at any size. Pass `caption`
+ * ({ kicker, title, highlight }) to set it on a glass plate in the frame.
+ */
+export default function Headshot({ person, width, ratio = 4 / 5, round = false, label = true, caption }) {
   const height = round ? width : Math.round(width / ratio);
+  // The initials centre in the space above the caption plate.
+  const [plate, setPlate] = useState(0);
   return (
     <View
       style={[
         styles.frame,
         { width, height, borderRadius: round ? width / 2 : 14 },
-        round && { borderColor: `${person.tint}66` },
+        round && { borderColor: withAlpha(person.tint, 0.4) },
       ]}
     >
       {person.headshot ? (
@@ -30,14 +60,14 @@ export default function Headshot({ person, width, ratio = 4 / 5, round = false, 
       ) : (
         <>
           <LinearGradient
-            colors={[`${person.tint}70`, `${person.tint}12`, 'transparent']}
+            colors={[withAlpha(person.tint, 0.44), withAlpha(person.tint, 0.07), 'transparent']}
             locations={[0, 0.5, 1]}
             start={{ x: 0.75, y: 0.1 }}
             end={{ x: 0.2, y: 1 }}
             style={StyleSheet.absoluteFill}
           />
-          <Fog opacity={0.16} />
-          <View style={styles.center}>
+          <Fog opacity={0.32} variant={person.name.length} />
+          <View style={[styles.center, caption && !round && { paddingBottom: plate + 8 }]}>
             <Text style={[styles.initials, { color: person.tint, fontSize: width * (round ? 0.42 : 0.34) }]}>
               {initials(person.name)}
             </Text>
@@ -45,6 +75,7 @@ export default function Headshot({ person, width, ratio = 4 / 5, round = false, 
           {label && !round && <Slate style={styles.tag}>Headshot · 4:5</Slate>}
         </>
       )}
+      {caption && !round && <GlassCaption {...caption} compact={width < 170} onHeight={setPlate} />}
     </View>
   );
 }
@@ -59,4 +90,19 @@ const styles = StyleSheet.create({
   center: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
   initials: { fontFamily: fonts.serif, letterSpacing: -1, opacity: 0.9 },
   tag: { position: 'absolute', top: 12, left: 12, opacity: 0.55 },
+  glass: {
+    position: 'absolute',
+    left: 8,
+    right: 8,
+    bottom: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 3,
+    borderRadius: 10,
+    overflow: 'hidden',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(243,239,232,0.22)',
+  },
+  glassCompact: { left: 6, right: 6, bottom: 6, paddingHorizontal: 10, paddingVertical: 8 },
+  glassTitle: { fontFamily: fonts.semibold, fontSize: 15, color: colors.text, letterSpacing: -0.3 },
 });

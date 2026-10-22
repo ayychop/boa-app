@@ -21,7 +21,7 @@ function compose(artist, title) {
   const t = clean(title);
   if (!t && !a) return null;
   if (!a || t.toLowerCase().includes(a.toLowerCase())) return t || a;
-  return `${a} — ${t}`;
+  return `${a} · ${t}`;
 }
 
 // Station IDs, jingles and "Unknown" placeholders aren't track info.

@@ -1,4 +1,4 @@
-import { Image, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useEffect } from 'react';
 import Animated, {
   Easing,
@@ -10,11 +10,9 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
-import { Asset } from 'expo-asset';
 import BoaLogo from './BoaLogo';
+import Smoke from './Smoke';
 import { colors, fonts, radius, space, type } from '../theme';
-
-const fog = require('../../assets/fog.png');
 
 /** Mono, letter-spaced label, optionally led by a gold "recording" dot. */
 export function Slate({ children, dot = false, color, style, lines = 1 }) {
@@ -41,27 +39,12 @@ export function Viewfinder({ inset = 14, size = 14, color = 'rgba(243,239,232,0.
   );
 }
 
-/** The site's fog texture (a 256px tile), as a quiet overlay. */
-export function Fog({ opacity = 0.35 }) {
-  if (Platform.OS === 'web') {
-    // react-native-web draws resizeMode="repeat" as a single tile; use CSS.
-    const { uri } = Asset.fromModule(fog);
-    return (
-      <div
-        aria-hidden
-        style={{
-          position: 'absolute',
-          inset: 0,
-          opacity,
-          pointerEvents: 'none',
-          backgroundImage: `url(${uri})`,
-          backgroundRepeat: 'repeat',
-          backgroundSize: '256px 256px',
-        }}
-      />
-    );
-  }
-  return <Image source={fog} resizeMode="repeat" style={[StyleSheet.absoluteFill, { opacity }]} pointerEvents="none" />;
+/**
+ * The site's smoke as a quiet overlay. Vector puffs stretched to the frame,
+ * so it fills any card edge to edge at any size.
+ */
+export function Fog({ opacity = 0.35, variant = 0 }) {
+  return <Smoke opacity={opacity} variant={variant} />;
 }
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);

@@ -21,6 +21,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { Ionicons } from '@expo/vector-icons';
 import { useFonts } from 'expo-font';
 import {
+  Manrope_200ExtraLight,
   Manrope_300Light,
   Manrope_400Regular,
   Manrope_500Medium,
@@ -204,7 +205,8 @@ function MainTabs({ narrow }) {
   );
 }
 
-// First run shows the vibe check; after that, straight to the app. Waits for
+// First run shows the vibe check (the intro's "Get started" leads into
+// it); after that, straight to the app. Waits for
 // the stored profile so returning listeners never see onboarding flash past.
 function Gate({ narrow }) {
   const { ready, onboarded } = useUser();
@@ -224,7 +226,8 @@ function Gate({ narrow }) {
 
 export default function App() {
   const narrow = useWindowDimensions().width < 380;
-  const [fontsLoaded] = useFonts({
+  const [fontsLoaded, fontError] = useFonts({
+    Manrope_200ExtraLight,
     Manrope_300Light,
     Manrope_400Regular,
     Manrope_500Medium,
@@ -236,17 +239,24 @@ export default function App() {
     InstrumentSerif_400Regular_Italic,
   });
 
-  const [introDone, setIntroDone] = useState(false);
-  const finishIntro = useCallback(() => setIntroDone(true), []);
-
-  // The app mounts behind the intro as soon as the fonts are in, so it's
-  // ready (profile loaded, first screen drawn) by the time the intro lifts.
+  // The native splash covers the wait for the fonts; the intro takes over
+  // from it. A font that fails to load falls back rather than hanging here.
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
-      {fontsLoaded && <Root narrow={narrow} />}
-      {!introDone && <Intro ready={fontsLoaded} onDone={finishIntro} />}
+      {(fontsLoaded || fontError) && <Root narrow={narrow} />}
     </View>
   );
+}
+
+// The intro sits over the app, which mounts behind it at once so it's ready
+// (profile loaded, first screen drawn) by the time the intro lifts. It needs
+// the stored profile to know whether this is a first run.
+function Boot() {
+  const { ready, onboarded } = useUser();
+  const [done, setDone] = useState(false);
+  const finish = useCallback(() => setDone(true), []);
+  if (done) return null;
+  return <Intro firstRun={ready ? !onboarded : null} onDone={finish} />;
 }
 
 function Root({ narrow }) {
@@ -267,6 +277,7 @@ function Root({ narrow }) {
               </DisplayProvider>
             </SleepTimerProvider>
           </PlayerProvider>
+          <Boot />
         </UserProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

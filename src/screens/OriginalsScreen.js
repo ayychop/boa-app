@@ -95,7 +95,7 @@ function EpisodeCard({ production, episode, width }) {
   const media = useMedia();
   return (
     <Tappable onPress={() => media.openEpisode(production, episode)} accessibilityRole="button" accessibilityLabel={`Play ${episode.title}`}>
-      <Poster production={{ ...production, backdrop: episode.image, status: 'available' }} width={width} showTitle={false} />
+      <Poster production={{ ...production, backdrop: episode.image, status: 'available' }} width={width} showTitle={false} fit="contain" />
       <View style={styles.episodeCaption}>
         <Slate>Ep 01</Slate>
         <Text style={styles.episodeTitle}>{episode.title}</Text>
@@ -104,11 +104,13 @@ function EpisodeCard({ production, episode, width }) {
   );
 }
 
-// Everything watchable, in slate order: each production's episodes, then its
-// trailer; productions with neither are listed as coming soon.
+// Everything watchable, in slate order: each production's official trailer
+// first, then its episodes from Episode 1; productions with neither are
+// listed as coming soon.
 const CATALOGUE = productions.flatMap((p) => {
-  const items = p.episodes.map((episode) => ({ key: episode.id, production: p, kind: 'episode', episode, label: episode.title }));
-  if (p.trailerYouTubeId) items.push({ key: `${p.id}-trailer`, production: p, kind: 'trailer', label: 'Official trailer' });
+  const items = [];
+  if (p.trailerYouTubeId) items.push({ key: `${p.id}-trailer`, production: p, kind: 'trailer', label: 'Official Trailer' });
+  p.episodes.forEach((episode) => items.push({ key: episode.id, production: p, kind: 'episode', episode, label: episode.title }));
   if (!items.length) items.push({ key: p.id, production: p, kind: 'soon', label: 'Coming soon' });
   return items;
 });
@@ -195,7 +197,8 @@ function EpisodeList({ selected, onSelect, width, bottom }) {
                 accessibilityLabel={`${item.production.title}, ${item.label}`}
                 style={({ pressed }) => [styles.listRow, active && styles.listRowActive, pressed && { opacity: 0.75 }]}
               >
-                <Poster production={thumbOf(item)} width={Math.min(132, width * 0.3)} showTitle={false} rounded={8} />
+                {/* Contained, so the art's "MIND STATES UK" title is never cut. */}
+                <Poster production={thumbOf(item)} width={Math.min(132, width * 0.3)} showTitle={false} rounded={8} fit="contain" />
                 <View style={{ flex: 1, minWidth: 0 }}>
                   <Text style={[styles.listTitle, soon && { color: colors.textFaint }]} numberOfLines={1}>
                     {item.label}
