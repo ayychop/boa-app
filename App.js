@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import { DarkTheme, NavigationContainer, useIsFocused } from '@react-navigation/native';
@@ -17,6 +17,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { BlurView } from 'expo-blur';
+import * as SplashScreen from 'expo-splash-screen';
 import { Ionicons } from '@expo/vector-icons';
 import { useFonts } from 'expo-font';
 import {
@@ -38,8 +39,7 @@ import { SleepTimerProvider } from './src/context/SleepTimerContext';
 import { DisplayProvider } from './src/context/DisplayContext';
 import { DisplayButton } from './src/components/display/DisplayMenu';
 import OnboardingScreen from './src/screens/OnboardingScreen';
-import BoaLogo from './src/components/BoaLogo';
-import { PulseDot } from './src/components/ui';
+import Intro from './src/components/Intro';
 import MiniPlayer from './src/components/MiniPlayer';
 import HomeScreen from './src/screens/HomeScreen';
 import RadioScreen from './src/screens/RadioScreen';
@@ -49,6 +49,11 @@ import ProfileScreen from './src/screens/ProfileScreen';
 import { colors, fonts } from './src/theme';
 import { haptics } from './src/utils/haptics';
 import useLayout from './src/hooks/useLayout';
+
+// The native splash stays up until the intro is on screen, then dissolves
+// into it.
+SplashScreen.preventAutoHideAsync().catch(() => {});
+SplashScreen.setOptions({ fade: true, duration: 500 });
 
 const Tab = createBottomTabNavigator();
 
@@ -199,25 +204,12 @@ function MainTabs({ narrow }) {
   );
 }
 
-// Shown while fonts and the saved profile load: the splash screen's own
-// layout (gold wordmark on charcoal) with the Vyb dot, so the native splash
-// hands over without a visible change.
-function BootScreen() {
-  return (
-    <View style={{ flex: 1, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center' }}>
-      <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
-        <BoaLogo height={130} />
-        <PulseDot size={8} style={{ marginLeft: 10, marginTop: 4 }} />
-      </View>
-    </View>
-  );
-}
-
 // First run shows the vibe check; after that, straight to the app. Waits for
 // the stored profile so returning listeners never see onboarding flash past.
 function Gate({ narrow }) {
   const { ready, onboarded } = useUser();
-  if (!ready) return <BootScreen />;
+  // The intro covers this while the profile loads.
+  if (!ready) return <View style={{ flex: 1, backgroundColor: colors.bg }} />;
   return onboarded ? (
     <Animated.View key="app" entering={FadeIn.duration(450)} style={{ flex: 1 }}>
       <MainTabs narrow={narrow} />
@@ -244,8 +236,20 @@ export default function App() {
     InstrumentSerif_400Regular_Italic,
   });
 
-  if (!fontsLoaded) return <BootScreen />;
+  const [introDone, setIntroDone] = useState(false);
+  const finishIntro = useCallback(() => setIntroDone(true), []);
 
+  // The app mounts behind the intro as soon as the fonts are in, so it's
+  // ready (profile loaded, first screen drawn) by the time the intro lifts.
+  return (
+    <View style={{ flex: 1, backgroundColor: colors.bg }}>
+      {fontsLoaded && <Root narrow={narrow} />}
+      {!introDone && <Intro ready={fontsLoaded} onDone={finishIntro} />}
+    </View>
+  );
+}
+
+function Root({ narrow }) {
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.bg }}>
       <SafeAreaProvider>

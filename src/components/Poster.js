@@ -12,7 +12,7 @@ export function metaLine(p) {
  * Production artwork. Without an image it renders the site's own placeholder
  * treatment: fogged charcoal, a gold glow and slate labels.
  */
-export default function Poster({ production, width, ratio = 16 / 9, showTitle = true, rounded = radius.md }) {
+export default function Poster({ production, width, ratio = 16 / 9, showTitle = true, rounded = radius.md, fit = 'cover' }) {
   const height = Math.round(width / ratio);
   const portrait = ratio < 1;
   const soon = production.status === 'coming-soon';
@@ -25,7 +25,15 @@ export default function Poster({ production, width, ratio = 16 / 9, showTitle = 
   return (
     <View style={[styles.frame, { width, height, borderRadius: rounded }]}>
       {art ? (
-        <Image source={art} style={fillFrame} resizeMode="cover" />
+        fit === 'contain' ? (
+          // The whole artwork, letterboxed over a blurred copy of itself.
+          <>
+            <Image source={art} style={[fillFrame, { opacity: 0.5 }]} resizeMode="cover" blurRadius={24} />
+            <Image source={art} style={fillFrame} resizeMode="contain" />
+          </>
+        ) : (
+          <Image source={art} style={fillFrame} resizeMode="cover" />
+        )
       ) : (
         <>
           <LinearGradient

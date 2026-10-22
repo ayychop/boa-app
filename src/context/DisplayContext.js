@@ -42,11 +42,13 @@ export function DisplayProvider({ children }) {
     lastActivity.current = Date.now();
   }, []);
 
-  // Keys count as activity too (the radio carousel browses with ←/→ on web).
+  // On web, keys (the radio carousel browses with ←/→), the mouse and the
+  // scroll wheel count as activity too.
   useEffect(() => {
     if (Platform.OS !== 'web') return;
-    window.addEventListener('keydown', touch);
-    return () => window.removeEventListener('keydown', touch);
+    const events = ['keydown', 'pointerdown', 'pointermove', 'wheel', 'touchstart'];
+    events.forEach((e) => window.addEventListener(e, touch, { passive: true, capture: true }));
+    return () => events.forEach((e) => window.removeEventListener(e, touch, { capture: true }));
   }, [touch]);
 
   const exitZen = useCallback(() => {
@@ -71,13 +73,20 @@ export function DisplayProvider({ children }) {
 
   return (
     <DisplayContext.Provider value={value}>
-      {/* Every touch anywhere resets the idle clock; it never claims the touch. */}
+      {/* Every touch anywhere, and every drag or scroll, resets the idle
+          clock; it never claims the touch. */}
       <View
         style={{ flex: 1 }}
         onStartShouldSetResponderCapture={() => {
           touch();
           return false;
         }}
+        onMoveShouldSetResponderCapture={() => {
+          touch();
+          return false;
+        }}
+        onTouchStart={touch}
+        onTouchMove={touch}
       >
         {children}
       </View>

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,39 +12,61 @@ import { DISPLAY_BUTTON_SPACE } from '../components/display/DisplayMenu';
 import YouTubePlayer from '../components/media/YouTubePlayer';
 import VideoPlayer from '../components/media/VideoPlayer';
 import Poster, { metaLine } from '../components/Poster';
-import { heroArt } from '../components/HeroArt';
+import { BACKDROP_TITLE_TOP, fillFrame, heroArt, toSource } from '../components/HeroArt';
 import { Button, Fog, SectionHeader, Slate, Tappable, Viewfinder } from '../components/ui';
 import useBottomSpace from '../hooks/useBottomSpace';
-import useLayout from '../hooks/useLayout';
+import useLayout, { WIDE } from '../hooks/useLayout';
 import { colors, fonts, space, type } from '../theme';
 
 const GAP = 14;
 
 function Featured({ production, width, clearRight }) {
   const insets = useSafeAreaInsets();
+  const window = useWindowDimensions();
   const media = useMedia();
   const wide = width >= 900;
-  // Desktop goes full 2.39:1 scope. Phones get a tall frame for the 9:16
-  // poster, deep enough that its title clears the copy underneath.
-  const height = wide ? Math.round(width / 2.39) + insets.top : Math.round(width * 1.68) + insets.top;
-  const { node: art, titleInFrame } = heroArt(production, width, height);
+  // Narrow screens (a folded phone's cover screen) show the whole 9:16
+  // poster, title and all, so the copy goes underneath it rather than over
+  // it. Wider ones get the cinematic crop, capped at half the screen so the
+  // buttons below are always in view without scrolling, and stopped short of
+  // the backdrop's baked-in title so it never shows half cut off.
+  const stacked = width < WIDE;
+  const natural = wide ? Math.round(width / 2.39) + insets.top : Math.round(width * 1.68) + insets.top;
+  const height = stacked
+    ? Math.round(Math.min((width * 16) / 9, window.height * 0.56))
+    : Math.round(Math.min(natural, window.height * 0.5, BACKDROP_TITLE_TOP * width - space.md));
+  const poster = production.poster ?? production.backdrop;
+  const { node: art, titleInFrame } = stacked && poster
+    ? {
+        titleInFrame: !!production.titleInArt,
+        node: (
+          // The whole poster, letterboxed over a blurred copy of itself.
+          <>
+            <Image source={toSource(poster)} resizeMode="cover" blurRadius={24} style={[fillFrame, { opacity: 0.5 }]} />
+            <Image source={toSource(poster)} resizeMode="contain" style={fillFrame} />
+          </>
+        ),
+      }
+    : heroArt(production, width, height);
 
   return (
-    <View style={{ width, height, overflow: 'hidden' }}>
-      <Animated.View entering={FadeInDown.duration(600)} style={StyleSheet.absoluteFill}>
-        {art}
-      </Animated.View>
-      <LinearGradient
-        colors={['rgba(5,5,6,0.55)', 'rgba(5,5,6,0)', 'rgba(5,5,6,0.65)', colors.bg]}
-        locations={[0, 0.3, 0.7, 1]}
-        style={StyleSheet.absoluteFill}
-      />
-      <Viewfinder inset={16} />
-      <View
-        style={[styles.featuredTop, { top: insets.top + space.xl }, clearRight && { right: space.xl + 8 + DISPLAY_BUTTON_SPACE }]}
-      >
-        <Slate dot>02 · Productions</Slate>
-        <Slate>The slate</Slate>
+    <View style={{ width }}>
+      <View style={{ width, height, overflow: 'hidden' }}>
+        <Animated.View entering={FadeInDown.duration(600)} style={StyleSheet.absoluteFill}>
+          {art}
+        </Animated.View>
+        <LinearGradient
+          colors={['rgba(5,5,6,0.55)', 'rgba(5,5,6,0)', 'rgba(5,5,6,0)', colors.bg]}
+          locations={[0, 0.25, 0.8, 1]}
+          style={StyleSheet.absoluteFill}
+        />
+        <Viewfinder inset={16} />
+        <View
+          style={[styles.featuredTop, { top: insets.top + space.xl }, clearRight && { right: space.xl + 8 + DISPLAY_BUTTON_SPACE }]}
+        >
+          <Slate dot>02 · Productions</Slate>
+          <Slate>The slate</Slate>
+        </View>
       </View>
       <View style={styles.featuredBody}>
         <Slate color={colors.gold} lines={2}>
@@ -123,11 +145,11 @@ function InlineScreening({ item, playing, onPlay, width, bottom }) {
             accessibilityRole="button"
             accessibilityLabel={source ? `Play ${production.title}, ${item.label}` : `${production.title}, coming soon`}
           >
-            <Poster production={thumbOf(item)} width={videoWidth} showTitle={false} rounded={0} />
-            <View style={styles.playOverlay}>
+            <Poster production={thumbOf(item)} width={videoWidth} showTitle={false} rounded={0} fit="contain" />
+            <View style={[styles.playOverlay, source && styles.playCorner]}>
               {source ? (
                 <View style={styles.playButton}>
-                  <Ionicons name="play" size={30} color={colors.bg} style={{ marginLeft: 4 }} />
+                  <Ionicons name="play" size={24} color={colors.bg} style={{ marginLeft: 3 }} />
                 </View>
               ) : (
                 <Text style={styles.soonTitle}>
@@ -289,10 +311,13 @@ const styles = StyleSheet.create({
     boxShadow: '0px 30px 80px rgba(0,0,0,0.75), 0px 0px 0px 1px rgba(243,239,232,0.08)',
   },
   playOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(5,5,6,0.25)' },
+  // The whole cover art is in frame, title included, so the play button
+  // waits in the corner rather than sitting on it.
+  playCorner: { alignItems: 'flex-start', justifyContent: 'flex-end', padding: space.md, backgroundColor: 'transparent' },
   playButton: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
+    width: 54,
+    height: 54,
+    borderRadius: 27,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.gold,
@@ -314,7 +339,7 @@ const styles = StyleSheet.create({
   listTitle: { fontFamily: fonts.semibold, fontSize: 15, color: colors.text },
   listMeta: { fontFamily: fonts.medium, fontSize: 12, color: colors.textFaint, marginTop: 3 },
   featuredTop: { position: 'absolute', left: space.xl + 8, right: space.xl + 8, flexDirection: 'row', justifyContent: 'space-between' },
-  featuredBody: { position: 'absolute', left: space.xl, right: space.xl, bottom: space.xl, maxWidth: 680 },
+  featuredBody: { paddingHorizontal: space.xl, paddingTop: space.lg, maxWidth: 680 + space.xl * 2 },
   srOnly: { position: 'absolute', width: 1, height: 1, opacity: 0, overflow: 'hidden' },
   featuredTitle: { fontSize: 48, lineHeight: 50, marginTop: space.md },
   logline: { marginTop: space.md },

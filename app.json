@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "BOA",
+    "name": "BOA Networks",
     "slug": "boa-app",
     "version": "1.0.0",
     "orientation": "default",
@@ -68,7 +68,21 @@
           "enableBackgroundPlayback": true
         }
       ],
-      "expo-status-bar"
+      "expo-status-bar",
+      [
+        "./plugins/withAndroidConfigChanges",
+        {
+          "configChanges": [
+            "keyboard",
+            "keyboardHidden",
+            "orientation",
+            "screenSize",
+            "screenLayout",
+            "smallestScreenSize",
+            "uiMode"
+          ]
+        }
+      ]
     ],
     "owner": "boanets-team",
     "extra": {

@@ -3,7 +3,7 @@ import Animated from 'react-native-reanimated';
 
 // Where the baked-in title starts on the square backdrop (fraction of its
 // height). Wide crops stop just above it.
-const BACKDROP_TITLE_TOP = 0.6;
+export const BACKDROP_TITLE_TOP = 0.6;
 const BACKDROP_TITLE_BOTTOM = 0.67;
 // Where the baked-in title ends on the 9:16 poster (fraction of its height).
 const POSTER_TITLE_BOTTOM = 0.62;
@@ -37,7 +37,29 @@ export function heroArt(production, width, height, animatedStyle) {
       node: <Animated.Image source={toSource(production.image)} resizeMode="cover" style={[fillFrame, animatedStyle]} />,
     };
   }
-  if (portrait || !production.backdrop) {
+  const posterArt = portrait || !production.backdrop;
+  if (posterArt && width / height < 9 / 16) {
+    // Narrower than the poster (a Split View pane, a folded phone's cover
+    // screen): `cover` would cut the title at the sides. Fit the poster to
+    // the width instead and fill the rest with a blurred copy of itself.
+    const artHeight = (width * 16) / 9;
+    const top = (height - artHeight) / 2;
+    return {
+      titleInFrame: !!production.titleInArt,
+      titleBottom: production.titleInArt ? top + POSTER_TITLE_BOTTOM * artHeight : null,
+      node: (
+        <>
+          <Animated.Image source={toSource(art)} resizeMode="cover" blurRadius={24} style={[fillFrame, { opacity: 0.55 }]} />
+          <Animated.Image
+            source={toSource(art)}
+            resizeMode="contain"
+            style={[{ position: 'absolute', left: 0, top, width, height: artHeight }, animatedStyle]}
+          />
+        </>
+      ),
+    };
+  }
+  if (posterArt) {
     // `cover` scales to the larger of the two fits and centres the overflow.
     const artHeight = Math.max(height, (width * 16) / 9);
     const titleBottom = production.titleInArt && portrait ? (height - artHeight) / 2 + POSTER_TITLE_BOTTOM * artHeight : null;
