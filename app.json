@@ -30,7 +30,6 @@
     },
     "backgroundColor": "#050506",
     "plugins": [
-      "react-native-track-player",
       "expo-font",
       "expo-asset",
       [
