@@ -1,4 +1,4 @@
-import { ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -8,6 +8,7 @@ import Poster, { metaLine } from '../components/Poster';
 import { heroArt } from '../components/HeroArt';
 import { Button, Fog, SectionHeader, Slate, Tappable, Viewfinder } from '../components/ui';
 import useBottomSpace from '../hooks/useBottomSpace';
+import useLayout from '../hooks/useLayout';
 import { colors, fonts, space, type } from '../theme';
 
 const GAP = 14;
@@ -73,7 +74,7 @@ function EpisodeCard({ production, episode, width }) {
 }
 
 export default function OriginalsScreen() {
-  const { width } = useWindowDimensions();
+  const { width } = useLayout();
   const media = useMedia();
   const bottom = useBottomSpace(space.xxl);
   const contentWidth = Math.min(width, 1200);

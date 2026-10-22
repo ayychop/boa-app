@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { interpolate, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { GestureDetector, GestureHandlerRootView, usePanGesture } from 'react-native-gesture-handler';
 import { scheduleOnRN } from 'react-native-worklets';
+import useLayout from '../hooks/useLayout';
 import { colors, radius, space } from '../theme';
 
 const OPEN = { mass: 1, stiffness: 260, damping: 28 };
@@ -15,9 +16,14 @@ const OFFSCREEN = 900;
  * to set `open` to false.
  * Forms pass `dragAnywhere={false}` so only the handle drags, leaving
  * scrolling and text selection to the content.
+ * On wide screens (tablets, unfolded foldables) it rises to the centre as a
+ * card instead of stretching along the bottom edge.
  */
 export default function BottomSheet({ open, onClose, children, dragAnywhere = true }) {
   const insets = useSafeAreaInsets();
+  const { wide } = useLayout();
+  // A centred card clears the home indicator on its own.
+  const bottomPad = wide ? space.xl : insets.bottom + (dragAnywhere ? space.xl : space.lg);
   const y = useSharedValue(OFFSCREEN);
   const [mounted, setMounted] = useState(open);
 
@@ -59,18 +65,18 @@ export default function BottomSheet({ open, onClose, children, dragAnywhere = tr
         </Animated.View>
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={styles.avoider}
+          style={[styles.avoider, wide && styles.avoiderWide]}
           pointerEvents="box-none"
         >
           {dragAnywhere ? (
             <GestureDetector gesture={pan}>
-              <Animated.View style={[styles.sheet, { paddingBottom: insets.bottom + space.xl }, sheetStyle]}>
+              <Animated.View style={[styles.sheet, wide && styles.card, { paddingBottom: bottomPad }, sheetStyle]}>
                 <View style={styles.grabber} />
                 {children}
               </Animated.View>
             </GestureDetector>
           ) : (
-            <Animated.View style={[styles.sheet, { paddingBottom: insets.bottom + space.lg }, sheetStyle]}>
+            <Animated.View style={[styles.sheet, wide && styles.card, { paddingBottom: bottomPad }, sheetStyle]}>
               <GestureDetector gesture={pan}>
                 <View style={styles.handleZone}>
                   <View style={styles.grabber} />
@@ -88,8 +94,9 @@ export default function BottomSheet({ open, onClose, children, dragAnywhere = tr
 const styles = StyleSheet.create({
   backdrop: { backgroundColor: 'rgba(0,0,0,0.6)' },
   avoider: { flex: 1, justifyContent: 'flex-end', alignItems: 'center' },
+  avoiderWide: { justifyContent: 'center', padding: space.xl },
   sheet: {
-    maxWidth: 640,
+    maxWidth: 600,
     width: '100%',
     maxHeight: '92%',
     backgroundColor: colors.bgElevated,
@@ -101,6 +108,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     boxShadow: '0px -20px 60px rgba(0,0,0,0.6)',
   },
+  card: { maxHeight: '100%', borderRadius: radius.xl, boxShadow: '0px 30px 80px rgba(0,0,0,0.6)' },
   // Taller than the grabber itself so it's easy to catch.
   handleZone: { marginTop: -space.md, paddingTop: space.md, cursor: 'grab' },
   grabber: {

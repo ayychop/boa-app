@@ -23,7 +23,8 @@ import useNowPlaying from '../hooks/useNowPlaying';
 import RecordCarousel, { carouselItemWidth } from '../components/RecordCarousel';
 import GlowField, { FogPlane } from '../components/GlowField';
 import Vinyl from '../components/Vinyl';
-import { MINI_PLAYER_SPACE } from '../components/MiniPlayer';
+import { useMiniPlayerSpace } from '../components/MiniPlayer';
+import useLayout from '../hooks/useLayout';
 import Reactions from '../components/Reactions';
 import { GoldBadge, PulseDot } from '../components/ui';
 import { genreForVibes, useUser } from '../context/UserContext';
@@ -33,7 +34,24 @@ import { colors, fonts, radius, space } from '../theme';
 
 const TEXT_BLOCK = 150;
 
-function GenrePills({ selected, onSelect }) {
+// One scrolling row on phones; in the wide layout's info column they wrap so
+// every genre is in view.
+function GenrePills({ selected, onSelect, wrap }) {
+  const pills = GENRES.map((g) => {
+    const active = g.tag === selected;
+    return (
+      <Pressable
+        key={g.tag}
+        onPress={() => onSelect(g.tag)}
+        accessibilityRole="button"
+        accessibilityState={{ selected: active }}
+        style={({ pressed }) => [styles.pill, active && styles.pillActive, pressed && { opacity: 0.6 }]}
+      >
+        <Text style={[styles.pillText, active && styles.pillTextActive]}>{g.label}</Text>
+      </Pressable>
+    );
+  });
+  if (wrap) return <View style={[styles.pills, styles.pillsWrap]}>{pills}</View>;
   return (
     <ScrollView
       horizontal
@@ -41,20 +59,7 @@ function GenrePills({ selected, onSelect }) {
       style={styles.pillsScroll}
       contentContainerStyle={styles.pills}
     >
-      {GENRES.map((g) => {
-        const active = g.tag === selected;
-        return (
-          <Pressable
-            key={g.tag}
-            onPress={() => onSelect(g.tag)}
-            accessibilityRole="button"
-            accessibilityState={{ selected: active }}
-            style={({ pressed }) => [styles.pill, active && styles.pillActive, pressed && { opacity: 0.6 }]}
-          >
-            <Text style={[styles.pillText, active && styles.pillTextActive]}>{g.label}</Text>
-          </Pressable>
-        );
-      })}
+      {pills}
     </ScrollView>
   );
 }
@@ -279,15 +284,24 @@ export default function RadioScreen({ route, navigation }) {
   // Always reserve the mini player's slot so the record never resizes when
   // playback starts.
   const tabBarHeight = useBottomTabBarHeight();
-  const bottomPad = tabBarHeight + MINI_PLAYER_SPACE;
+  const miniPlayerSpace = useMiniPlayerSpace();
+  const bottomPad = tabBarHeight + miniPlayerSpace;
   const stage = layout && { width: layout.width, height: layout.height - bottomPad };
 
-  // The record fills ~70% of the width, but never so tall that the name and
-  // track line get pushed under the mini player.
-  const discSize = stage
-    ? Math.round(Math.min(stage.width * 0.7, (stage.height - TEXT_BLOCK) * 0.86, 440))
-    : 0;
-  const compact = stage ? stage.width < 420 : true;
+  // Wide screens split in two at the centre (a dual screen's hinge): the
+  // record on the left, genres and track info on the right.
+  const { wide, short } = useLayout();
+  const recordWidth = stage ? (wide ? stage.width / 2 : stage.width) : 0;
+
+  // On phones the record fills ~70% of the width, but never so tall that the
+  // name and track line get pushed under the mini player. Side by side, it
+  // only has to fit its own column.
+  const discSize = !stage
+    ? 0
+    : wide
+      ? Math.round(Math.min(recordWidth * 0.72, (stage.height - 40) * 0.9, 440))
+      : Math.round(Math.min(stage.width * 0.7, (stage.height - TEXT_BLOCK) * 0.86, 440));
+  const compact = recordWidth < 420;
 
   const statusFor = (station) => (player.current?.id === station.id ? player.status : null);
 
@@ -312,85 +326,90 @@ export default function RadioScreen({ route, navigation }) {
     (player.current?.id === station.id && player.trackTitle) || fetchedTrack;
   const itemWidth = carouselItemWidth(discSize);
 
-  let content;
-  if (!stage) content = null;
+  let record;
+  let info;
+  if (!stage) record = info = null;
   else if (data.status === 'ready' && stations.length > 0) {
-    content = (
-      <>
-        <View style={{ width: stage.width, height: discSize + 40 }}>
-          <GlowField
-            items={stations}
-            colorsById={glows}
-            index={index}
-            x={scrollX}
-            itemWidth={itemWidth}
-            discSize={discSize}
-            centerY={(discSize + 40) / 2}
-            width={stage.width}
-          />
-          <RecordCarousel
-            key={genre}
-            position={scrollX}
-            items={stations}
-            index={index}
-            onIndexChange={setIndex}
-            onPressActive={player.toggle}
-            width={stage.width}
-            height={discSize + 40}
-            discSize={discSize}
-            renderItem={(station, i) => (
-              <Vinyl
-                station={station}
-                focused={i === index}
-                size={discSize}
-                status={statusFor(station)}
-                spinning={player.current?.id === station.id && player.status === 'playing'}
-              />
-            )}
-          />
-        </View>
-        <View style={styles.textSlot}>
-          {active && (
-            <StationText
-              station={active}
-              saved={user.isSaved(active.id)}
-              hifi={user.isPremium}
-              onSave={() =>
-                requirePremium(() => user.toggleSaved(active), 'Upgrade to BOA Premium to save your favourite stations.')
-              }
-              track={trackFor(active)}
-              status={statusFor(active)}
-              meta={metaFor(active)}
-              compact={compact}
+    record = (
+      <View style={{ width: recordWidth, height: discSize + 40 }}>
+        <GlowField
+          items={stations}
+          colorsById={glows}
+          index={index}
+          x={scrollX}
+          itemWidth={itemWidth}
+          discSize={discSize}
+          centerY={(discSize + 40) / 2}
+          width={recordWidth}
+        />
+        <RecordCarousel
+          key={genre}
+          position={scrollX}
+          items={stations}
+          index={index}
+          onIndexChange={setIndex}
+          onPressActive={player.toggle}
+          width={recordWidth}
+          height={discSize + 40}
+          discSize={discSize}
+          // Side by side, neighbours would sit under the track info.
+          peek={!wide}
+          renderItem={(station, i) => (
+            <Vinyl
+              station={station}
+              focused={i === index}
+              size={discSize}
+              status={statusFor(station)}
+              spinning={player.current?.id === station.id && player.status === 'playing'}
             />
           )}
-        </View>
-      </>
+        />
+      </View>
+    );
+    info = (
+      <View style={styles.textSlot}>
+        {active && (
+          <StationText
+            station={active}
+            saved={user.isSaved(active.id)}
+            hifi={user.isPremium}
+            onSave={() =>
+              requirePremium(() => user.toggleSaved(active), 'Upgrade to BOA Premium to save your favourite stations.')
+            }
+            track={trackFor(active)}
+            status={statusFor(active)}
+            meta={metaFor(active)}
+            compact={compact}
+          />
+        )}
+      </View>
     );
   } else {
     const loading = data.status === 'loading';
-    content = (
-      <>
-        <View style={{ height: discSize + 40, justifyContent: 'center' }}>
-          <Vinyl station={null} size={discSize} spinning={loading} />
-        </View>
-        <View style={styles.textSlot}>
-          {loading ? (
-            <Notice title="Tuning in…" body={`Finding ${label} stations on air`} />
-          ) : data.status === 'error' ? (
-            <Notice
-              title="Couldn't reach the airwaves"
-              body="Check your connection and try again."
-              action="Retry"
-              onAction={() => load(genre)}
-            />
-          ) : (
-            <Notice title={`No ${label} on air`} body="Try another genre." />
-          )}
-        </View>
-      </>
+    record = (
+      <View style={{ height: discSize + 40, justifyContent: 'center' }}>
+        <Vinyl station={null} size={discSize} spinning={loading} />
+      </View>
+    );
+    info = (
+      <View style={styles.textSlot}>
+        {loading ? (
+          <Notice title="Tuning in…" body={`Finding ${label} stations on air`} />
+        ) : data.status === 'error' ? (
+          <Notice
+            title="Couldn't reach the airwaves"
+            body="Check your connection and try again."
+            action="Retry"
+            onAction={() => load(genre)}
+          />
+        ) : (
+          <Notice title={`No ${label} on air`} body="Try another genre." />
+        )}
+      </View>
     );
   }
+
+  const pills = <GenrePills selected={genre} onSelect={setGenre} wrap={wide && !short} />;
 
   return (
     <View style={styles.screen}>
@@ -405,7 +424,7 @@ export default function RadioScreen({ route, navigation }) {
           </Text>
         )}
       </View>
-      <GenrePills selected={genre} onSelect={setGenre} />
+      {!wide && pills}
 
       <View
         style={[styles.stage, { paddingBottom: bottomPad }]}
@@ -414,12 +433,35 @@ export default function RadioScreen({ route, navigation }) {
           setLayout((l) => (l && l.width === width && l.height === height ? l : { width, height }));
         }}
       >
-        {content}
+        {wide ? (
+          <View style={styles.split}>
+            <View style={styles.column}>{record}</View>
+            <View style={[styles.column, styles.infoColumn]}>
+              {pills}
+              {info}
+            </View>
+          </View>
+        ) : (
+          <>
+            {record}
+            {info}
+          </>
+        )}
         {isFocused && player.current?.kind === 'radio' && player.status === 'playing' && (
-          <Reactions style={{ right: space.lg, bottom: tabBarHeight + MINI_PLAYER_SPACE - space.xs }} />
+          // Side by side, they go on the record's half (where the swipe hint
+          // sat) so they never cover the track info.
+          <Reactions style={[wide ? { left: space.lg } : { right: space.lg }, { bottom: bottomPad - space.xs }]} />
         )}
         {data.status === 'ready' && !player.current && stations.length > 0 && (
-          <Text style={[styles.hint, { bottom: tabBarHeight + MINI_PLAYER_SPACE / 2 - 6 }]}>Swipe to browse · Tap the record to play</Text>
+          <Text
+            style={[
+              styles.hint,
+              { bottom: tabBarHeight + miniPlayerSpace / 2 - 6 },
+              // Under the record, not across the hinge.
+              wide && { left: 0, width: recordWidth, textAlign: 'center' },
+            ]}
+          >
+            Swipe to browse · Tap the record to play</Text>
         )}
       </View>
     </View>
@@ -444,6 +486,11 @@ const styles = StyleSheet.create({
   pillText: { fontFamily: fonts.semibold, color: colors.textFaint, fontSize: 14, letterSpacing: -0.1 },
   pillTextActive: { color: colors.text },
   stage: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  pillsWrap: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', paddingHorizontal: space.xl, rowGap: 6 },
+  // Two equal halves, so the gap between them is the screen's centre line.
+  split: { flex: 1, flexDirection: 'row', alignSelf: 'stretch' },
+  column: { flex: 1, minWidth: 0, alignItems: 'center', justifyContent: 'center' },
+  infoColumn: { gap: space.lg },
   textSlot: { height: TEXT_BLOCK, alignSelf: 'stretch' },
   textBlock: {
     position: 'absolute',
@@ -469,7 +516,7 @@ const styles = StyleSheet.create({
   subtitle: { fontFamily: fonts.medium, color: colors.textMuted, fontSize: 15, letterSpacing: -0.1, textAlign: 'center', flexShrink: 1 },
   subtitleLead: { color: colors.textFaint },
   meta: { fontFamily: fonts.mono, color: colors.textFaint, fontSize: 10.5, letterSpacing: 1.8, textTransform: 'uppercase', textAlign: 'center' },
-  hint: { position: 'absolute', bottom: MINI_PLAYER_SPACE / 2 - 6, fontFamily: fonts.mono, color: colors.textFaint, fontSize: 10.5, letterSpacing: 2, textTransform: 'uppercase' },
+  hint: { position: 'absolute', fontFamily: fonts.mono, color: colors.textFaint, fontSize: 10.5, letterSpacing: 2, textTransform: 'uppercase' },
   retry: {
     marginTop: space.sm,
     paddingHorizontal: space.xl,

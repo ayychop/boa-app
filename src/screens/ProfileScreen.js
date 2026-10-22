@@ -13,10 +13,13 @@ import { VIBES } from './OnboardingScreen';
 import BoaLogo from '../components/BoaLogo';
 import { Button, EmptyState, Fog, GoldBadge, LogoWatermark, Slate, Tappable, Viewfinder } from '../components/ui';
 import useBottomSpace from '../hooks/useBottomSpace';
+import useLayout from '../hooks/useLayout';
 import { colors, fonts, radius, space, type } from '../theme';
 
 // No accounts yet, so the profile has a placeholder name.
 const LISTENER_NAME = 'BOA Listener';
+
+const GRID_GAP = 12;
 
 const KIND_LABEL = { getSeen: 'Talent application', contact: 'Message to BOA' };
 
@@ -32,6 +35,15 @@ export default function ProfileScreen({ navigation }) {
   const player = usePlayer();
   const { openPremium } = usePremium();
 
+  // Phones get grouped lists; wider screens turn each list into a grid of
+  // tiles (two columns, three once there's room).
+  const { width, wide } = useLayout();
+  const inner = Math.min(width, 1100) - space.xl * 2;
+  const columns = inner >= 960 ? 3 : 2;
+  const tileWidth = Math.floor((inner - GRID_GAP * (columns - 1)) / columns);
+  const list = wide ? styles.grid : styles.list;
+  const row = wide ? [styles.link, styles.tile, { width: tileWidth }] : styles.link;
+
   const actions = [
     { icon: 'person-add-outline', label: 'Get seen', detail: 'Submit as talent', onPress: forms.openGetSeen },
     { icon: 'chatbubble-ellipses-outline', label: 'Contact BOA', detail: 'Bookings, press, hello', onPress: () => forms.openContact() },
@@ -41,7 +53,7 @@ export default function ProfileScreen({ navigation }) {
 
   return (
     <View style={styles.screen}>
-      <ScrollView contentContainerStyle={[styles.content, { paddingTop: insets.top + space.xxl, paddingBottom: bottom }]}>
+      <ScrollView contentContainerStyle={[styles.content, wide && styles.contentWide, { paddingTop: insets.top + space.xxl, paddingBottom: bottom }]}>
         <View style={styles.card}>
           <Fog opacity={0.28} />
           {/* Big wordmark behind the avatar: the profile sits on the brand. */}
@@ -105,7 +117,7 @@ export default function ProfileScreen({ navigation }) {
 
         <Slate style={{ marginTop: space.xxl, marginBottom: space.md }}>My Library</Slate>
         {user.saved.length ? (
-          <View style={styles.list}>
+          <View style={list}>
             {user.saved.map((station) => (
               <Pressable
                 key={station.id}
@@ -115,7 +127,7 @@ export default function ProfileScreen({ navigation }) {
                 }}
                 accessibilityRole="button"
                 accessibilityLabel={`Play ${station.name}`}
-                style={({ pressed }) => [styles.link, pressed && { backgroundColor: colors.surfaceRaised }]}
+                style={({ pressed }) => [row, pressed && { backgroundColor: colors.surfaceRaised }]}
               >
                 <StationLogo station={station} size={40} rounded={20} fit="cover" />
                 <View style={{ flex: 1, minWidth: 0 }}>
@@ -145,13 +157,13 @@ export default function ProfileScreen({ navigation }) {
         )}
 
         <Slate style={{ marginTop: space.xxl, marginBottom: space.md }}>BOA</Slate>
-        <View style={styles.list}>
+        <View style={list}>
           {actions.map((a) => (
             <Pressable
               key={a.label}
               onPress={a.onPress}
               accessibilityRole={a.external ? 'link' : 'button'}
-              style={({ pressed }) => [styles.link, pressed && { backgroundColor: colors.surfaceRaised }]}
+              style={({ pressed }) => [row, pressed && { backgroundColor: colors.surfaceRaised }]}
             >
               <Ionicons name={a.icon} size={19} color={colors.gold} />
               <View style={{ flex: 1 }}>
@@ -166,9 +178,9 @@ export default function ProfileScreen({ navigation }) {
         {forms.submissions.length > 0 && (
           <>
             <Slate style={{ marginTop: space.xxl, marginBottom: space.md }}>Your submissions</Slate>
-            <View style={styles.list}>
+            <View style={list}>
               {forms.submissions.map((sub) => (
-                <View key={sub.id} style={styles.link}>
+                <View key={sub.id} style={row}>
                   <Ionicons name="checkmark-circle" size={19} color={colors.live} />
                   <View style={{ flex: 1 }}>
                     <Text style={styles.linkText}>{KIND_LABEL[sub.kind]}</Text>
@@ -184,14 +196,16 @@ export default function ProfileScreen({ navigation }) {
         )}
 
         <Slate style={{ marginTop: space.xxl }}>The founders</Slate>
-        {founders.map((f) => (
-          <View key={f.name} style={styles.quote}>
-            <Text style={styles.quoteText}>“{f.quote}”</Text>
-            <Slate style={{ marginTop: space.md }}>
-              {f.name} · {f.role}
-            </Slate>
-          </View>
-        ))}
+        <View style={wide && styles.quotes}>
+          {founders.map((f) => (
+            <View key={f.name} style={[styles.quote, wide && { width: (inner - space.xl) / 2 }]}>
+              <Text style={styles.quoteText}>“{f.quote}”</Text>
+              <Slate style={{ marginTop: space.md }}>
+                {f.name} · {f.role}
+              </Slate>
+            </View>
+          ))}
+        </View>
 
         <Button label="Get seen" icon="arrow-forward" onPress={forms.openGetSeen} style={{ marginTop: space.xl, alignSelf: 'flex-start' }} />
         <Slate style={{ marginTop: space.xxl, opacity: 0.6 }}>© 2026 BOA Network · Made in the United Kingdom</Slate>
@@ -203,6 +217,7 @@ export default function ProfileScreen({ navigation }) {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   content: { paddingHorizontal: space.xl, maxWidth: 720, width: '100%', alignSelf: 'center' },
+  contentWide: { maxWidth: 1100 },
   card: {
     padding: space.xl,
     borderRadius: 20,
@@ -260,6 +275,9 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
   },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: GRID_GAP },
+  tile: { borderRadius: radius.lg, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
+  quotes: { flexDirection: 'row', flexWrap: 'wrap', columnGap: space.xl },
   link: {
     flexDirection: 'row',
     alignItems: 'center',

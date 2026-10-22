@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
   Easing,
@@ -137,48 +137,56 @@ export default function OnboardingScreen() {
         </View>
       </View>
 
-      <View style={[styles.body, { width: contentWidth, paddingBottom: insets.bottom + space.xxl }]}>
-        {step === 0 ? (
-          <Animated.View key="welcome" entering={FadeIn.duration(500)} exiting={FadeOut.duration(160)}>
-            <Slate dot color={colors.text}>Scene 01 · Take 01</Slate>
-            <Animated.Text entering={FadeInDown.delay(100).springify().damping(18)} style={styles.headline}>
-              Welcome to BOA.
-            </Animated.Text>
-            <Animated.Text entering={FadeInDown.delay(200).springify().damping(18)} style={[type.serif, styles.serifLine]}>
-              Best of all networks.
-            </Animated.Text>
-            <Animated.Text entering={FadeInDown.delay(300).springify().damping(18)} style={[type.bodyMuted, styles.lede]}>
-              Radio, originals, podcasts and the talent behind them, all in one place.
-            </Animated.Text>
-            <Animated.View entering={FadeInDown.delay(420).springify().damping(18)}>
-              <Button label="Get started" icon="arrow-forward" onPress={() => setStep(1)} style={styles.cta} />
+      {/* Copy sits at the foot of the screen; it scrolls when a phone on its
+          side is too short to hold it. */}
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + space.xxl }]}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={{ width: contentWidth }}>
+          {step === 0 ? (
+            <Animated.View key="welcome" entering={FadeIn.duration(500)} exiting={FadeOut.duration(160)}>
+              <Slate dot color={colors.text}>Scene 01 · Take 01</Slate>
+              <Animated.Text entering={FadeInDown.delay(100).springify().damping(18)} style={styles.headline}>
+                Welcome to BOA.
+              </Animated.Text>
+              <Animated.Text entering={FadeInDown.delay(200).springify().damping(18)} style={[type.serif, styles.serifLine]}>
+                Best of all networks.
+              </Animated.Text>
+              <Animated.Text entering={FadeInDown.delay(300).springify().damping(18)} style={[type.bodyMuted, styles.lede]}>
+                Radio, originals, podcasts and the talent behind them, all in one place.
+              </Animated.Text>
+              <Animated.View entering={FadeInDown.delay(420).springify().damping(18)}>
+                <Button label="Get started" icon="arrow-forward" onPress={() => setStep(1)} style={styles.cta} />
+              </Animated.View>
             </Animated.View>
-          </Animated.View>
-        ) : (
-          <Animated.View key="vibes" entering={FadeInDown.springify().damping(20)}>
-            <Slate dot color={colors.text}>The vibe check</Slate>
-            <Text style={styles.headline}>
-              What's your <Text style={[type.serif, styles.serifInline]}>vibe?</Text>
-            </Text>
-            <Text style={[type.bodyMuted, styles.lede]}>Pick as many as you like. We'll set the app up around them.</Text>
-            <View style={styles.pills}>
-              {VIBES.map((v, i) => (
-                <VibePill key={v.id} vibe={v} index={i} selected={vibes.includes(v.id)} onToggle={toggle} />
-              ))}
-            </View>
-            <Button
-              label={vibes.length ? "Let's go" : 'Pick at least one'}
-              icon="arrow-forward"
-              disabled={!vibes.length}
-              onPress={() => completeOnboarding(vibes)}
-              style={styles.cta}
-            />
-            <Pressable onPress={() => completeOnboarding([])} hitSlop={10} style={styles.skip} accessibilityRole="button">
-              <Text style={styles.skipText}>Skip for now</Text>
-            </Pressable>
-          </Animated.View>
-        )}
-      </View>
+          ) : (
+            <Animated.View key="vibes" entering={FadeInDown.springify().damping(20)}>
+              <Slate dot color={colors.text}>The vibe check</Slate>
+              <Text style={styles.headline}>
+                What's your <Text style={[type.serif, styles.serifInline]}>vibe?</Text>
+              </Text>
+              <Text style={[type.bodyMuted, styles.lede]}>Pick as many as you like. We'll set the app up around them.</Text>
+              <View style={styles.pills}>
+                {VIBES.map((v, i) => (
+                  <VibePill key={v.id} vibe={v} index={i} selected={vibes.includes(v.id)} onToggle={toggle} />
+                ))}
+              </View>
+              <Button
+                label={vibes.length ? "Let's go" : 'Pick at least one'}
+                icon="arrow-forward"
+                disabled={!vibes.length}
+                onPress={() => completeOnboarding(vibes)}
+                style={styles.cta}
+              />
+              <Pressable onPress={() => completeOnboarding([])} hitSlop={10} style={styles.skip} accessibilityRole="button">
+                <Text style={styles.skipText}>Skip for now</Text>
+              </Pressable>
+            </Animated.View>
+          )}
+        </View>
+      </ScrollView>
     </View>
   );
 }
@@ -189,7 +197,8 @@ const styles = StyleSheet.create({
   dots: { flexDirection: 'row', gap: 6 },
   dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: 'rgba(243,239,232,0.25)' },
   dotOn: { width: 22, backgroundColor: colors.gold },
-  body: { flex: 1, justifyContent: 'flex-end', alignSelf: 'center' },
+  scroll: { flex: 1 },
+  body: { flexGrow: 1, justifyContent: 'flex-end', alignItems: 'center' },
   headline: { fontFamily: fonts.semibold, fontSize: 46, lineHeight: 50, letterSpacing: -2, color: colors.text, marginTop: space.md },
   serifLine: { fontSize: 40, lineHeight: 46, marginTop: 2 },
   serifInline: { fontSize: 50, letterSpacing: -1 },

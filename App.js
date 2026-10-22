@@ -3,7 +3,7 @@ import { StatusBar } from 'expo-status-bar';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import { DarkTheme, NavigationContainer, useIsFocused } from '@react-navigation/native';
 import { BottomTabBar, createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, {
   Easing,
@@ -45,6 +45,7 @@ import TalentScreen from './src/screens/TalentScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 import { colors, fonts } from './src/theme';
 import { haptics } from './src/utils/haptics';
+import useLayout from './src/hooks/useLayout';
 
 const Tab = createBottomTabNavigator();
 
@@ -73,9 +74,11 @@ const ICONS = {
 const EASE_OUT_EXPO = Easing.bezier(0.16, 1, 0.3, 1);
 
 // Tabs are switched constantly, so this stays small: a short fade and an 8pt
-// rise, opacity-only under Reduce Motion.
+// rise, opacity-only under Reduce Motion. Also keeps every screen clear of a
+// notch or camera cutout when the phone is on its side.
 function TabTransition({ children }) {
   const focused = useIsFocused();
+  const { side } = useLayout();
   const reduceMotion = useReducedMotion();
   const progress = useSharedValue(focused ? 1 : 0);
 
@@ -90,7 +93,7 @@ function TabTransition({ children }) {
     transform: [{ translateY: reduceMotion ? 0 : (1 - progress.value) * 8 }],
   }));
 
-  return <Animated.View style={style}>{children}</Animated.View>;
+  return <Animated.View style={[style, { paddingHorizontal: side }]}>{children}</Animated.View>;
 }
 
 // Dynamic Island-style pop on the icon that just became active: a quick dip
@@ -149,6 +152,8 @@ function TabBarBackground() {
 }
 
 function MainTabs({ narrow }) {
+  const insets = useSafeAreaInsets();
+  const { side, short } = useLayout();
   return (
     <NavigationContainer theme={navTheme}>
       <StatusBar style="light" />
@@ -164,6 +169,11 @@ function MainTabs({ narrow }) {
             borderTopColor: colors.border,
             borderTopWidth: StyleSheet.hairlineWidth,
             elevation: 0,
+            paddingLeft: side,
+            paddingRight: side,
+            // Landscape phones: a slim bar (labels sit beside the icons) so
+            // it takes as little of the short screen as it can.
+            ...(short && { height: 40 + insets.bottom }),
           },
           tabBarBackground: () => <TabBarBackground />,
           // Five tabs: step the labels down on narrow phones so

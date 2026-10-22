@@ -28,12 +28,14 @@ const RENDER_WINDOW = 3;
 // Neighbours peek in from the edges at their scaled-down size.
 export const carouselItemWidth = (discSize) => Math.round(discSize * 0.9);
 
-function Slide({ index, x, itemWidth, left, children }) {
+function Slide({ index, x, itemWidth, left, peek, children }) {
   const style = useAnimatedStyle(() => {
     const d = index + x.value / itemWidth; // 0 = centred, ±1 = neighbour
     const a = Math.abs(d);
     return {
-      opacity: interpolate(a, [0, 1, 2.2], [1, 0.38, 0], Extrapolation.CLAMP),
+      opacity: peek
+        ? interpolate(a, [0, 1, 2.2], [1, 0.38, 0], Extrapolation.CLAMP)
+        : interpolate(a, [0, 0.7], [1, 0], Extrapolation.CLAMP),
       zIndex: Math.round(100 - a * 10),
       transform: [
         { translateX: d * itemWidth },
@@ -48,6 +50,8 @@ function Slide({ index, x, itemWidth, left, children }) {
  * Horizontal, spring-driven record carousel.
  * Swipe to browse; tap the centre record to play/pause; tap a side record to
  * move to it. On web, ←/→ browse and Space plays/pauses.
+ * `peek={false}` hides the neighbours at rest (they fade in as you swipe),
+ * for layouts where something else sits beside the carousel.
  */
 export default function RecordCarousel({
   items,
@@ -59,6 +63,7 @@ export default function RecordCarousel({
   discSize,
   renderItem,
   position,
+  peek = true,
 }) {
   const itemWidth = carouselItemWidth(discSize);
   const left = (width - itemWidth) / 2;
@@ -171,7 +176,7 @@ export default function RecordCarousel({
       <View style={[styles.stage, { width, height }]}>
         {items.map((item, i) =>
           Math.abs(i - index) > RENDER_WINDOW ? null : (
-            <Slide key={item.id} index={i} x={x} itemWidth={itemWidth} left={left}>
+            <Slide key={item.id} index={i} x={x} itemWidth={itemWidth} left={left} peek={peek}>
               {renderItem(item, i)}
             </Slide>
           ),

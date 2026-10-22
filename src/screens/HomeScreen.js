@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Children, useEffect, useState } from 'react';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
   Easing,
@@ -26,6 +26,7 @@ import PodcastCover from '../components/PodcastCover';
 import StationLogo from '../components/StationLogo';
 import { Button, Fog, LogoWatermark, PulseDot, SectionHeader, Slate, Tappable, Viewfinder } from '../components/ui';
 import useBottomSpace from '../hooks/useBottomSpace';
+import useLayout from '../hooks/useLayout';
 import { colors, fonts, space, type } from '../theme';
 
 const METAL = ['#F2F2F4', '#8A8A90', '#FAFAFB', '#5E5E64', '#D9D9DD'];
@@ -119,6 +120,20 @@ function Row({ children }) {
   );
 }
 
+// Two sections side by side on wide screens, stacked on phones. The halves
+// are equal, so the gutter between them falls on the screen's centre line
+// (a dual screen's hinge); each row scrolls inside its own half.
+function Pair({ wide, children }) {
+  if (!wide) return children;
+  return (
+    <View style={styles.pair}>
+      {Children.map(children, (child) => (
+        <View style={styles.half}>{child}</View>
+      ))}
+    </View>
+  );
+}
+
 function TrendingStation({ station, onPress, live }) {
   return (
     <Tappable onPress={() => onPress(station)} style={styles.station} accessibilityRole="button" accessibilityLabel={`Play ${station.name}`}>
@@ -139,7 +154,7 @@ function TrendingStation({ station, onPress, live }) {
 }
 
 export default function HomeScreen({ navigation }) {
-  const { width, height } = useWindowDimensions();
+  const { width, height, wide } = useLayout();
   const bottom = useBottomSpace(space.xxl);
   const player = usePlayer();
   const media = useMedia();
@@ -164,121 +179,126 @@ export default function HomeScreen({ navigation }) {
   };
 
   const heroHeight = Math.min(Math.max(height * 0.78, 520), 820);
-  const posterWidth = Math.min(Math.round(width * 0.72), 340);
+  const columnWidth = wide ? width / 2 : width;
+  const posterWidth = Math.min(Math.round(columnWidth * 0.72), 340);
 
   return (
     <View style={styles.screen}>
       <ScrollView contentContainerStyle={{ paddingBottom: bottom }} showsVerticalScrollIndicator={false}>
         <Hero production={featuredProduction} width={width} height={heroHeight} />
 
-        <View style={styles.section}>
-          <SectionHeader
-            index="01"
-            kicker="R&B · Hip Hop · Ghana"
-            title="Trending on BOA Radio"
-            action="Open radio"
-            onAction={() => navigation.navigate('Radio')}
-          />
-          {trending === null ? (
-            <View style={styles.tuning}>
-              <ActivityIndicator color={colors.textMuted} />
-              <Slate>Tuning the premium stations…</Slate>
-            </View>
-          ) : trending.length === 0 ? (
-            <Text style={[type.bodyMuted, { paddingHorizontal: space.xl }]}>Stations are off air right now.</Text>
-          ) : (
+        <Pair wide={wide}>
+          <View style={styles.section}>
+            <SectionHeader
+              index="01"
+              kicker="R&B · Hip Hop · Ghana"
+              title="Trending on BOA Radio"
+              action="Open radio"
+              onAction={() => navigation.navigate('Radio')}
+            />
+            {trending === null ? (
+              <View style={styles.tuning}>
+                <ActivityIndicator color={colors.textMuted} />
+                <Slate>Tuning the premium stations…</Slate>
+              </View>
+            ) : trending.length === 0 ? (
+              <Text style={[type.bodyMuted, { paddingHorizontal: space.xl }]}>Stations are off air right now.</Text>
+            ) : (
+              <Row>
+                {trending.map((s, i) => (
+                  <Animated.View key={s.id} entering={FadeIn.delay(i * 70)}>
+                    <TrendingStation
+                      station={s}
+                      onPress={playStation}
+                      live={player.current?.id === s.id && player.isPlaying}
+                    />
+                  </Animated.View>
+                ))}
+              </Row>
+            )}
+          </View>
+
+          <View style={styles.section}>
+            <SectionHeader
+              index="02"
+              kicker="Productions"
+              title="BOA Originals"
+              action="See all"
+              onAction={() => navigation.navigate('Originals')}
+            />
             <Row>
-              {trending.map((s, i) => (
-                <Animated.View key={s.id} entering={FadeIn.delay(i * 70)}>
-                  <TrendingStation
-                    station={s}
-                    onPress={playStation}
-                    live={player.current?.id === s.id && player.isPlaying}
-                  />
-                </Animated.View>
+              {productions.slice(0, 5).map((p) => (
+                <Tappable key={p.id} onPress={() => navigation.navigate('Originals')} accessibilityRole="button" accessibilityLabel={p.title}>
+                  <Poster production={p} width={posterWidth} ratio={16 / 9} />
+                </Tappable>
               ))}
             </Row>
-          )}
-        </View>
+          </View>
+        </Pair>
 
-        <View style={styles.section}>
-          <SectionHeader
-            index="02"
-            kicker="Productions"
-            title="BOA Originals"
-            action="See all"
-            onAction={() => navigation.navigate('Originals')}
-          />
-          <Row>
-            {productions.slice(0, 5).map((p) => (
-              <Tappable key={p.id} onPress={() => navigation.navigate('Originals')} accessibilityRole="button" accessibilityLabel={p.title}>
-                <Poster production={p} width={posterWidth} ratio={16 / 9} />
-              </Tappable>
-            ))}
-          </Row>
-        </View>
+        <Pair wide={wide}>
+          <View style={styles.section}>
+            <SectionHeader index="03" kicker="Mindset · Mood · Motivation · Tech" title="BOA Podcasts" />
+            <Row>
+              {podcasts.map((pod, i) => {
+                const live = player.current?.podcastId === pod.id && player.isPlaying;
+                return (
+                  <Animated.View key={pod.id} entering={FadeIn.delay(i * 70)}>
+                    <Tappable
+                      onPress={() => media.openPodcast(pod)}
+                      style={styles.podcast}
+                      accessibilityRole="button"
+                      accessibilityLabel={`${pod.title} podcast`}
+                    >
+                      <PodcastCover podcast={pod} size={148} rounded={18} />
+                      {live && (
+                        <View style={[styles.liveBadge, styles.podLive]}>
+                          <View style={styles.liveDot} />
+                          <Text style={styles.liveText}>PLAYING</Text>
+                        </View>
+                      )}
+                      <Text style={styles.podTitle} numberOfLines={1}>
+                        {pod.title}
+                      </Text>
+                      <Text style={styles.personRole} numberOfLines={1}>
+                        {pod.category} · {pod.author}
+                      </Text>
+                    </Tappable>
+                  </Animated.View>
+                );
+              })}
+            </Row>
+          </View>
 
-        <View style={styles.section}>
-          <SectionHeader index="03" kicker="Mindset · Mood · Motivation · Tech" title="BOA Podcasts" />
-          <Row>
-            {podcasts.map((pod, i) => {
-              const live = player.current?.podcastId === pod.id && player.isPlaying;
-              return (
-                <Animated.View key={pod.id} entering={FadeIn.delay(i * 70)}>
-                  <Tappable
-                    onPress={() => media.openPodcast(pod)}
-                    style={styles.podcast}
-                    accessibilityRole="button"
-                    accessibilityLabel={`${pod.title} podcast`}
-                  >
-                    <PodcastCover podcast={pod} size={148} rounded={18} />
-                    {live && (
-                      <View style={[styles.liveBadge, styles.podLive]}>
-                        <View style={styles.liveDot} />
-                        <Text style={styles.liveText}>PLAYING</Text>
-                      </View>
-                    )}
-                    <Text style={styles.podTitle} numberOfLines={1}>
-                      {pod.title}
-                    </Text>
-                    <Text style={styles.personRole} numberOfLines={1}>
-                      {pod.category} · {pod.author}
-                    </Text>
-                  </Tappable>
-                </Animated.View>
-              );
-            })}
-          </Row>
-        </View>
-
-        <View style={styles.section}>
-          <SectionHeader
-            index="04"
-            kicker="The roster"
-            title="Our Talent"
-            action="See all"
-            onAction={() => navigation.navigate('Talent')}
-          />
-          <Row>
-            {talent.map((person) => (
-              <Tappable
-                key={person.id}
-                onPress={() => navigation.navigate('Talent', { talentId: person.id })}
-                style={styles.person}
-                accessibilityRole="button"
-                accessibilityLabel={`${person.name}, ${person.role}`}
-              >
-                <Headshot person={person} width={96} round />
-                <Text style={styles.personName} numberOfLines={1}>
-                  {person.name}
-                </Text>
-                <Text style={styles.personRole} numberOfLines={1}>
-                  {person.role}
-                </Text>
-              </Tappable>
-            ))}
-          </Row>
-        </View>
+          <View style={styles.section}>
+            <SectionHeader
+              index="04"
+              kicker="The roster"
+              title="Our Talent"
+              action="See all"
+              onAction={() => navigation.navigate('Talent')}
+            />
+            <Row>
+              {talent.map((person) => (
+                <Tappable
+                  key={person.id}
+                  onPress={() => navigation.navigate('Talent', { talentId: person.id })}
+                  style={styles.person}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${person.name}, ${person.role}`}
+                >
+                  <Headshot person={person} width={96} round />
+                  <Text style={styles.personName} numberOfLines={1}>
+                    {person.name}
+                  </Text>
+                  <Text style={styles.personRole} numberOfLines={1}>
+                    {person.role}
+                  </Text>
+                </Tappable>
+              ))}
+            </Row>
+          </View>
+        </Pair>
 
         <View style={styles.mission}>
           <Fog opacity={0.28} />
@@ -324,6 +344,8 @@ const styles = StyleSheet.create({
   heroTitle: { fontFamily: fonts.semibold, fontSize: 54, lineHeight: 56, letterSpacing: -2.6, color: colors.text },
   heroActions: { flexDirection: 'row', flexWrap: 'wrap', gap: space.md, marginTop: space.sm },
   section: { marginTop: space.xxl },
+  pair: { flexDirection: 'row' },
+  half: { flex: 1, minWidth: 0, overflow: 'hidden' },
   rowContent: { paddingHorizontal: space.xl, gap: 14 },
   station: { width: 104, alignItems: 'center' },
   ring: { width: 98, height: 98, borderRadius: 49, alignItems: 'center', justifyContent: 'center', boxShadow: '0px 10px 24px rgba(0,0,0,0.5)' },

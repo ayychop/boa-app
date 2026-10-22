@@ -22,11 +22,25 @@ import useNowPlaying from '../hooks/useNowPlaying';
 import { useUser } from '../context/UserContext';
 import { GoldBadge } from './ui';
 import StationLogo from './StationLogo';
+import useLayout from '../hooks/useLayout';
 import { colors, fonts, radius, space } from '../theme';
 
 const HEIGHT = 60;
+// Landscape phones get a slimmer pill with tighter margins.
+const COMPACT_HEIGHT = 46;
+
+function useMetrics() {
+  const { short } = useLayout();
+  return short
+    ? { height: COMPACT_HEIGHT, margin: space.sm, art: 34, button: 34 }
+    : { height: HEIGHT, margin: space.md, art: 42, button: 42 };
+}
+
 // Space screens should leave free at the bottom so content isn't hidden.
-export const MINI_PLAYER_SPACE = HEIGHT + space.md * 2;
+export function useMiniPlayerSpace() {
+  const { height, margin } = useMetrics();
+  return height + margin * 2;
+}
 
 // Thin progress line for on-demand audio; isolated so only it re-renders on
 // every position tick.
@@ -46,6 +60,7 @@ export default function MiniPlayer({ onOpenRadio }) {
   const reduceMotion = useReducedMotion();
   const { isPremium } = useUser();
   const nowPlaying = useNowPlaying(current, current?.kind === 'radio');
+  const m = useMetrics();
   const swell = useSharedValue(1);
   const halo = useSharedValue(0);
 
@@ -78,12 +93,12 @@ export default function MiniPlayer({ onOpenRadio }) {
     <Animated.View
       entering={FadeInDown.springify().damping(17).stiffness(170)}
       exiting={FadeOutDown.duration(180)}
-      style={styles.wrap}
+      style={[styles.wrap, { marginBottom: m.margin }]}
       pointerEvents="box-none"
     >
       <Animated.View style={[styles.shell, swellStyle]}>
         <Animated.View pointerEvents="none" style={[styles.halo, haloStyle]} />
-        <View style={styles.pill}>
+        <View style={[styles.pill, { height: m.height }]}>
           {/* Frosted glass: heavy blur, a faint tint, a top sheen, a hairline. */}
           <BlurView intensity={100} tint="dark" experimentalBlurMethod="dimezisBlurView" style={StyleSheet.absoluteFill} />
           <View style={styles.tint} />
@@ -100,9 +115,9 @@ export default function MiniPlayer({ onOpenRadio }) {
             style={styles.info}
           >
             {podcast ? (
-              <PodcastCover podcast={podcast} size={42} rounded={10} />
+              <PodcastCover podcast={podcast} size={m.art} rounded={10} />
             ) : (
-              <StationLogo station={current} size={42} rounded={21} fit="cover" />
+              <StationLogo station={current} size={m.art} rounded={m.art / 2} fit="cover" />
             )}
             <View style={styles.body}>
               <View style={styles.titleRow}>
@@ -121,7 +136,11 @@ export default function MiniPlayer({ onOpenRadio }) {
             hitSlop={8}
             accessibilityRole="button"
             accessibilityLabel={isPlaying ? 'Pause' : 'Play'}
-            style={({ pressed }) => [styles.button, pressed && { transform: [{ scale: 0.92 }] }]}
+            style={({ pressed }) => [
+              styles.button,
+              { width: m.button, height: m.button, borderRadius: m.button / 2 },
+              pressed && { transform: [{ scale: 0.92 }] },
+            ]}
           >
             {status === 'loading' ? (
               <ActivityIndicator color={colors.bg} size="small" />
@@ -147,7 +166,6 @@ const styles = StyleSheet.create({
     left: space.md,
     right: space.md,
     bottom: '100%',
-    marginBottom: space.md,
     alignItems: 'center',
   },
   // Shadow lives on an unclipped shell; the glass inside clips its blur.
@@ -163,7 +181,6 @@ const styles = StyleSheet.create({
     boxShadow: '0px 0px 0px 1px rgba(226,168,75,0.55), 0px 0px 28px rgba(226,168,75,0.45)',
   },
   pill: {
-    height: HEIGHT,
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.md,
@@ -184,9 +201,6 @@ const styles = StyleSheet.create({
   title: { fontFamily: fonts.bold, color: colors.text, fontSize: 15, letterSpacing: -0.3 },
   subtitle: { fontFamily: fonts.medium, color: colors.textMuted, fontSize: 12.5, marginTop: 1 },
   button: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.text,

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Linking, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeIn, FadeInDown, LinearTransition } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -9,6 +9,7 @@ import Headshot from '../components/Headshot';
 import BottomSheet from '../components/BottomSheet';
 import { Button, Fog, Slate, Tappable } from '../components/ui';
 import useBottomSpace from '../hooks/useBottomSpace';
+import useLayout from '../hooks/useLayout';
 import { colors, fonts, radius, space, type } from '../theme';
 
 const FILTERS = [
@@ -47,7 +48,7 @@ function TalentCard({ person, width, onPress, delay }) {
 
 export default function TalentScreen({ route, navigation }) {
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
+  const { width } = useLayout();
   const bottom = useBottomSpace(space.xxl);
   const [filter, setFilter] = useState('all');
   const [selected, setSelected] = useState(null);
