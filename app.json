@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "BOA Network",
+    "name": "BOA",
     "slug": "boa-app",
     "version": "1.0.0",
     "orientation": "default",
@@ -16,9 +16,8 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
+        "backgroundColor": "#050506",
+        "foregroundImage": "./assets/adaptive-icon.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "package": "com.boanetsteam.boaapp",
