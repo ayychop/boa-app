@@ -2,7 +2,6 @@
   "expo": {
     "name": "BOA Network",
     "slug": "boa-app",
-    "newArchEnabled": false,
     "version": "1.0.0",
     "orientation": "default",
     "icon": "./assets/icon.png",
@@ -62,7 +61,8 @@
           "recordAudioAndroid": false,
           "enableBackgroundPlayback": true
         }
-      ]
+      ],
+      "expo-status-bar"
     ],
     "owner": "boanets-team"
   }
