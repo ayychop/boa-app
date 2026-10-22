@@ -14,6 +14,7 @@
     "expo": "~58.0.16",
     "expo-asset": "~58.0.17",
     "expo-blur": "~58.0.5",
+    "expo-build-properties": "~58.0.11",
     "expo-font": "~58.0.9",
     "expo-haptics": "~58.0.7",
     "expo-linear-gradient": "~58.0.3",

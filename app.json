@@ -44,6 +44,14 @@
             "backgroundColor": "#050506"
           }
         }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "kotlinVersion": "2.0.21"
+          }
+        }
       ]
     ],
     "extra": {
