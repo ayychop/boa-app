@@ -1,21 +1,20 @@
-import TrackPlayer, {
-  AppKilledPlaybackBehavior,
-  Capability,
-  Event,
-  State,
-} from 'react-native-track-player';
+import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 
-// Items are live radio ({ kind: 'radio' }) or on-demand audio such as podcast
-// episodes ({ kind: 'podcast' }); see engine.js for the shared contract.
+// Native audio engine: a single expo-audio player. Items are live radio
+// ({ kind: 'radio' }) or on-demand audio such as podcast episodes
+// ({ kind: 'podcast' }); see engine.js for the shared contract.
+let player = null;
 let current = null;
 let state = { status: 'idle', title: null, position: 0, duration: 0, rate: 1, retry: 0 };
-let ready = null;
 let attempts = 0;
 let failedGen = -1;
+let connectTimer = null;
 let retryTimer = null;
 let gen = 0; // see engine.js: guards against stale failures
 const listeners = new Set();
 
+// Some streams never send data and never error either; don't spin forever.
+const CONNECT_TIMEOUT_MS = 9000;
 // Self-healing: quietly reconnect this many times before telling the user.
 export const MAX_RETRIES = 2;
 const RETRY_DELAYS_MS = [1200, 2500];
@@ -27,64 +26,45 @@ function emit(patch) {
   listeners.forEach((fn) => fn(state));
 }
 
-const STATUS = {
-  [State.Playing]: 'playing',
-  [State.Loading]: 'loading',
-  [State.Buffering]: 'loading',
-  [State.Paused]: 'paused',
-  [State.Stopped]: 'paused',
-  [State.Ended]: 'ended',
-  [State.Error]: 'error',
-};
-
-function trackTitle({ title, artist }) {
-  if (!title) return null;
-  return artist && !title.includes(artist) ? `${artist} — ${title}` : title;
+function onStatus(s) {
+  // Only while we're trying to play; a stale error after pause is ignored.
+  if (s.error) return (state.status === 'loading' || state.status === 'playing') && fail(gen);
+  if (!isLive(current)) {
+    emit({ position: s.currentTime, ...(s.duration > 0 && { duration: s.duration }) });
+  }
+  if (s.didJustFinish) return emit({ status: 'ended', position: state.duration });
+  if (s.playing && !s.isBuffering) {
+    if (state.status !== 'playing') {
+      clearTimeout(connectTimer);
+      attempts = 0;
+      emit({ status: 'playing', retry: 0 });
+    }
+  } else if (s.isBuffering && state.status === 'playing') {
+    emit({ status: 'loading' });
+  } else if (!s.playing && !s.isBuffering && state.status === 'playing') {
+    // Paused from outside the app: lock screen, headset, audio focus loss.
+    emit({ status: 'paused' });
+  }
 }
 
-function setup() {
-  if (!ready) {
-    ready = TrackPlayer.setupPlayer({ autoHandleInterruptions: true })
-      .catch((err) => {
-        // Fast refresh re-runs this module while the native player lives on.
-        if (!String(err?.message).includes('already been initialized')) throw err;
-      })
-      .then(() =>
-        TrackPlayer.updateOptions({
-          capabilities: [Capability.Play, Capability.Pause, Capability.Stop, Capability.SeekTo, Capability.JumpForward, Capability.JumpBackward],
-          compactCapabilities: [Capability.Play, Capability.Pause],
-          forwardJumpInterval: 30,
-          backwardJumpInterval: 15,
-          progressUpdateEventInterval: 1,
-          android: {
-            appKilledPlaybackBehavior: AppKilledPlaybackBehavior.StopPlaybackAndRemoveNotification,
-          },
-        }),
-      )
-      .then(() => {
-        TrackPlayer.addEventListener(Event.PlaybackState, ({ state: s }) => {
-          if (s === State.Error) return fail(gen); // handled by the retry path
-          if (s === State.Playing) attempts = 0;
-          // While reconnecting, keep showing "loading" rather than a flash of
-          // "paused"/"stopped" from the reset between attempts.
-          if (STATUS[s] && !(state.retry && STATUS[s] === 'paused')) emit({ status: STATUS[s], ...(s === State.Playing && { retry: 0 }) });
-        });
-        TrackPlayer.addEventListener(Event.PlaybackError, () => fail(gen));
-        TrackPlayer.addEventListener(Event.PlaybackProgressUpdated, ({ position, duration }) => {
-          if (!isLive(current)) emit({ position, ...(duration > 0 && { duration }) });
-        });
-        // ICY StreamTitle arrives as timed metadata; ID3/common tags as common.
-        TrackPlayer.addEventListener(Event.MetadataTimedReceived, ({ metadata }) => {
-          const title = isLive(current) && metadata?.[0] && trackTitle(metadata[0]);
-          if (title) emit({ title });
-        });
-        TrackPlayer.addEventListener(Event.MetadataCommonReceived, ({ metadata }) => {
-          const title = isLive(current) && metadata && trackTitle(metadata);
-          if (title) emit({ title });
-        });
-      });
+function getPlayer() {
+  if (!player) {
+    setAudioModeAsync({
+      playsInSilentMode: true,
+      shouldPlayInBackground: true,
+      interruptionMode: 'doNotMix',
+    }).catch(() => {});
+    player = createAudioPlayer(null, { updateInterval: 1000 });
+    player.addListener('playbackStatusUpdate', onStatus);
   }
-  return ready;
+  return player;
+}
+
+function armConnectTimeout(attempt) {
+  clearTimeout(connectTimer);
+  connectTimer = setTimeout(() => {
+    if (state.status === 'loading') fail(attempt);
+  }, CONNECT_TIMEOUT_MS);
 }
 
 // See engine.js: retry quietly, then surface "error".
@@ -92,6 +72,8 @@ function fail(attempt) {
   // One failure per attempt: some players report the same failure twice.
   if (attempt !== gen || attempt === failedGen || !current) return;
   failedGen = attempt;
+  clearTimeout(connectTimer);
+  player?.pause();
   if (attempts < MAX_RETRIES) {
     attempts += 1;
     emit({ status: 'loading', retry: attempts });
@@ -120,25 +102,23 @@ async function connect(item, { retry = false, resumeAt = 0 }) {
   } else if (switching) emit({ status: 'loading', title: null, position: 0, duration: item.duration || 0, retry: 0 });
   else emit({ status: 'loading', retry: 0 });
   try {
-    await setup();
+    const p = getPlayer();
+    armConnectTimeout(attempt);
     if (!switching && !retry && !isLive(item)) {
-      if (state.status === 'ended') await TrackPlayer.seekTo(0);
-      await TrackPlayer.play();
+      if (state.status === 'ended') await p.seekTo(0);
+      p.play();
       return;
     }
-    // Re-adding a live track on resume puts it back at "now".
-    await TrackPlayer.reset();
-    await TrackPlayer.add({
-      id: item.id,
-      url: item.streamUrl,
-      title: item.name,
-      artist: item.artist || 'BOA Radio',
-      artwork: item.logo || undefined,
-      isLiveStream: isLive(item),
-    });
-    if (!isLive(item)) await TrackPlayer.setRate(state.rate);
-    if (resumeAt > 0) await TrackPlayer.seekTo(resumeAt);
-    await TrackPlayer.play();
+    // Reloading a live stream on resume puts it back at "now".
+    p.replace({ uri: item.streamUrl });
+    p.setPlaybackRate(isLive(item) ? 1 : state.rate);
+    if (resumeAt > 0) await p.seekTo(resumeAt);
+    p.play();
+    p.setActiveForLockScreen(
+      true,
+      { title: item.name, artist: item.artist || 'BOA Radio', artworkUrl: item.logo || undefined },
+      { showSeekForward: !isLive(item), showSeekBackward: !isLive(item) },
+    );
   } catch {
     fail(attempt);
   }
@@ -146,18 +126,18 @@ async function connect(item, { retry = false, resumeAt = 0 }) {
 
 export async function pause() {
   clearTimeout(retryTimer);
+  clearTimeout(connectTimer);
   attempts = 0;
   gen += 1;
   emit({ status: 'paused', retry: 0 });
-  await setup();
-  await TrackPlayer.pause();
+  player?.pause();
 }
 
 export async function seek(seconds) {
-  if (isLive(current)) return;
+  if (!player || isLive(current)) return;
   const t = Math.max(0, Math.min(seconds, state.duration || seconds));
-  emit({ position: t });
-  await TrackPlayer.seekTo(t);
+  emit({ position: t, ...(state.status === 'ended' && { status: 'paused' }) });
+  await player.seekTo(t);
 }
 
 export function skip(delta) {
@@ -166,7 +146,7 @@ export function skip(delta) {
 
 export async function setRate(rate) {
   emit({ rate });
-  if (!isLive(current)) await TrackPlayer.setRate(rate);
+  if (player && !isLive(current)) player.setPlaybackRate(rate);
 }
 
 export function subscribe(fn) {
@@ -175,4 +155,5 @@ export function subscribe(fn) {
   return () => listeners.delete(fn);
 }
 
-export const supportsTrackTitles = true;
+// expo-audio doesn't surface ICY stream titles, so state.title stays null.
+export const supportsTrackTitles = false;

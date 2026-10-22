@@ -1,5 +1,5 @@
 // Web audio engine: a single HTML5 <audio> element.
-// The native build resolves engine.native.js (react-native-track-player)
+// The native build resolves engine.native.js (expo-audio)
 // instead; both expose the same interface.
 //
 // Items are either live radio ({ kind: 'radio', streamUrl }) or on-demand

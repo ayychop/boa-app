@@ -54,6 +54,14 @@
             "enableR8InReleaseBuilds": false
           }
         }
+      ],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": false,
+          "recordAudioAndroid": false,
+          "enableBackgroundPlayback": true
+        }
       ]
     ],
     "owner": "boanets-team"
