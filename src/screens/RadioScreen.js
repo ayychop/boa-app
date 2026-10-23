@@ -288,14 +288,6 @@ export default function RadioScreen({ route, navigation }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stations.map((s) => s.id).join('|')]);
 
-  // The records on screen are the queue for next/previous station (unless
-  // something from another list is playing).
-  const queueKey = stations.map((s) => s.id).join('|');
-  useEffect(() => {
-    player.setQueue(stations);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [queueKey]);
-
   // A station that still fails after the engine's retries is dead for this
   // session; one that plays is alive again (e.g. after a manual retry).
   const playingId = player.current?.kind === 'radio' ? player.current.id : null;
@@ -402,7 +394,8 @@ export default function RadioScreen({ route, navigation }) {
           items={stations}
           index={index}
           onIndexChange={setIndex}
-          onPressActive={player.toggle}
+          // The records on screen become the queue for next/previous.
+          onPressActive={(station) => player.toggle(station, stations)}
           width={recordWidth}
           height={discSize + 40}
           discSize={discSize}

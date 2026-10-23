@@ -27,7 +27,9 @@ export function PlayerProvider({ children }) {
   );
 
   // The list the current station was played from (the radio carousel,
-  // Home's trending row, your library): next/previous step through it.
+  // Home's trending row, your library), as it was at that moment, so
+  // next/previous step through a stable order even if the list on screen
+  // changes later.
   const queue = useRef([]);
   const currentRef = useRef(null);
   currentRef.current = current;
@@ -47,13 +49,6 @@ export function PlayerProvider({ children }) {
     },
     [start],
   );
-
-  /** Offer a station list as the queue, unless something else is playing. */
-  const setQueue = useCallback((list) => {
-    const radio = (list || []).filter((s) => s.kind === 'radio');
-    const playing = currentRef.current;
-    if (!playing || radio.some((s) => s.id === playing.id)) queue.current = radio;
-  }, []);
 
   // Next/previous station, from the lock screen, notification, headset or
   // car: wraps round the queue. Only for live radio.
@@ -76,12 +71,13 @@ export function PlayerProvider({ children }) {
 
   const isPlaying = core.status === 'playing' || core.status === 'loading';
 
-  // Tapping a record or cover: pause it if it's the one playing, else play it.
+  // Tapping a record or cover: pause it if it's the one playing, else play
+  // it (with the list it sits in as the queue).
   const toggle = useCallback(
-    (target = current) => {
+    (target = current, list) => {
       if (!target) return;
       if (target.id === current?.id && isPlaying) pause();
-      else play(target);
+      else play(target, list);
     },
     [current, isPlaying, play, pause],
   );
@@ -98,12 +94,11 @@ export function PlayerProvider({ children }) {
       play,
       pause,
       toggle,
-      setQueue,
       seek: engine.seek,
       skip: engine.skip,
       setRate: engine.setRate,
     }),
-    [current, core, isPlaying, play, pause, toggle, setQueue],
+    [current, core, isPlaying, play, pause, toggle],
   );
 
   return (

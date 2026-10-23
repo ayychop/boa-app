@@ -53,7 +53,7 @@ function VibePill({ vibe, selected, onToggle, index }) {
 }
 
 const STAGE = '#0A0A0A';
-const SPOT_Y = 0.64; // the spotlight sits behind the copy, not the empty top
+const SPOT_Y = 0.52; // the spotlight sits behind the copy
 
 // Soft gold pool of light behind the text, slowly breathing (scale + opacity,
 // ~7s a cycle). Sized in pixels so it stays a circle on a tall phone.
@@ -132,8 +132,8 @@ export default function OnboardingScreen() {
         </View>
       </View>
 
-      {/* Copy sits at the foot of the screen; it scrolls when a phone on its
-          side is too short to hold it. */}
+      {/* Copy is centred in the space under the top bar, with no dead area
+          above it; it scrolls when a phone on its side is too short. */}
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + space.xxl }]}
@@ -169,7 +169,7 @@ const styles = StyleSheet.create({
   dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: 'rgba(243,239,232,0.25)' },
   dotOn: { width: 22, backgroundColor: colors.gold },
   scroll: { flex: 1 },
-  body: { flexGrow: 1, justifyContent: 'flex-end', alignItems: 'center' },
+  body: { flexGrow: 1, justifyContent: 'center', alignItems: 'center' },
   headline: { fontFamily: fonts.semibold, fontSize: 46, lineHeight: 50, letterSpacing: -2, color: colors.text, marginTop: space.md },
   serifInline: { fontSize: 50, letterSpacing: -1 },
   lede: { marginTop: space.md, maxWidth: 420 },
