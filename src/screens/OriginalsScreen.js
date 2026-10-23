@@ -8,7 +8,7 @@ import { featuredProduction, productions } from '../data/boaContent';
 import { useMedia } from '../context/MediaContext';
 import { usePlayer } from '../context/PlayerContext';
 import { useDisplay } from '../context/DisplayContext';
-import { DISPLAY_BUTTON_SPACE } from '../components/display/DisplayMenu';
+import { DISPLAY_BUTTON_SPACE, DISPLAY_BUTTON_WIDTH } from '../components/display/DisplayMenu';
 import YouTubePlayer from '../components/media/YouTubePlayer';
 import VideoPlayer from '../components/media/VideoPlayer';
 import Poster, { metaLine } from '../components/Poster';
@@ -62,7 +62,7 @@ function Featured({ production, width, clearRight }) {
         />
         <Viewfinder inset={16} />
         <View
-          style={[styles.featuredTop, { top: insets.top + space.xl }, clearRight && { right: space.xl + 8 + DISPLAY_BUTTON_SPACE }]}
+          style={[styles.featuredTop, { top: insets.top + space.xl }, clearRight && { right: space.xl + 8 + DISPLAY_BUTTON_WIDTH }]}
         >
           <Slate dot>02 · Productions</Slate>
           <Slate>The slate</Slate>

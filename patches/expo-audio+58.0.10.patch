@@ -1,0 +1,47 @@
+diff --git a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/AudioPlayer.kt b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/AudioPlayer.kt
+index fb2d0b5..3780fd4 100644
+--- a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/AudioPlayer.kt
++++ b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/AudioPlayer.kt
+@@ -24,6 +24,10 @@ import java.lang.ref.WeakReference
+ private const val PLAYBACK_STATUS_UPDATE = "playbackStatusUpdate"
+ private const val AUDIO_SAMPLE_UPDATE = "audioSampleUpdate"
+ private const val SEEK_JUMP_INTERVAL_MS: Long = 10_000
++// BOA: next/previous from the lock screen, notification, headset or car,
++// handed to JS, which knows the station list.
++private const val REMOTE_NEXT_TRACK = "remoteNextTrack"
++private const val REMOTE_PREVIOUS_TRACK = "remotePreviousTrack"
+ 
+ @UnstableApi
+ class AudioPlayer(
+@@ -37,6 +41,9 @@ class AudioPlayer(
+     .setLooper(context.mainLooper)
+     .setAudioAttributes(AudioAttributes.DEFAULT, false)
+     .setHandleAudioBecomingNoisy(true)
++    // BOA: hold a partial wake lock and a Wi-Fi lock while playing, so a
++    // stream keeps flowing with the screen off.
++    .setWakeMode(C.WAKE_MODE_NETWORK)
+     .setSeekForwardIncrementMs(SEEK_JUMP_INTERVAL_MS)
+     .setSeekBackIncrementMs(SEEK_JUMP_INTERVAL_MS)
+     .apply {
+@@ -72,6 +79,21 @@ class AudioPlayer(
+   override val isLive: Boolean
+     get() = ref.isCurrentMediaItemLive
+ 
++  // BOA: show next/previous on the lock screen when JS asks for them
++  // (showNextTrack / showPreviousTrack) and let JS pick the station.
++  override val supportsNextTrack: Boolean
++    get() = true
++  override val supportsPreviousTrack: Boolean
++    get() = true
++
++  override fun nextTrack() {
++    emit(REMOTE_NEXT_TRACK)
++  }
++
++  override fun previousTrack() {
++    emit(REMOTE_PREVIOUS_TRACK)
++  }
++
+   val currentOffsetFromLive: Double?
+     get() {
+       val offset = ref.currentLiveOffset

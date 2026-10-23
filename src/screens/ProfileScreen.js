@@ -125,7 +125,7 @@ export default function ProfileScreen({ navigation }) {
               <Pressable
                 key={station.id}
                 onPress={() => {
-                  player.play(station);
+                  player.play(station, user.saved);
                   navigation.navigate('Radio', { station });
                 }}
                 accessibilityRole="button"

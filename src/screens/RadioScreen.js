@@ -26,7 +26,7 @@ import Vinyl from '../components/Vinyl';
 import { useMiniPlayerSpace } from '../components/MiniPlayer';
 import useLayout from '../hooks/useLayout';
 import { useDisplay, useIdle } from '../context/DisplayContext';
-import { DISPLAY_BUTTON_SPACE } from '../components/display/DisplayMenu';
+import { DISPLAY_BUTTON_WIDTH } from '../components/display/DisplayMenu';
 import StationLogo from '../components/StationLogo';
 import Reactions from '../components/Reactions';
 import { GoldBadge, PulseDot } from '../components/ui';
@@ -288,6 +288,14 @@ export default function RadioScreen({ route, navigation }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stations.map((s) => s.id).join('|')]);
 
+  // The records on screen are the queue for next/previous station (unless
+  // something from another list is playing).
+  const queueKey = stations.map((s) => s.id).join('|');
+  useEffect(() => {
+    player.setQueue(stations);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queueKey]);
+
   // A station that still fails after the engine's retries is dead for this
   // session; one that plays is alive again (e.g. after a manual retry).
   const playingId = player.current?.kind === 'radio' ? player.current.id : null;
@@ -353,7 +361,9 @@ export default function RadioScreen({ route, navigation }) {
     const where = [station.country, station.bitrate ? `${station.bitrate} kbps` : null].filter(Boolean).join(' · ');
     switch (statusFor(station)) {
       case 'loading':
-        return player.retry ? `Reconnecting… (${player.retry}/${MAX_RETRIES})` : 'Tuning in…';
+        if (!player.retry) return 'Tuning in…';
+        // A stream that was playing keeps reconnecting past the quick retries.
+        return player.retry <= MAX_RETRIES ? `Reconnecting… (${player.retry}/${MAX_RETRIES})` : 'Reconnecting…';
       case 'playing':
         return where ? `On air · ${where}` : 'On air';
       case 'paused':
@@ -463,7 +473,7 @@ export default function RadioScreen({ route, navigation }) {
         style={[
           styles.header,
           { paddingTop: insets.top + space.lg },
-          unfolded && { paddingRight: space.xl + DISPLAY_BUTTON_SPACE },
+          unfolded && { paddingRight: space.xl + DISPLAY_BUTTON_WIDTH },
         ]}
       >
         <Text style={styles.title}>Radio</Text>

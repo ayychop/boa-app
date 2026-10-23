@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useIsFocused } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
   Easing,
@@ -28,12 +29,13 @@ import { Button, Fog, LogoWatermark, PulseDot, SectionHeader, Slate, Tappable, V
 import useBottomSpace from '../hooks/useBottomSpace';
 import useLayout from '../hooks/useLayout';
 import { useDisplay } from '../context/DisplayContext';
-import { DISPLAY_BUTTON_SPACE } from '../components/display/DisplayMenu';
+import { DISPLAY_BUTTON_SPACE, DISPLAY_BUTTON_WIDTH } from '../components/display/DisplayMenu';
+import MiniPlayer, { useMiniPlayerSpace } from '../components/MiniPlayer';
 import { colors, fonts, space, type } from '../theme';
 
 const METAL = ['#F2F2F4', '#8A8A90', '#FAFAFB', '#5E5E64', '#D9D9DD'];
 
-function Hero({ production, width, height, clearRight, bottomInset = 0 }) {
+function Hero({ production, width, height, clearRight, bottomInset = 0, topInset = 0 }) {
   const insets = useSafeAreaInsets();
   const media = useMedia();
   const reduceMotion = useReducedMotion();
@@ -71,7 +73,7 @@ function Hero({ production, width, height, clearRight, bottomInset = 0 }) {
       <Viewfinder inset={16} />
 
       <View
-        style={[styles.heroTop, { top: insets.top + space.xl }, clearRight && { right: space.xl + 8 + DISPLAY_BUTTON_SPACE }]}
+        style={[styles.heroTop, { top: insets.top + space.xl + topInset }, clearRight && { right: space.xl + 8 + DISPLAY_BUTTON_WIDTH }]}
       >
         <View>
           <View style={styles.logoRow}>
@@ -156,6 +158,8 @@ export default function HomeScreen({ navigation }) {
   const { split, unfolded } = useDisplay();
   const paneWidth = split ? width / 2 : width;
   const bottom = useBottomSpace(space.xxl);
+  const miniPlayerSpace = useMiniPlayerSpace();
+  const isFocused = useIsFocused();
   const player = usePlayer();
   const media = useMedia();
   const forms = useForms();
@@ -174,7 +178,7 @@ export default function HomeScreen({ navigation }) {
   }, []);
 
   const playStation = (station) => {
-    player.play(station);
+    player.play(station, trending);
     navigation.navigate('Radio', { genre: station.genre, station });
   };
 
@@ -316,20 +320,41 @@ export default function HomeScreen({ navigation }) {
     </>
   );
 
+  // On Home the mini player docks at the top, under the status bar, and the
+  // hero's header moves down to make room for it.
+  const topInset = player.current ? miniPlayerSpace : 0;
+  // Only while Home is the tab on screen; elsewhere the tab bar carries it,
+  // and a second copy would poll what's playing twice.
+  const topPlayer = isFocused && (
+    <View
+      pointerEvents="box-none"
+      style={[
+        styles.topPlayer,
+        { top: insets.top + space.sm, height: miniPlayerSpace },
+        // Split View: over the hero pane. Full: clear of the display pill.
+        split ? { right: paneWidth } : { right: unfolded ? DISPLAY_BUTTON_WIDTH : 0 },
+      ]}
+    >
+      <MiniPlayer placement="top" onOpenRadio={() => navigation.navigate('Radio')} />
+    </View>
+  );
+
   if (split) {
     return (
       <Animated.View key="split" entering={FadeIn.duration(360)} style={[styles.screen, styles.split]}>
         <View style={{ width: paneWidth }}>
-          <Hero production={featuredProduction} width={paneWidth} height={height} bottomInset={bottom - space.xxl} />
+          <Hero production={featuredProduction} width={paneWidth} height={height} bottomInset={bottom - space.xxl} topInset={topInset} />
         </View>
         <Animated.ScrollView
           entering={FadeInDown.springify().damping(20).stiffness(150)}
           style={{ width: paneWidth }}
-          contentContainerStyle={{ paddingTop: insets.top + space.xl, paddingBottom: bottom }}
+          // Starts below the display pill in the top-right corner.
+          contentContainerStyle={{ paddingTop: insets.top + space.xl + DISPLAY_BUTTON_SPACE, paddingBottom: bottom }}
           showsVerticalScrollIndicator={false}
         >
           {sections}
         </Animated.ScrollView>
+        {topPlayer}
       </Animated.View>
     );
   }
@@ -337,9 +362,10 @@ export default function HomeScreen({ navigation }) {
   return (
     <Animated.View key="full" entering={FadeIn.duration(360)} style={styles.screen}>
       <ScrollView contentContainerStyle={{ paddingBottom: bottom }} showsVerticalScrollIndicator={false}>
-        <Hero production={featuredProduction} width={width} height={heroHeight} clearRight={unfolded} />
+        <Hero production={featuredProduction} width={width} height={heroHeight} clearRight={unfolded} topInset={topInset} />
         {sections}
       </ScrollView>
+      {topPlayer}
     </Animated.View>
   );
 }
@@ -347,6 +373,7 @@ export default function HomeScreen({ navigation }) {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   split: { flexDirection: 'row' },
+  topPlayer: { position: 'absolute', left: 0, right: 0, zIndex: 20 },
   heroTop: {
     position: 'absolute',
     left: space.xl + 8,

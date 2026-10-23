@@ -142,9 +142,11 @@ const Profile = withTransition(ProfileScreen);
 // Tab bar and mini player float over the screens so content scrolls beneath
 // the blur; screens pad themselves with useBottomSpace().
 function FloatingTabBar(props) {
+  // Home docks the mini player at its top instead, clear of its content.
+  const onHome = props.state.routes[props.state.index]?.name === 'Home';
   return (
     <View style={styles.tabBarWrap} pointerEvents="box-none">
-      <MiniPlayer onOpenRadio={() => props.navigation.navigate('Radio')} />
+      {!onHome && <MiniPlayer onOpenRadio={() => props.navigation.navigate('Radio')} />}
       <BottomTabBar {...props} />
     </View>
   );
@@ -159,16 +161,19 @@ function TabBarBackground() {
   );
 }
 
-// Android's gesture bar needs about this much clear space even on the rare
-// device that reports no bottom inset in edge-to-edge mode.
-const ANDROID_MIN_BOTTOM_INSET = 16;
+// Android's gesture bar needs at least this much clear space, even on a
+// device that reports no bottom inset in edge-to-edge mode, plus some
+// breathing room so the labels never sit right on the bar.
+const ANDROID_MIN_BOTTOM_INSET = 20;
+const ANDROID_BOTTOM_COMFORT = 10;
 
 function MainTabs({ narrow }) {
   const insets = useSafeAreaInsets();
   const { side, short } = useLayout();
   // The tab bar pads itself by this, so its icons and labels always sit
   // above the system gesture bar or navigation buttons.
-  const bottomInset = Math.max(insets.bottom, Platform.OS === 'android' ? ANDROID_MIN_BOTTOM_INSET : 0);
+  const bottomInset =
+    Platform.OS === 'android' ? Math.max(insets.bottom, ANDROID_MIN_BOTTOM_INSET) + ANDROID_BOTTOM_COMFORT : insets.bottom;
   return (
     <NavigationContainer theme={navTheme}>
       <StatusBar style="light" />
@@ -178,6 +183,9 @@ function MainTabs({ narrow }) {
         safeAreaInsets={{ bottom: bottomInset }}
         screenOptions={({ route }) => ({
           headerShown: false,
+          // Tabs you aren't looking at are frozen: folding or unfolding the
+          // phone only re-renders the tab on screen.
+          freezeOnBlur: true,
           tabBarActiveTintColor: colors.gold,
           tabBarInactiveTintColor: colors.textFaint,
           tabBarStyle: {

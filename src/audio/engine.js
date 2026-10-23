@@ -17,6 +17,7 @@ let failedGen = -1;
 // attempt (or an earlier station) can never trigger a retry for this one.
 let gen = 0;
 const listeners = new Set();
+let remote = null; // { next, previous } from the player context
 
 // Some streams never send data and never error either; don't spin forever.
 const CONNECT_TIMEOUT_MS = 9000;
@@ -69,6 +70,8 @@ function setMediaSession(item) {
   const onDemand = !isLive(item);
   ms.setActionHandler('seekbackward', onDemand ? () => skip(-15) : null);
   ms.setActionHandler('seekforward', onDemand ? () => skip(30) : null);
+  ms.setActionHandler('nexttrack', !onDemand && remote ? () => remote.next?.() : null);
+  ms.setActionHandler('previoustrack', !onDemand && remote ? () => remote.previous?.() : null);
 }
 
 function armConnectTimeout(attempt) {
@@ -181,6 +184,11 @@ export function setRate(rate) {
   const el = getAudio();
   if (el && !isLive(current)) el.playbackRate = rate;
   emit({ rate });
+}
+
+/** Handlers for next/previous station from the browser's media controls. */
+export function setRemoteControls(handlers) {
+  remote = handlers;
 }
 
 export function subscribe(fn) {

@@ -4,7 +4,8 @@ import { MAX_RETRIES } from './engine';
 export function describePlayback(status, trackTitle, retry = 0) {
   switch (status) {
     case 'loading':
-      return retry ? `Reconnecting… (${retry}/${MAX_RETRIES})` : 'Tuning in…';
+      if (!retry) return 'Tuning in…';
+      return retry <= MAX_RETRIES ? `Reconnecting… (${retry}/${MAX_RETRIES})` : 'Reconnecting…';
     case 'playing':
       return trackTitle || 'Live Broadcast';
     case 'paused':

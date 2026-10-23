@@ -2,7 +2,9 @@ import { useEffect } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   FadeInDown,
+  FadeInUp,
   FadeOutDown,
+  FadeOutUp,
   useAnimatedStyle,
   useReducedMotion,
   useSharedValue,
@@ -56,7 +58,12 @@ function ProgressLine({ tint }) {
   );
 }
 
-export default function MiniPlayer({ onOpenRadio }) {
+/**
+ * The floating now-playing pill. `placement="bottom"` (the default) rides on
+ * top of the tab bar; `placement="top"` docks at the top of its container,
+ * as on Home, sliding in from above.
+ */
+export default function MiniPlayer({ onOpenRadio, placement = 'bottom' }) {
   const { current, status, trackTitle, isPlaying, toggle, retry } = usePlayer();
   const media = useMedia();
   const reduceMotion = useReducedMotion();
@@ -95,9 +102,9 @@ export default function MiniPlayer({ onOpenRadio }) {
 
   return (
     <Animated.View
-      entering={FadeInDown.springify().damping(17).stiffness(170)}
-      exiting={FadeOutDown.duration(180)}
-      style={[styles.wrap, { marginBottom: m.margin }]}
+      entering={(placement === 'top' ? FadeInUp : FadeInDown).springify().damping(17).stiffness(170)}
+      exiting={(placement === 'top' ? FadeOutUp : FadeOutDown).duration(180)}
+      style={placement === 'top' ? styles.wrapTop : [styles.wrap, { marginBottom: m.margin }]}
       pointerEvents="box-none"
     >
       <Animated.View style={[styles.shell, swellStyle]}>
@@ -171,6 +178,13 @@ const styles = StyleSheet.create({
     left: space.md,
     right: space.md,
     bottom: '100%',
+    alignItems: 'center',
+  },
+  wrapTop: {
+    position: 'absolute',
+    left: space.md,
+    right: space.md,
+    top: 0,
     alignItems: 'center',
   },
   // Shadow lives on an unclipped shell; the glass inside clips its blur.

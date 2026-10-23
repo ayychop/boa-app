@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import * as engine from '../audio/engine';
 import { haptics } from '../utils/haptics';
 
@@ -26,12 +26,48 @@ export function PlayerProvider({ children }) {
     [],
   );
 
-  // Every play/pause is a user action, so each gets one light tap.
-  const play = useCallback((item) => {
-    haptics.tap();
+  // The list the current station was played from (the radio carousel,
+  // Home's trending row, your library): next/previous step through it.
+  const queue = useRef([]);
+  const currentRef = useRef(null);
+  currentRef.current = current;
+
+  const start = useCallback((item) => {
     setCurrent(item);
     engine.play(item);
   }, []);
+
+  // Every play/pause is a user action, so each gets one light tap. Pass the
+  // list it came from to make it the queue for next/previous.
+  const play = useCallback(
+    (item, list) => {
+      haptics.tap();
+      if (list?.length) queue.current = list.filter((s) => s.kind === 'radio');
+      start(item);
+    },
+    [start],
+  );
+
+  /** Offer a station list as the queue, unless something else is playing. */
+  const setQueue = useCallback((list) => {
+    const radio = (list || []).filter((s) => s.kind === 'radio');
+    const playing = currentRef.current;
+    if (!playing || radio.some((s) => s.id === playing.id)) queue.current = radio;
+  }, []);
+
+  // Next/previous station, from the lock screen, notification, headset or
+  // car: wraps round the queue. Only for live radio.
+  useEffect(() => {
+    const step = (delta) => {
+      const playing = currentRef.current;
+      const list = queue.current;
+      if (playing?.kind !== 'radio' || list.length < 2) return;
+      const i = list.findIndex((s) => s.id === playing.id);
+      start(list[(Math.max(i, 0) + delta + list.length) % list.length]);
+    };
+    engine.setRemoteControls({ next: () => step(1), previous: () => step(-1) });
+    return () => engine.setRemoteControls(null);
+  }, [start]);
 
   const pause = useCallback(() => {
     haptics.tap();
@@ -62,11 +98,12 @@ export function PlayerProvider({ children }) {
       play,
       pause,
       toggle,
+      setQueue,
       seek: engine.seek,
       skip: engine.skip,
       setRate: engine.setRate,
     }),
-    [current, core, isPlaying, play, pause, toggle],
+    [current, core, isPlaying, play, pause, toggle, setQueue],
   );
 
   return (
