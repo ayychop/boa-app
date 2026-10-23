@@ -190,7 +190,7 @@ export default function HomeScreen({ navigation }) {
       <View style={styles.section}>
         <SectionHeader
           index="01"
-          kicker="R&B · Hip Hop · Ghana"
+          kicker="R&B · Hip Hop · Ghana · Nigeria"
           title="Trending on BOA Radio"
           action="Open radio"
           onAction={() => navigation.navigate('Radio')}
@@ -331,11 +331,13 @@ export default function HomeScreen({ navigation }) {
       style={[
         styles.topPlayer,
         { top: insets.top + space.sm, height: miniPlayerSpace },
-        // Split View: over the hero pane. Full: clear of the display pill.
-        split ? { right: paneWidth } : { right: unfolded ? DISPLAY_BUTTON_WIDTH : 0 },
+        // Unfolded (either layout): centred on the whole screen, inset the
+        // same on both sides so it stays clear of the display pill. Folded,
+        // it runs edge to edge.
+        unfolded && { left: DISPLAY_BUTTON_WIDTH + space.lg, right: DISPLAY_BUTTON_WIDTH + space.lg },
       ]}
     >
-      <MiniPlayer placement="top" onOpenRadio={() => navigation.navigate('Radio')} />
+      <MiniPlayer placement="top" maxWidth={unfolded ? 460 : undefined} onOpenRadio={() => navigation.navigate('Radio')} />
     </View>
   );
 

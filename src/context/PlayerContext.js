@@ -52,17 +52,23 @@ export function PlayerProvider({ children }) {
 
   // Next/previous station, from the lock screen, notification, headset or
   // car: wraps round the queue. Only for live radio.
-  useEffect(() => {
-    const step = (delta) => {
+  // Zen Mode's own controls use the same steps.
+  const step = useCallback(
+    (delta) => {
       const playing = currentRef.current;
       const list = queue.current;
       if (playing?.kind !== 'radio' || list.length < 2) return;
       const i = list.findIndex((s) => s.id === playing.id);
       start(list[(Math.max(i, 0) + delta + list.length) % list.length]);
-    };
-    engine.setRemoteControls({ next: () => step(1), previous: () => step(-1) });
+    },
+    [start],
+  );
+  const next = useCallback(() => step(1), [step]);
+  const previous = useCallback(() => step(-1), [step]);
+  useEffect(() => {
+    engine.setRemoteControls({ next, previous });
     return () => engine.setRemoteControls(null);
-  }, [start]);
+  }, [next, previous]);
 
   const pause = useCallback(() => {
     haptics.tap();
@@ -94,11 +100,15 @@ export function PlayerProvider({ children }) {
       play,
       pause,
       toggle,
+      next,
+      previous,
+      // Live radio with somewhere to step to.
+      canStep: current?.kind === 'radio' && queue.current.length > 1,
       seek: engine.seek,
       skip: engine.skip,
       setRate: engine.setRate,
     }),
-    [current, core, isPlaying, play, pause, toggle],
+    [current, core, isPlaying, play, pause, toggle, next, previous],
   );
 
   return (

@@ -11,6 +11,7 @@ import PodcastCover from '../PodcastCover';
 import Scrubber from '../Scrubber';
 import { Slate, Tappable } from '../ui';
 import { colors, fonts, radius, space, type } from '../../theme';
+import { useOverlay } from '../../utils/overlays';
 
 const RATES = [1, 1.25, 1.5, 2, 0.75];
 
@@ -40,6 +41,7 @@ export default function PodcastPlayer({ podcast, onClose }) {
   const insets = useSafeAreaInsets();
   const player = usePlayer();
   const { position, duration } = usePlaybackProgress();
+  useOverlay(true);
   const reduceMotion = useReducedMotion();
   const coverScale = useSharedValue(1);
 

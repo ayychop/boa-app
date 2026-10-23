@@ -9,6 +9,7 @@ import Poster, { metaLine } from '../Poster';
 import { Button, Slate, Viewfinder } from '../ui';
 import { fillFrame, toSource } from '../HeroArt';
 import { colors, fonts, space, type } from '../../theme';
+import { useOverlay } from '../../utils/overlays';
 
 // Default room art when a production has none of its own.
 const ROOM_ART = require('../../../assets/images/mind-states-backdrop.jpg');
@@ -20,6 +21,7 @@ const ROOM_ART = require('../../../assets/images/mind-states-backdrop.jpg');
 export default function ScreeningRoom({ screening, onClose, onSwitch }) {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
+  useOverlay(!!screening);
   if (!screening) return null;
 
   const { production, kind, episode } = screening;

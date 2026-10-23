@@ -40,7 +40,7 @@ export default function ProfileScreen({ navigation }) {
   // Grouped lists, as on a phone; Split View turns each list into a grid of
   // tiles (two columns, three once there's room).
   const { width } = useLayout();
-  const { split: wide, unfolded } = useDisplay();
+  const { split: wide, unfolded, enterZen } = useDisplay();
   const inner = Math.min(width, 1100) - space.xl * 2;
   const columns = inner >= 960 ? 3 : 2;
   const tileWidth = Math.floor((inner - GRID_GAP * (columns - 1)) / columns);
@@ -48,6 +48,7 @@ export default function ProfileScreen({ navigation }) {
   const row = wide ? [styles.link, styles.tile, { width: tileWidth }] : styles.link;
 
   const actions = [
+    { icon: 'sparkles-outline', label: 'Zen Mode', detail: 'A screensaver for what you are playing', onPress: () => enterZen('active') },
     { icon: 'person-add-outline', label: 'Get seen', detail: 'Submit as talent', onPress: forms.openGetSeen },
     { icon: 'chatbubble-ellipses-outline', label: 'Contact BOA', detail: 'Bookings, press, hello', onPress: () => forms.openContact() },
     // Still on the website until the access page has in-app content.

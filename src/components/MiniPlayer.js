@@ -63,7 +63,7 @@ function ProgressLine({ tint }) {
  * top of the tab bar; `placement="top"` docks at the top of its container,
  * as on Home, sliding in from above.
  */
-export default function MiniPlayer({ onOpenRadio, placement = 'bottom' }) {
+export default function MiniPlayer({ onOpenRadio, placement = 'bottom', maxWidth }) {
   const { current, status, trackTitle, isPlaying, toggle, retry } = usePlayer();
   const media = useMedia();
   const reduceMotion = useReducedMotion();
@@ -107,7 +107,7 @@ export default function MiniPlayer({ onOpenRadio, placement = 'bottom' }) {
       style={placement === 'top' ? styles.wrapTop : [styles.wrap, { marginBottom: m.margin }]}
       pointerEvents="box-none"
     >
-      <Animated.View style={[styles.shell, swellStyle]}>
+      <Animated.View style={[styles.shell, maxWidth && { maxWidth }, swellStyle]}>
         <Animated.View pointerEvents="none" style={[styles.halo, haloStyle]} />
         <View style={[styles.pill, { height: m.height }]}>
           {/* Frosted glass: heavy blur, a faint tint, a top sheen, a hairline. */}

@@ -25,8 +25,9 @@ import GlowField, { FogPlane } from '../components/GlowField';
 import Vinyl from '../components/Vinyl';
 import { useMiniPlayerSpace } from '../components/MiniPlayer';
 import useLayout from '../hooks/useLayout';
-import { useDisplay, useIdle } from '../context/DisplayContext';
+import { useDisplay } from '../context/DisplayContext';
 import { DISPLAY_BUTTON_WIDTH } from '../components/display/DisplayMenu';
+import { ZenIcon } from '../components/icons';
 import StationLogo from '../components/StationLogo';
 import Reactions from '../components/Reactions';
 import { GoldBadge, PulseDot } from '../components/ui';
@@ -36,8 +37,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors, fonts, radius, space } from '../theme';
 
 const TEXT_BLOCK = 150;
-// Untouched this long while a station plays, the Radio tab drifts into Zen.
-const ZEN_AFTER = 15000;
 const QUEUE_LENGTH = 6;
 
 // One scrolling row in the full-width layout; in Split View's side pane they
@@ -343,10 +342,6 @@ export default function RadioScreen({ route, navigation }) {
   const discSize = stage ? Math.max(0, Math.round(Math.min(recordWidth * 0.7, (stage.height - TEXT_BLOCK) * 0.86, 440))) : 0;
   const compact = recordWidth < 420;
 
-  // Screensaver: a station on air and nobody touching the screen.
-  const onAir = player.current?.kind === 'radio' && player.status === 'playing';
-  useIdle(ZEN_AFTER, isFocused && onAir && !display.zen, display.enterZen);
-
   const statusFor = (station) => (player.current?.id === station.id ? player.status : null);
 
   const metaFor = (station) => {
@@ -470,12 +465,26 @@ export default function RadioScreen({ route, navigation }) {
         ]}
       >
         <Text style={styles.title}>Radio</Text>
-        {data.status === 'ready' && stations.length > 0 && (
-          <Text style={styles.counter}>
-            {String(index + 1).padStart(2, '0')}
-            <Text style={{ color: colors.textFaint }}> / {String(stations.length).padStart(2, '0')}</Text>
-          </Text>
-        )}
+        <View style={styles.headerRight}>
+          {data.status === 'ready' && stations.length > 0 && (
+            <Text style={styles.counter}>
+              {String(index + 1).padStart(2, '0')}
+              <Text style={{ color: colors.textFaint }}> / {String(stations.length).padStart(2, '0')}</Text>
+            </Text>
+          )}
+          {/* Unfolded screens start Zen Mode from the display pill instead. */}
+          {!unfolded && (
+            <Pressable
+              onPress={() => display.enterZen('active')}
+              hitSlop={10}
+              accessibilityRole="button"
+              accessibilityLabel="Start Zen Mode"
+              style={({ pressed }) => [styles.zenButton, pressed && { transform: [{ scale: 0.92 }] }]}
+            >
+              <ZenIcon size={16} color={colors.text} />
+            </Pressable>
+          )}
+        </View>
       </View>
       {!split && pills}
 
@@ -529,12 +538,23 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg, overflow: 'hidden' },
   header: {
     flexDirection: 'row',
-    alignItems: 'baseline',
+    alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: space.xl,
     paddingBottom: space.md,
   },
   title: { fontFamily: fonts.semibold, color: colors.text, fontSize: 28, letterSpacing: -1 },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  zenButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(243,239,232,0.07)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.borderStrong,
+  },
   counter: { fontFamily: fonts.mono, color: colors.textMuted, fontSize: 12, letterSpacing: 1.5 },
   pillsScroll: { flexGrow: 0, flexShrink: 0 },
   pills: { paddingHorizontal: space.lg, gap: 2, alignItems: 'center' },

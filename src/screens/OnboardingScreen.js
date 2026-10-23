@@ -3,7 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } fr
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
   Easing,
-  FadeInDown,
+  FadeIn,
   useAnimatedStyle,
   useReducedMotion,
   useSharedValue,
@@ -31,22 +31,30 @@ function VibePill({ vibe, selected, onToggle, index }) {
   const scale = useSharedValue(1);
   const style = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
   const press = () => {
+    onToggle(vibe.id);
     haptics.selection();
     // Little pop on every toggle, like a chip snapping into place.
     scale.value = withSequence(withTiming(0.92, { duration: 80 }), withSpring(1, { duration: 380, dampingRatio: 0.45 }));
-    onToggle(vibe.id);
   };
+  // Three layers, each with one job: the entrance (a layout animation) on
+  // the outside, the Pressable that owns the touch, and the pop (an animated
+  // transform) on a face inside it that never takes touches. A layout
+  // animation and an animated transform on one view fight over it, which
+  // can leave the chip drawn in one place and touchable in another.
   return (
-    <Animated.View entering={FadeInDown.delay(120 + index * 70).springify().damping(18)} style={style}>
+    <Animated.View entering={FadeIn.delay(120 + index * 70).duration(420)}>
       <Pressable
         onPress={press}
+        hitSlop={6}
+        pointerEvents="auto"
         accessibilityRole="checkbox"
         accessibilityState={{ checked: selected }}
         accessibilityLabel={vibe.label}
-        style={[styles.pill, selected && styles.pillOn]}
       >
-        <Ionicons name={selected ? 'checkmark-circle' : vibe.icon} size={20} color={selected ? colors.bg : colors.gold} />
-        <Text style={[styles.pillText, selected && { color: colors.bg }]}>{vibe.label}</Text>
+        <Animated.View pointerEvents="none" style={[styles.pill, selected && styles.pillOn, style]}>
+          <Ionicons name={selected ? 'checkmark-circle' : vibe.icon} size={20} color={selected ? colors.bg : colors.gold} />
+          <Text style={[styles.pillText, selected && { color: colors.bg }]}>{vibe.label}</Text>
+        </Animated.View>
       </Pressable>
     </Animated.View>
   );
@@ -71,7 +79,7 @@ function Spotlight({ width, height }) {
   const r = Math.max(width, height) * 0.55;
   return (
     <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, style]}>
-      <Svg width={width} height={height}>
+      <Svg width={width} height={height} pointerEvents="none">
         <Defs>
           <RadialGradient id="spot" cx={width / 2} cy={height * SPOT_Y} r={r} gradientUnits="userSpaceOnUse">
             <Stop offset="0" stopColor={colors.gold} stopOpacity={0.17} />
@@ -91,7 +99,7 @@ function Spotlight({ width, height }) {
 function Vignette({ width, height }) {
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-      <Svg width={width} height={height}>
+      <Svg width={width} height={height} pointerEvents="none">
         <Defs>
           <RadialGradient id="vig" cx={width / 2} cy={height * 0.55} r={Math.hypot(width, height) * 0.6} gradientUnits="userSpaceOnUse">
             <Stop offset="0.35" stopColor="#000" stopOpacity={0} />
@@ -136,11 +144,12 @@ export default function OnboardingScreen() {
           above it; it scrolls when a phone on its side is too short. */}
       <ScrollView
         style={styles.scroll}
+        keyboardShouldPersistTaps="handled"
         contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + space.xxl }]}
         showsVerticalScrollIndicator={false}
       >
         <View style={{ width: contentWidth }}>
-          <Animated.View key="vibes" entering={FadeInDown.springify().damping(20)}>
+          <Animated.View key="vibes" entering={FadeIn.duration(500)} pointerEvents="box-none">
             <Slate dot color={colors.text}>The vibe check</Slate>
             <Text style={styles.headline}>
               What's your <Text style={[type.serif, styles.serifInline]}>vibe?</Text>
@@ -168,13 +177,14 @@ const styles = StyleSheet.create({
   dots: { flexDirection: 'row', gap: 6 },
   dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: 'rgba(243,239,232,0.25)' },
   dotOn: { width: 22, backgroundColor: colors.gold },
-  scroll: { flex: 1 },
+  scroll: { flex: 1, zIndex: 2 },
   body: { flexGrow: 1, justifyContent: 'center', alignItems: 'center' },
   headline: { fontFamily: fonts.semibold, fontSize: 46, lineHeight: 50, letterSpacing: -2, color: colors.text, marginTop: space.md },
   serifInline: { fontSize: 50, letterSpacing: -1 },
   lede: { marginTop: space.md, maxWidth: 420 },
-  cta: { marginTop: space.xl, alignSelf: 'stretch' },
-  pills: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, marginTop: space.xl },
+  // A generous pause between the choices and the commit.
+  cta: { marginTop: space.xxxl + space.lg, alignSelf: 'stretch' },
+  pills: { flexDirection: 'row', flexWrap: 'wrap', gap: space.md, marginTop: space.xxl },
   pill: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -188,5 +198,5 @@ const styles = StyleSheet.create({
   },
   pillOn: { backgroundColor: colors.gold, borderColor: colors.gold, boxShadow: '0px 8px 24px rgba(226,168,75,0.35)' },
   pillText: { fontFamily: fonts.semibold, fontSize: 15, color: colors.text },
-  hint: { alignSelf: 'center', marginTop: space.md, fontFamily: fonts.medium, fontSize: 13, color: colors.textFaint },
+  hint: { alignSelf: 'center', marginTop: space.lg, fontFamily: fonts.medium, fontSize: 13, color: colors.textFaint },
 });

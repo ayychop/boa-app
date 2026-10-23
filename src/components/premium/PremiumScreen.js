@@ -8,6 +8,7 @@ import { useUser } from '../../context/UserContext';
 import BoaLogo from '../BoaLogo';
 import { Button, Fog, GoldBadge, Slate, Viewfinder } from '../ui';
 import { colors, fonts, radius, space, type } from '../../theme';
+import { useOverlay } from '../../utils/overlays';
 
 export const PRICE = '£2.99';
 
@@ -25,6 +26,7 @@ export default function PremiumScreen({ open, onClose }) {
   const { width } = useWindowDimensions();
   const { isPremium, subscribe, cancelPremium } = useUser();
   const [justJoined, setJustJoined] = useState(false);
+  useOverlay(open);
   if (!open) return null;
 
   const close = () => {
