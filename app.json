@@ -11,7 +11,8 @@
       "infoPlist": {
         "UIBackgroundModes": [
           "audio"
-        ]
+        ],
+        "NSLocationWhenInUseUsageDescription": "BOA uses your approximate location to show local weather."
       }
     },
     "android": {
@@ -26,7 +27,9 @@
         "android.permission.FOREGROUND_SERVICE",
         "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
         "android.permission.POST_NOTIFICATIONS",
-        "android.permission.WAKE_LOCK"
+        "android.permission.WAKE_LOCK",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.SCHEDULE_EXACT_ALARM"
       ]
     },
     "web": {
@@ -87,13 +90,40 @@
         }
       ],
       "./plugins/withBoaWidget",
-      "expo-video"
+      "expo-video",
+      "expo-web-browser",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "BOA uses your approximate location to show local weather.",
+          "isAndroidBackgroundLocationEnabled": false
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Choose a photo for your BOA Creative Hub avatar.",
+          "cameraPermission": false
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "sounds": [
+            "./assets/sounds/alarm_bowl.wav",
+            "./assets/sounds/alarm_chimes.wav",
+            "./assets/sounds/alarm_classic.wav"
+          ],
+          "color": "#E2A84B"
+        }
+      ]
     ],
     "owner": "boanets-team",
     "extra": {
       "eas": {
         "projectId": "f08c9a51-4138-4a1f-a97e-74994582a693"
       }
-    }
+    },
+    "scheme": "boa"
   }
 }

@@ -11,7 +11,10 @@
 //     minute apart. Kept only if both were "Artist - Song" (the second read
 //     caught talk segments on several gospel stations, which are excluded).
 //  4. Played in a real browser (reached `canplay`) and logo checked; a dead
-//     logo is null so the app shows its generated label instead.
+//     logo is null so the app shows its generated label instead. Re-checked
+//     2026-10-24: dead or missing logos were replaced from the station's own
+//     site (og:image or touch icon) where one exists; the rest stay null and
+//     the record and lock screen fall back to the BOA logo.
 //
 // Optional `brandColor` forces the glow behind a station's record when its
 // logo can't be colour-extracted (dead logo, or one the browser can't read).
@@ -33,7 +36,7 @@ export const STATIONS_BY_GENRE = {
     // Fior - Undercover Lover -> Fior - Undercover Lover
     { kind: "radio", id: "68ec09af-5b30-46b4-acf1-71400cf95892", name: "Power Ace Radio", streamUrl: "https://music-station.live/radio/8030/radio.mp3", logo: "https://www.poweraceradio.com/favicon.ico", homepage: "https://www.poweraceradio.com/", country: "The United Kingdom Of Great Britain And Northern Ireland", countryCode: "GB", tags: ["afrobeats", "easy listening", "jazz", "reggae", "reggaetón", "soul"], codec: "MP3", bitrate: 128, votes: 34, metadataVerified: true },
     // Young Jonn - Lalala (feat. Rema) -> Young Jonn - Lalala (feat. Rema)
-    { kind: "radio", id: "1a9c8c79-2e17-11ea-aa0c-52543be04c81", name: "Urban Afro", streamUrl: "https://urbanhitblack.ice.infomaniak.ch/urbanhitblack128.mp3", logo: "https://bocir-prod-bucket.s3.eu-west-1.amazonaws.com/radios/urbanhit/images/favicon.vnd.microsoft.icon", homepage: "https://www.urbanhit.fr/", country: "France", countryCode: "FR", tags: [], codec: "MP3", bitrate: 128, votes: 501, metadataVerified: true },
+    { kind: "radio", id: "1a9c8c79-2e17-11ea-aa0c-52543be04c81", name: "Urban Afro", streamUrl: "https://urbanhitblack.ice.infomaniak.ch/urbanhitblack128.mp3", logo: null, homepage: "https://www.urbanhit.fr/", country: "France", countryCode: "FR", tags: [], codec: "MP3", bitrate: 128, votes: 501, metadataVerified: true },
     // Quavo, T.I. - Backwards -> Quavo, T.I. - Backwards
     { kind: "radio", id: "034f7bb9-cf06-4dad-b9ae-2e48d7cff8d9", name: "Mix97FM", streamUrl: "https://panel.radiocast.net/listen/mix97fm/radio.mp3", logo: "https://files.catbox.moe/r5yc9a.png", homepage: "https://www.mix97fm.ca/", country: "Canada", countryCode: "CA", tags: ["afrobeats", "amapiano", "hip-hop", "reggae", "rnb"], codec: "MP3", bitrate: 192, votes: 0, metadataVerified: true },
   ],
@@ -87,13 +90,13 @@ export const STATIONS_BY_GENRE = {
     // Sizzla - Sizzla - Wanting You -> - 20-Comforter - Morgan`s Heritage
     { kind: "radio", id: "d9d78c50-3766-4e74-8f67-1cd7d878f2f4", name: "Ghetto Vibes Radio", brandColor: "#D81B60", streamUrl: "https://www.radioking.com/play/ghetto-vibes-radio-station", logo: null, homepage: "https://app.site123.com/manager/wizard.php?wu=6293042d3b4b8-6293042d3b4f3-6293042d3b52d&from=dash#", country: "Jamaica", countryCode: "JM", tags: ["classic soul", "dancehall", "roots reggae", "soca"], codec: "MP3", bitrate: 128, votes: 1193, metadataVerified: true },
     // Wayne Wonder - Sensimedia Radio -> Moyann - Likkle Miss Riding Hood
-    { kind: "radio", id: "49da007a-d18c-4f03-b3ba-f1934079facc", name: "Sensimedia Dancehall Radio", streamUrl: "https://sensidancehall.radioca.st/;", logo: null, homepage: "http://sensi.media/dancehallradio", country: "The United States Of America", countryCode: "US", tags: ["dancehall", "dub", "reggae"], codec: "MP3", bitrate: 192, votes: 6, metadataVerified: true },
+    { kind: "radio", id: "49da007a-d18c-4f03-b3ba-f1934079facc", name: "Sensimedia Dancehall Radio", streamUrl: "https://sensidancehall.radioca.st/;", logo: "https://sensimedia.net/images/cards/radio.general.png", homepage: "http://sensi.media/dancehallradio", country: "The United States Of America", countryCode: "US", tags: ["dancehall", "dub", "reggae"], codec: "MP3", bitrate: 192, votes: 6, metadataVerified: true },
     // I-Octane - Party Start -> I-Octane - Party Start
     { kind: "radio", id: "208e60b9-2075-435a-9506-9787ef30928c", name: "RauteMusik Caribbean Wave", streamUrl: "https://streams.rautemusik.fm/caribbean-wave/mp3-192/?ref=radiobrowser", logo: "https://i.ibb.co/nL15LGH/cw.jpg", homepage: "https://www.rm.fm/caribbean-wave", country: "Germany", countryCode: "DE", tags: ["afro", "afro-latin music", "afro-pop", "afrobeats", "caribbean", "caribbean music"], codec: "MP3", bitrate: 192, votes: 132, metadataVerified: true },
     // Judah Tribe - Wild Locust & Honey -> Judah Tribe - Wild Locust & Honey
-    { kind: "radio", id: "1c49165c-70f5-4ef7-8743-633a0cdc6b5d", name: "Riddim Radio", streamUrl: "https://stream.zeno.fm/nw7xmuzasyduv", logo: "https://image2url.com/r2/default/images/1774831280375-8a6a2bb2-cba2-474d-a8de-c4efa22ac457.png", homepage: "https://riddimradio.com/", country: "Belize", countryCode: "BZ", tags: ["reggae"], codec: "MP3", bitrate: 128, votes: 28, metadataVerified: true },
+    { kind: "radio", id: "1c49165c-70f5-4ef7-8743-633a0cdc6b5d", name: "Riddim Radio", streamUrl: "https://stream.zeno.fm/nw7xmuzasyduv", logo: "https://riddimradio.com/uploads/6706d00312d96/site/1777217627_ef6f0bae49c0311848c7.png", homepage: "https://riddimradio.com/", country: "Belize", countryCode: "BZ", tags: ["reggae"], codec: "MP3", bitrate: 128, votes: 28, metadataVerified: true },
     // Soul Rebel Project ft Green Lion Crew & Lion Fiyah - Medi (Dirty) -> Soul Rebel Project ft
-    { kind: "radio", id: "4a091030-84e1-4195-a312-33304c76565b", name: "Simply Irie", streamUrl: "https://s6.autopo.st/proxy/simplyradio5?mp=/stream", logo: null, homepage: "https://simplyradio.com/stations/irie/", country: "The United States Of America", countryCode: "US", tags: ["dancehall", "reggae"], codec: "MP3", bitrate: 128, votes: 0, metadataVerified: true },
+    { kind: "radio", id: "4a091030-84e1-4195-a312-33304c76565b", name: "Simply Irie", streamUrl: "https://s6.autopo.st/proxy/simplyradio5?mp=/stream", logo: "https://simplyradio.com/og-beta101.png?v=20260908", homepage: "https://simplyradio.com/stations/irie/", country: "The United States Of America", countryCode: "US", tags: ["dancehall", "reggae"], codec: "MP3", bitrate: 128, votes: 0, metadataVerified: true },
   ],
   // Reggae
   "reggae": [
@@ -106,7 +109,7 @@ export const STATIONS_BY_GENRE = {
     // Med Tone All Stars - Rootical Skank -> Dudley Sibley & The Soul Gang - Love In Our Nation
     { kind: "radio", id: "6304532a-d3c9-4633-a85d-cf6c5c77524a", name: "Ruffneck Smille", streamUrl: "https://ruffneck-smille.stream.laut.fm/ruffneck-smille", logo: "https://assets.laut.fm/b542a9bc43da2edcec23dd4d7f71e3f6?t=_120x120", homepage: "https://laut.fm/ruffneck-smille", country: "Germany", countryCode: "DE", tags: ["reggae", "rocksteady", "ska"], codec: "MP3", bitrate: 128, votes: 2, metadataVerified: true },
     // Soul Rebel Project ft Green Lion Crew & Lion Fiyah - Medi (Dirty) -> Soul Rebel Project ft
-    { kind: "radio", id: "4a091030-84e1-4195-a312-33304c76565b", name: "Simply Irie", streamUrl: "https://s6.autopo.st/proxy/simplyradio5?mp=/stream", logo: null, homepage: "https://simplyradio.com/stations/irie/", country: "The United States Of America", countryCode: "US", tags: ["dancehall", "reggae"], codec: "MP3", bitrate: 128, votes: 0, metadataVerified: true },
+    { kind: "radio", id: "4a091030-84e1-4195-a312-33304c76565b", name: "Simply Irie", streamUrl: "https://s6.autopo.st/proxy/simplyradio5?mp=/stream", logo: "https://simplyradio.com/og-beta101.png?v=20260908", homepage: "https://simplyradio.com/stations/irie/", country: "The United States Of America", countryCode: "US", tags: ["dancehall", "reggae"], codec: "MP3", bitrate: 128, votes: 0, metadataVerified: true },
   ],
   // Jazz
   "jazz": [
@@ -123,7 +126,7 @@ export const STATIONS_BY_GENRE = {
     // Eddie Gomez - Mode VI -> Eddie Gomez - Mode VI
     { kind: "radio", id: "de4af2f0-6262-455c-9bd2-d44f1235bb6b", name: "Radio Art - Smooth Jazz", streamUrl: "https://live.radioart.com/fSmooth_jazz.mp3", logo: "https://www.radioart.com/images/channels/Smooth_jazz.jpg", homepage: "https://www.radioart.com/", country: "Greece", countryCode: "GR", tags: ["jazz", "music", "smooth", "smooth jazz"], codec: "MP3", bitrate: 96, votes: 148, metadataVerified: true },
     // Dr. Sax Love - Where's The Love -> Dr. Sax Love - Where's The Love
-    { kind: "radio", id: "c7d6315c-3bcd-40f6-a1b5-4bc1c8efecee", name: "Tropical Smooth Jazz", streamUrl: "https://servidor32-3.brlogic.com:8230/live", logo: "https://public-rf-upload.minhawebradio.net/47137/favicon/6c0b5a4fbc04adeb8117f49ccabeb70b.jpg", homepage: "https://tropicalsmoothjazz.com/", country: "Brazil", countryCode: "BR", tags: ["jazz", "smooth jazz", "suave"], codec: "MP3", bitrate: 128, votes: 817, metadataVerified: true },
+    { kind: "radio", id: "c7d6315c-3bcd-40f6-a1b5-4bc1c8efecee", name: "Tropical Smooth Jazz", streamUrl: "https://servidor32-3.brlogic.com:8230/live", logo: "https://platform-upload.cdn-brlogic.com/47137/fbplayer/e57eba87f9840b88b9f3db116416aebe.png", homepage: "https://tropicalsmoothjazz.com/", country: "Brazil", countryCode: "BR", tags: ["jazz", "smooth jazz", "suave"], codec: "MP3", bitrate: 128, votes: 817, metadataVerified: true },
   ],
   // Gospel
   "gospel": [
@@ -140,7 +143,7 @@ export const STATIONS_BY_GENRE = {
     // JOE METTLE - NYA GYIDI (HAVE FAITH) -> JOE METTLE - NYA GYIDI (HAVE FAITH)
     { kind: "radio", id: "40507470-ace1-4637-8548-8173d9aaa3df", name: "Air Gospel", streamUrl: "https://stream.zeno.fm/qkgrhugy908uv", logo: null, homepage: "https://airtv.world/", country: "Nigeria", countryCode: "NG", tags: [], codec: "MP3", bitrate: 128, votes: 213, metadataVerified: true },
     // James Wilson - Hallelujah -> James Wilson - Hallelujah
-    { kind: "radio", id: "d8a39607-5d36-4ccf-a1cb-bff53ea3109a", name: "Trace Gospel", streamUrl: "https://c25.radioboss.fm:8130/4rm8tzo7qirtv", logo: null, homepage: "https://c25.radioboss.fm:8130/4rm8tzo7qirtv", country: "Uganda", countryCode: "UG", tags: ["religious"], codec: "MP3", bitrate: 192, votes: 168, metadataVerified: true },
+    { kind: "radio", id: "d8a39607-5d36-4ccf-a1cb-bff53ea3109a", name: "Trace Gospel", streamUrl: "https://c25.radioboss.fm:8130/4rm8tzo7qirtv", logo: "https://www.trace.tv/icons/icon-512x512.png", homepage: "https://c25.radioboss.fm:8130/4rm8tzo7qirtv", country: "Uganda", countryCode: "UG", tags: ["religious"], codec: "MP3", bitrate: 192, votes: 168, metadataVerified: true },
   ],
 };
 
@@ -193,7 +196,7 @@ export const BACKUP_STATIONS_BY_GENRE = {
     // Allan Harris - I  Let A Song Get Out Of My .. -> Allan Harris - I  Let A Song Get Out Of M
     { kind: "radio", id: "a0481653-b63d-4ae2-9df3-0684c3313af6", name: "Jazzy Cool", streamUrl: "https://radio.musorok.org/listen/jazzycool/jazzycool.mp3", logo: "https://jazzy-backend-prod.melkweg.hu/jazzy-borito-fallback-cool.jpg", homepage: "https://jazzy.hu/", country: "Hungary", countryCode: "HU", tags: ["jazz", "smooth jazz"], codec: "MP3", bitrate: 192, votes: 215, metadataVerified: true },
     // Anders Ponsaing / Claus Højensgård - The Man with the Red Face -> DJ Maretimo - Cafe Inter
-    { kind: "radio", id: "02569932-0b3c-4938-9d3e-b00b2158d40b", name: "Airport Lounge Radio", streamUrl: "https://az1.mediacp.eu/listen/airport-lounge-radio/radio.mp3", logo: "https://favicon-generator.org/favicon-generator/htdocs/favicons/2023-12-16/9274e8a4803971186ff5c45359ab77a4.ico.png", homepage: "https://radiosuitenetwork.torontocast.stream/airport-lounge-radio/", country: "Canada", countryCode: "CA", tags: ["aereoporto", "airport", "ambient", "chill", "chillout", "easy listening"], codec: "MP3", bitrate: 128, votes: 2316, metadataVerified: true },
+    { kind: "radio", id: "02569932-0b3c-4938-9d3e-b00b2158d40b", name: "Airport Lounge Radio", streamUrl: "https://az1.mediacp.eu/listen/airport-lounge-radio/radio.mp3", logo: null, homepage: "https://radiosuitenetwork.torontocast.stream/airport-lounge-radio/", country: "Canada", countryCode: "CA", tags: ["aereoporto", "airport", "ambient", "chill", "chillout", "easy listening"], codec: "MP3", bitrate: 128, votes: 2316, metadataVerified: true },
   ],
   "gospel": [
     // MASTER`S PROMISE - PREPARE YE THE WAY(2017) -> LESTERS - HIS REDEEMED (2013)

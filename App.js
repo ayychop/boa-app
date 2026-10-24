@@ -3,6 +3,7 @@ import { StatusBar } from 'expo-status-bar';
 import { Platform, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { DarkTheme, NavigationContainer, useIsFocused } from '@react-navigation/native';
 import { BottomTabBar, createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, {
@@ -37,7 +38,10 @@ import { UserProvider, useUser } from './src/context/UserContext';
 import { PremiumProvider } from './src/context/PremiumContext';
 import { SleepTimerProvider } from './src/context/SleepTimerContext';
 import { ZenProvider, useZen } from './src/context/ZenContext';
-import { navigationRef } from './src/navigation/ref';
+import { WeatherProvider } from './src/context/WeatherContext';
+import { AlarmProvider, useAlarms } from './src/context/AlarmContext';
+import { HubProvider } from './src/context/HubContext';
+import { currentTab, navigationRef, openPage } from './src/navigation/ref';
 import OnboardingScreen from './src/screens/OnboardingScreen';
 import Intro from './src/components/Intro';
 import MiniPlayer from './src/components/MiniPlayer';
@@ -48,6 +52,15 @@ import ZenScreen from './src/screens/ZenScreen';
 import OriginalsScreen from './src/screens/OriginalsScreen';
 import TalentScreen from './src/screens/TalentScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
+import ForecastScreen from './src/screens/ForecastScreen';
+import AlarmSettingsScreen from './src/screens/AlarmSettingsScreen';
+import AlarmRingingScreen from './src/screens/AlarmRingingScreen';
+import HubWelcomeScreen from './src/screens/hub/HubWelcomeScreen';
+import HubDirectoryScreen from './src/screens/hub/HubDirectoryScreen';
+import HubProfileScreen from './src/screens/hub/HubProfileScreen';
+import HubSettingsScreen from './src/screens/hub/HubSettingsScreen';
+import HubChatsScreen from './src/screens/hub/HubChatsScreen';
+import HubThreadScreen from './src/screens/hub/HubThreadScreen';
 import { colors, fonts } from './src/theme';
 import { haptics } from './src/utils/haptics';
 import useLayout from './src/hooks/useLayout';
@@ -58,6 +71,7 @@ SplashScreen.preventAutoHideAsync().catch(() => {});
 SplashScreen.setOptions({ fade: true, duration: 500 });
 
 const Tab = createBottomTabNavigator();
+const Stack = createNativeStackNavigator();
 
 const navTheme = {
   ...DarkTheme,
@@ -178,7 +192,7 @@ function TabBarBackground() {
 const ANDROID_MIN_BOTTOM_INSET = 20;
 const ANDROID_BOTTOM_COMFORT = 10;
 
-function MainTabs({ narrow }) {
+function Tabs({ narrow }) {
   const insets = useSafeAreaInsets();
   const { side, short } = useLayout();
   // The tab bar pads itself by this, so its icons and labels always sit
@@ -186,61 +200,97 @@ function MainTabs({ narrow }) {
   const bottomInset =
     Platform.OS === 'android' ? Math.max(insets.bottom, ANDROID_MIN_BOTTOM_INSET) + ANDROID_BOTTOM_COMFORT : insets.bottom;
   return (
-    <NavigationContainer ref={navigationRef} theme={navTheme}>
+    <Tab.Navigator
+      initialRouteName="Home"
+      tabBar={(props) => <FloatingTabBar {...props} />}
+      safeAreaInsets={{ bottom: bottomInset }}
+      screenOptions={({ route }) => ({
+        headerShown: false,
+        // Tabs you aren't looking at are frozen: folding or unfolding the
+        // phone only re-renders the tab on screen.
+        freezeOnBlur: true,
+        tabBarActiveTintColor: colors.gold,
+        tabBarInactiveTintColor: colors.textFaint,
+        tabBarStyle: {
+          backgroundColor: 'transparent',
+          borderTopColor: colors.border,
+          borderTopWidth: StyleSheet.hairlineWidth,
+          elevation: 0,
+          paddingLeft: side,
+          paddingRight: side,
+          // Landscape phones: a slim bar (labels sit beside the icons) so
+          // it takes as little of the short screen as it can.
+          ...(short && { height: 40 + bottomInset }),
+        },
+        tabBarBackground: () => <TabBarBackground />,
+        // Six tabs: each label stays on one line and shrinks to fit its
+        // slot (down to 75%) rather than wrapping into the icon or
+        // clipping, so "BOA Originals" fits on the narrowest phones.
+        // Spelled out for screen readers: a custom label means React
+        // Navigation no longer builds one.
+        tabBarAccessibilityLabel: `${TAB_TITLES[route.name] ?? route.name}, tab`,
+        tabBarLabel: ({ color, children }) => (
+          <Text
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.75}
+            allowFontScaling={false}
+            style={[styles.tabLabel, { color, fontSize: narrow ? 9.5 : 10 }]}
+          >
+            {children}
+          </Text>
+        ),
+        tabBarIcon: ({ focused, color, size }) => (
+          <TabIcon name={route.name} focused={focused} color={color} size={size} />
+        ),
+      })}
+      screenListeners={{ tabPress: () => haptics.selection() }}
+    >
+      <Tab.Screen name="Home" component={Home} />
+      <Tab.Screen name="Radio" component={Radio} />
+      <Tab.Screen name="Zen" component={Zen} />
+      <Tab.Screen name="Originals" component={Originals} options={{ title: 'BOA Originals' }} />
+      <Tab.Screen name="Talent" component={Talent} />
+      <Tab.Screen name="Profile" component={Profile} />
+    </Tab.Navigator>
+  );
+}
+
+// An alarm going off brings up its ringing screen over whatever is open.
+function AlarmRinger({ navReady }) {
+  const { ringing } = useAlarms();
+  useEffect(() => {
+    if (navReady && ringing && currentTab() !== 'AlarmRinging') openPage('AlarmRinging');
+  }, [navReady, ringing]);
+  return null;
+}
+
+const PAGE_OPTIONS = { headerShown: false, animation: 'slide_from_right', contentStyle: { backgroundColor: colors.bg } };
+
+// The tabs, with the full-screen pages (the forecast, alarms, the Creative
+// Hub) stacked over them.
+function MainTabs({ narrow }) {
+  const [navReady, setNavReady] = useState(false);
+  return (
+    <NavigationContainer ref={navigationRef} theme={navTheme} onReady={() => setNavReady(true)}>
       <StatusBar style="light" />
-      <Tab.Navigator
-        initialRouteName="Home"
-        tabBar={(props) => <FloatingTabBar {...props} />}
-        safeAreaInsets={{ bottom: bottomInset }}
-        screenOptions={({ route }) => ({
-          headerShown: false,
-          // Tabs you aren't looking at are frozen: folding or unfolding the
-          // phone only re-renders the tab on screen.
-          freezeOnBlur: true,
-          tabBarActiveTintColor: colors.gold,
-          tabBarInactiveTintColor: colors.textFaint,
-          tabBarStyle: {
-            backgroundColor: 'transparent',
-            borderTopColor: colors.border,
-            borderTopWidth: StyleSheet.hairlineWidth,
-            elevation: 0,
-            paddingLeft: side,
-            paddingRight: side,
-            // Landscape phones: a slim bar (labels sit beside the icons) so
-            // it takes as little of the short screen as it can.
-            ...(short && { height: 40 + bottomInset }),
-          },
-          tabBarBackground: () => <TabBarBackground />,
-          // Six tabs: each label stays on one line and shrinks to fit its
-          // slot (down to 75%) rather than wrapping into the icon or
-          // clipping, so "BOA Originals" fits on the narrowest phones.
-          // Spelled out for screen readers: a custom label means React
-          // Navigation no longer builds one.
-          tabBarAccessibilityLabel: `${TAB_TITLES[route.name] ?? route.name}, tab`,
-          tabBarLabel: ({ color, children }) => (
-            <Text
-              numberOfLines={1}
-              adjustsFontSizeToFit
-              minimumFontScale={0.75}
-              allowFontScaling={false}
-              style={[styles.tabLabel, { color, fontSize: narrow ? 9.5 : 10 }]}
-            >
-              {children}
-            </Text>
-          ),
-          tabBarIcon: ({ focused, color, size }) => (
-            <TabIcon name={route.name} focused={focused} color={color} size={size} />
-          ),
-        })}
-        screenListeners={{ tabPress: () => haptics.selection() }}
-      >
-        <Tab.Screen name="Home" component={Home} />
-        <Tab.Screen name="Radio" component={Radio} />
-        <Tab.Screen name="Zen" component={Zen} />
-        <Tab.Screen name="Originals" component={Originals} options={{ title: 'BOA Originals' }} />
-        <Tab.Screen name="Talent" component={Talent} />
-        <Tab.Screen name="Profile" component={Profile} />
-      </Tab.Navigator>
+      <Stack.Navigator screenOptions={PAGE_OPTIONS}>
+        <Stack.Screen name="Tabs">{() => <Tabs narrow={narrow} />}</Stack.Screen>
+        <Stack.Screen name="Forecast" component={ForecastScreen} />
+        <Stack.Screen name="AlarmSettings" component={AlarmSettingsScreen} />
+        <Stack.Screen
+          name="AlarmRinging"
+          component={AlarmRingingScreen}
+          options={{ presentation: 'fullScreenModal', animation: 'fade', gestureEnabled: false }}
+        />
+        <Stack.Screen name="HubWelcome" component={HubWelcomeScreen} options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+        <Stack.Screen name="HubDirectory" component={HubDirectoryScreen} />
+        <Stack.Screen name="HubProfile" component={HubProfileScreen} />
+        <Stack.Screen name="HubSettings" component={HubSettingsScreen} />
+        <Stack.Screen name="HubChats" component={HubChatsScreen} />
+        <Stack.Screen name="HubThread" component={HubThreadScreen} />
+      </Stack.Navigator>
+      <AlarmRinger navReady={navReady} />
       {/* Draws the lock screen's record artwork for the station playing. */}
       <RecordArtwork />
     </NavigationContainer>
@@ -304,11 +354,17 @@ function Root({ narrow }) {
             <SleepTimerProvider>
               <ZenProvider>
                 <MediaProvider>
-                  <PremiumProvider>
-                    <FormsProvider>
-                      {booted ? <Gate narrow={narrow} /> : <Intro onDone={finishBoot} />}
-                    </FormsProvider>
-                  </PremiumProvider>
+                  <WeatherProvider>
+                    <AlarmProvider>
+                      <HubProvider>
+                        <PremiumProvider>
+                          <FormsProvider>
+                            {booted ? <Gate narrow={narrow} /> : <Intro onDone={finishBoot} />}
+                          </FormsProvider>
+                        </PremiumProvider>
+                      </HubProvider>
+                    </AlarmProvider>
+                  </WeatherProvider>
                 </MediaProvider>
               </ZenProvider>
             </SleepTimerProvider>

@@ -6,7 +6,6 @@ import { GestureDetector, GestureHandlerRootView, usePanGesture } from 'react-na
 import { BlurView } from 'expo-blur';
 import { scheduleOnRN } from 'react-native-worklets';
 import useLayout from '../hooks/useLayout';
-import { useOverlay } from '../utils/overlays';
 import { colors, radius, space } from '../theme';
 
 const OPEN = { mass: 1, stiffness: 260, damping: 28 };
@@ -57,8 +56,6 @@ export default function BottomSheet({ open, onClose, children, dragAnywhere = tr
 
   const sheetStyle = useAnimatedStyle(() => ({ transform: [{ translateY: y.value }] }));
   const backdropStyle = useAnimatedStyle(() => ({ opacity: interpolate(y.value, [0, 500], [1, 0], 'clamp') }));
-
-  useOverlay(mounted);
 
   if (!mounted) return null;
 

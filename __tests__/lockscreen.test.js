@@ -2,6 +2,7 @@ import { act, fireEvent, render } from '@testing-library/react-native';
 import { AppState } from 'react-native';
 import * as audio from 'expo-audio';
 import { captureRef } from 'react-native-view-shot';
+import { File } from 'expo-file-system';
 
 // The real native engine, not the stand-in the app tests use.
 const engine = jest.requireActual('../src/audio/engine.native.js');
@@ -87,11 +88,15 @@ test('RecordArtwork draws the record off screen and hands the captured PNG to th
     </PlayerProvider>,
   );
   await act(async () => api.play(station));
-  // The record is drawn with the station's logo as its label...
+  // The station's logo is downloaded into the cache first...
+  await flush();
+  await flush();
+  // ...then the record is drawn with it as its label...
   // Hidden from screen readers (it's only for the lock screen).
   expect(screen.getByTestId('record-artwork', { includeHiddenElements: true })).toBeOnTheScreen();
   const logo = screen.getByTestId('record-artwork-logo', { includeHiddenElements: true });
-  expect(logo.props.source.uri).toBe(station.logo);
+  expect(logo.props.source.uri).toBe('file:///cache/logos/joy-0');
+  expect(File.downloadFileAsync).toHaveBeenCalledWith(station.logo, expect.objectContaining({ uri: 'file:///cache/logos/joy-0' }), expect.anything());
   // ...and once the logo has loaded it's captured and passed on.
   await fireEvent(logo, 'load');
   await act(async () => jest.advanceTimersByTime(50));

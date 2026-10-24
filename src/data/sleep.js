@@ -50,6 +50,8 @@ export const SCENES = {
 export const SOUNDSCAPES = [
   {
     id: 'rain',
+    // Deep blue, like rain at night.
+    tone: '#2F6BFF',
     label: 'Rain',
     detail: 'On the window',
     icon: 'rainy-outline',
@@ -62,6 +64,8 @@ export const SOUNDSCAPES = [
   },
   {
     id: 'white-noise',
+    // Violet, for the deepest sleep.
+    tone: '#8B5CF6',
     label: 'Deep sleep',
     detail: 'White noise',
     icon: 'moon-outline',
@@ -74,6 +78,8 @@ export const SOUNDSCAPES = [
   },
   {
     id: '432hz',
+    // BOA gold.
+    tone: '#E2A84B',
     label: '432 Hz',
     detail: 'Meditation frequency',
     icon: 'pulse-outline',
@@ -86,6 +92,8 @@ export const SOUNDSCAPES = [
   },
   {
     id: 'brown-noise',
+    // Earthy brown.
+    tone: '#A86A3D',
     label: 'Brown noise',
     detail: 'Low, warm rumble',
     icon: 'water-outline',

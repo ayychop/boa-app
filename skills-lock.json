@@ -1,6 +1,12 @@
 {
   "version": 1,
   "skills": {
+    "agent-device": {
+      "source": "callstackincubator/agent-device",
+      "sourceType": "github",
+      "skillPath": "skills/agent-device/SKILL.md",
+      "computedHash": "3187ae73a1a8b055e20630d64c86e5bb7576341b495c9a755f5e3ec7927c0302"
+    },
     "animate": {
       "source": "emilkowalski/skill",
       "sourceType": "github",
@@ -37,17 +43,35 @@
       "skillPath": "skills/ask-sonner/SKILL.md",
       "computedHash": "8bd257b845985f4b35b603b510a126604176521094af79c4b7347ffeb8a8f7ab"
     },
+    "assess-react-native-migration": {
+      "source": "callstackincubator/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/assess-react-native-migration/SKILL.md",
+      "computedHash": "c07f3265bc8d51ae6dfe929f2034bea3dfa3afd73d7a3fe9910cd8944cf3c970"
+    },
     "break-ui": {
       "source": "emilkowalski/skill",
       "sourceType": "github",
       "skillPath": "skills/break-ui/SKILL.md",
       "computedHash": "60ada67662925f4df5e3c6ff41cac3ab241b66f8898100a5ffcd7ba7196cb868"
     },
+    "create-react-native-library": {
+      "source": "callstackincubator/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/create-react-native-library/SKILL.md",
+      "computedHash": "3bac367718298bbdb0a1169bc7ea2478d77e6c88b3f02d45406027cbf1e93169"
+    },
     "design-taste-frontend": {
       "source": "Leonxlnx/taste-skill",
       "sourceType": "github",
       "skillPath": "skills/taste-skill/SKILL.md",
       "computedHash": "a5d2a6d7613d5f6665997cca26d5a3472c46a39857dd34ba3329212945da0dc7"
+    },
+    "dogfood": {
+      "source": "callstackincubator/agent-device",
+      "sourceType": "github",
+      "skillPath": "skills/dogfood/SKILL.md",
+      "computedHash": "8e6dfbff0633e355210ce7ae109cb39a3e1347946b6e92aaa607271154526b6b"
     },
     "emil-design-eng": {
       "source": "emilkowalski/skill",
@@ -60,6 +84,12 @@
       "sourceType": "github",
       "skillPath": "skills/find-animation-opportunities/SKILL.md",
       "computedHash": "465d087c41768e4f14ed640dd049036009f613feb55baaa5831b68b33178f9d2"
+    },
+    "github-actions": {
+      "source": "callstackincubator/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/github-actions/SKILL.md",
+      "computedHash": "c90128be4f55bc8b6dbdcba75ba2a540f3fb89ba91be1ccbe487e01ea70be122"
     },
     "improve-animations": {
       "source": "emilkowalski/skill",
@@ -85,17 +115,65 @@
       "skillPath": "skills/prototype/SKILL.md",
       "computedHash": "77be567d8c946608fdd15e61b62ab383cdf289a194dce2479828b7eda860d3ba"
     },
+    "react-native-best-practices": {
+      "source": "callstackincubator/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/react-native-best-practices/SKILL.md",
+      "computedHash": "4b2b9561ff7b4b9d15ff76d2dd2a6191e3cdc7f36c06d171e377bfefcbcb2bfb"
+    },
+    "react-native-brownfield-migration": {
+      "source": "callstackincubator/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/react-native-brownfield-migration/SKILL.md",
+      "computedHash": "659dfb7ada8725f05fe42a374fb70973f91be2830b8e1ee9ecea05d8ddc6b36e"
+    },
+    "react-native-testing": {
+      "source": "callstack/react-native-testing-library",
+      "sourceType": "github",
+      "skillPath": "skills/react-native-testing/SKILL.md",
+      "computedHash": "bb30ad4660a42c71178c91d7a3f2e88556add9dba2213ee26f099dbe352fd649"
+    },
+    "react-native-tv-best-practices": {
+      "source": "callstackincubator/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/react-native-tv-best-practices/SKILL.md",
+      "computedHash": "a451fa4bf7ba73a6cbd18a8e0a4c61e73e39d588f8f186e7c718540b7201862e"
+    },
+    "react-navigation": {
+      "source": "callstackincubator/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/react-navigation/SKILL.md",
+      "computedHash": "f09111c137b0bac6e43ff5ff57297afc93ae51583797acf779733ace4d1ced60"
+    },
     "review-animations": {
       "source": "emilkowalski/skill",
       "sourceType": "github",
       "skillPath": "skills/review-animations/SKILL.md",
       "computedHash": "b4e5f0f4fe3e2743c85bf7354108f48a0b9d502cb20ef5c4a9c195da91f93736"
     },
+    "upgrading-react-native": {
+      "source": "callstackincubator/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/upgrading-react-native/SKILL.md",
+      "computedHash": "91434efaa15e8134ba1a388ac829d06d0c8746455ce1b4a0cb27cb4b6d701d2a"
+    },
+    "validate-skills": {
+      "source": "callstackincubator/agent-skills",
+      "sourceType": "github",
+      "skillPath": ".claude/skills/validate-skills/SKILL.md",
+      "computedHash": "330cb59114b97e7b4727ff838b637682fff8820f752a950de3e7bd703608b56f"
+    },
     "write-swift": {
       "source": "emilkowalski/skill",
       "sourceType": "github",
       "skillPath": "skills/write-swift/SKILL.md",
       "computedHash": "f20bb9cf51dbee1900b264820a12f1d3d378dc4d23ac758e7ba9e644c49a2459"
+    },
+    "writing-user-docs": {
+      "source": "callstackincubator/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/writing-user-docs/SKILL.md",
+      "computedHash": "0d6bde034487709b4be83647dad6d3be955e97c97739b3bd8cbcadfb832ab35b"
     }
   }
 }

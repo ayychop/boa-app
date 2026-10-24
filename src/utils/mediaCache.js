@@ -35,3 +35,25 @@ export function cachedSource(folder, name, uri) {
   job.finally(() => pending.delete(key));
   return job;
 }
+
+/** The local uri if the file is already in the cache, else null. Synchronous. */
+export function cachedUri(folder, name) {
+  if (Platform.OS === 'web') return null;
+  try {
+    const file = new File(dir(folder), name);
+    return file.exists && file.size ? file.uri : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Downloads files into the cache one after another, in the background,
+ * skipping any already there. Resolves when all are done; never rejects.
+ */
+export async function prefetch(items) {
+  for (const { folder, name, uri } of items) {
+    if (cachedUri(folder, name)) continue;
+    await cachedSource(folder, name, uri);
+  }
+}

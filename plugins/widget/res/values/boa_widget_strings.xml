@@ -1,7 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
   <string name="boa_widget_label">BOA Radio</string>
-  <string name="boa_widget_description">The BOA record and the time. Tap to tune in.</string>
-  <string name="boa_widget_record">BOA record</string>
+  <string name="boa_widget_description">The time, your local weather and what\'s playing on BOA Radio.</string>
+  <string name="boa_widget_record">Station record</string>
+  <string name="boa_widget_logo">BOA Network</string>
+  <string name="boa_widget_weather">Weather. Tap for the forecast.</string>
   <string name="boa_widget_cta">BOA RADIO · TAP TO TUNE IN</string>
+  <string name="boa_widget_wx_blank">--°</string>
+  <string name="boa_widget_wx_setup">Tap for weather</string>
 </resources>

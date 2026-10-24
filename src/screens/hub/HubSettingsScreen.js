@@ -1,0 +1,204 @@
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
+import { useHub } from '../../context/HubContext';
+import * as hub from '../../api/hub';
+import { Avatar, Chip, Field, PageHeader, SettingRow, Toggle } from '../../components/kit';
+import { Button, Slate } from '../../components/ui';
+import { haptics } from '../../utils/haptics';
+import { colors, radius, space } from '../../theme';
+
+/**
+ * Your Hub profile and privacy: name, photo, bio and roles; whether you're
+ * visible on the Hub and open for work; whether your listening / watching
+ * shows; the people you've blocked; and your data (export or delete).
+ */
+export default function HubSettingsScreen({ navigation }) {
+  const insets = useSafeAreaInsets();
+  const { userId, profile, saveProfile, shareStatus, setShareStatus, blocked, unblock, signOut, deleteAccount } = useHub();
+  const [form, setForm] = useState(() => ({
+    display_name: profile?.display_name ?? '',
+    bio: profile?.bio ?? '',
+    roles: profile?.roles ?? [],
+  }));
+  const [saving, setSaving] = useState(false);
+  const [busy, setBusy] = useState(null);
+  const [blockedPeople, setBlockedPeople] = useState([]);
+
+  useEffect(() => {
+    let alive = true;
+    Promise.all([...blocked].map((id) => hub.getProfile(id).catch(() => null))).then((list) => alive && setBlockedPeople(list.filter(Boolean)));
+    return () => {
+      alive = false;
+    };
+  }, [blocked]);
+
+  if (!profile) return null;
+  const dirty = form.display_name !== (profile.display_name ?? '') || form.bio !== (profile.bio ?? '') || form.roles.join() !== profile.roles.join();
+
+  const flip = (key) => async (value) => {
+    try {
+      await saveProfile({ [key]: value });
+    } catch (err) {
+      Alert.alert("Couldn't save", err.message);
+    }
+  };
+
+  const changePhoto = async () => {
+    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: [1, 1], quality: 0.8 });
+    if (res.canceled || !res.assets?.[0]) return;
+    setBusy('photo');
+    try {
+      const url = await hub.uploadAvatar(userId, res.assets[0]);
+      await saveProfile({ avatar_url: url });
+    } catch (err) {
+      Alert.alert('Upload failed', err.message);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const exportData = async () => {
+    setBusy('export');
+    try {
+      const data = await hub.exportMyData();
+      await Share.share({ title: 'My BOA HUB data', message: JSON.stringify(data, null, 2) });
+    } catch (err) {
+      Alert.alert('Export failed', err.message);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const confirmDelete = () =>
+    Alert.alert(
+      'Delete your Hub account?',
+      'This permanently erases your profile, photo, conversations and messages from BOA HUB. It cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete everything',
+          style: 'destructive',
+          onPress: async () => {
+            setBusy('delete');
+            try {
+              await deleteAccount();
+              navigation.popToTop();
+            } catch (err) {
+              Alert.alert('Delete failed', err.message);
+              setBusy(null);
+            }
+          },
+        },
+      ],
+    );
+
+  return (
+    <View style={styles.screen} testID="hub-settings">
+      <PageHeader kicker="Creative Hub" title="Hub settings" onBack={() => navigation.goBack()} />
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+        <ScrollView contentContainerStyle={{ padding: space.xl, paddingTop: 0, paddingBottom: insets.bottom + space.xxl }} keyboardShouldPersistTaps="handled">
+          <View style={styles.photoRow}>
+            <Pressable onPress={changePhoto} accessibilityRole="button" accessibilityLabel="Change profile photo">
+              <Avatar uri={profile.avatar_url} name={profile.display_name || profile.username} size={76} ring />
+              {busy === 'photo' && <ActivityIndicator color={colors.gold} style={StyleSheet.absoluteFill} />}
+            </Pressable>
+            <Button label="Change photo" icon="camera-outline" variant="ghost" onPress={changePhoto} />
+          </View>
+
+          <Field label="Display name" value={form.display_name} onChangeText={(t) => setForm((f) => ({ ...f, display_name: t.slice(0, 50) }))} style={{ marginTop: space.xl }} />
+          <Field
+            label="Bio"
+            value={form.bio}
+            onChangeText={(t) => setForm((f) => ({ ...f, bio: t.slice(0, 280) }))}
+            multiline
+            hint={`${form.bio.length}/280`}
+            style={{ marginTop: space.lg }}
+          />
+          <Slate style={styles.section}>Roles</Slate>
+          <View style={styles.chips}>
+            {hub.ROLES.map((r) => (
+              <Chip
+                key={r.id}
+                label={r.label}
+                selected={form.roles.includes(r.id)}
+                onPress={() =>
+                  setForm((f) => ({
+                    ...f,
+                    roles: f.roles.includes(r.id) ? f.roles.filter((x) => x !== r.id) : f.roles.length < 6 ? [...f.roles, r.id] : f.roles,
+                  }))
+                }
+              />
+            ))}
+          </View>
+          {dirty && (
+            <Button
+              label={saving ? 'Saving' : 'Save profile'}
+              icon="checkmark"
+              disabled={saving || !form.roles.length}
+              onPress={async () => {
+                setSaving(true);
+                try {
+                  await saveProfile({ display_name: form.display_name.trim() || null, bio: form.bio.trim() || null, roles: form.roles });
+                  haptics.success();
+                } catch (err) {
+                  Alert.alert("Couldn't save", err.message);
+                } finally {
+                  setSaving(false);
+                }
+              }}
+              style={{ marginTop: space.lg, alignSelf: 'flex-start' }}
+            />
+          )}
+
+          <Slate style={styles.section}>Presence</Slate>
+          <View style={styles.group}>
+            <SettingRow icon="eye-outline" title="Visible on Hub" detail="Show up in Find talent and appear online. Off: only people you already talk to can see you.">
+              <Toggle value={profile.visible_on_hub} onChange={flip('visible_on_hub')} label="Visible on Hub" testID="hub-visible" />
+            </SettingRow>
+            <SettingRow icon="briefcase-outline" title="Open for work" detail="A gold badge on your profile, and you're listed first.">
+              <Toggle value={profile.open_for_work} onChange={flip('open_for_work')} label="Open for work" testID="hub-open-for-work" />
+            </SettingRow>
+            <SettingRow icon="musical-notes-outline" title="Show what I'm playing" detail="'Listening to' a station or 'Watching' a BOA Original, on your profile." last>
+              <Toggle value={shareStatus} onChange={setShareStatus} label="Show what I'm playing" testID="hub-share-status" />
+            </SettingRow>
+          </View>
+
+          {blockedPeople.length > 0 && (
+            <>
+              <Slate style={styles.section}>Blocked</Slate>
+              <View style={styles.group}>
+                {blockedPeople.map((p, i) => (
+                  <SettingRow key={p.id} title={p.display_name || `@${p.username}`} detail={`@${p.username}`} last={i === blockedPeople.length - 1}>
+                    <Button label="Unblock" variant="ghost" onPress={() => unblock(p.id).catch(() => {})} />
+                  </SettingRow>
+                ))}
+              </View>
+            </>
+          )}
+
+          <Slate style={styles.section}>Your data</Slate>
+          <View style={styles.group}>
+            <SettingRow icon="download-outline" title="Export my data" detail="Everything the Hub holds about you, as JSON." onPress={exportData}>
+              {busy === 'export' ? <ActivityIndicator color={colors.gold} /> : <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />}
+            </SettingRow>
+            <SettingRow icon="log-out-outline" title="Sign out" onPress={() => signOut().then(() => navigation.popToTop())} />
+            <SettingRow icon="trash-outline" title="Delete my Hub account" detail="Erases your profile and all your conversations." danger onPress={confirmDelete} last>
+              {busy === 'delete' ? <ActivityIndicator color="#FF6B6B" /> : null}
+            </SettingRow>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  screen: { flex: 1, backgroundColor: colors.bg },
+  photoRow: { flexDirection: 'row', alignItems: 'center', gap: space.lg },
+  section: { marginTop: space.xl, marginBottom: space.md },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
+  group: { borderRadius: radius.lg, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
+});

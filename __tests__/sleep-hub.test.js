@@ -33,6 +33,9 @@ afterEach(() => {
 const lastPlayer = () => audio.__players[audio.__players.length - 1];
 // Soundscape downloads (scene videos are cached too, in their own folder).
 const audioDownloads = () => File.downloadFileAsync.mock.calls.filter((c) => c[1].uri.includes('/soundscapes/'));
+// The Zen tab also downloads every soundscape in the background, so a
+// test about one recording counts only that one.
+const downloadsOf = (id) => audioDownloads().filter((c) => c[1].uri.endsWith(`/soundscapes/${id}.mp3`));
 const videoExt = Platform.OS === 'ios' ? 'mov' : 'webm';
 
 // Opens Zen from a tab's Zen button (Home, Radio) or the Zen tab itself.
@@ -67,8 +70,8 @@ test.each(['Home', 'Radio', 'Zen'])('from %s: tapping Rain downloads the recordi
   await advance(200);
 
   const rain = soundscapeById('rain');
-  expect(audioDownloads()).toHaveLength(1);
-  const [url, dest, options] = audioDownloads()[0];
+  expect(downloadsOf('rain')).toHaveLength(1);
+  const [url, dest, options] = downloadsOf('rain')[0];
   expect(url).toBe(rain.uri);
   expect(dest.uri).toBe('file:///cache/soundscapes/rain.mp3');
   expect(options.headers).toEqual(MEDIA_HEADERS);
@@ -86,7 +89,7 @@ test.each(['Home', 'Radio', 'Zen'])('from %s: tapping Rain downloads the recordi
   expect(player.pause).toHaveBeenCalled();
   await user.press(screen.getByRole('button', { name: 'Play Rain' }));
   await advance(200);
-  expect(audioDownloads()).toHaveLength(1);
+  expect(downloadsOf('rain')).toHaveLength(1);
 });
 
 test('switching soundscapes swaps the recording in the same looping player', async () => {
@@ -101,7 +104,9 @@ test('switching soundscapes swaps the recording in the same looping player', asy
   expect(audio.__players).toHaveLength(1);
   expect(player.replace).toHaveBeenLastCalledWith({ uri: 'file:///cache/soundscapes/white-noise.mp3' });
   expect(player.loop).toBe(true);
-  expect(audioDownloads().map((c) => c[0])).toEqual([soundscapeById('432hz').uri, soundscapeById('white-noise').uri]);
+  // Each recording is downloaded once, however it was asked for.
+  expect(downloadsOf('432hz').map((c) => c[0])).toEqual([soundscapeById('432hz').uri]);
+  expect(downloadsOf('white-noise').map((c) => c[0])).toEqual([soundscapeById('white-noise').uri]);
 });
 
 test('if the download fails it streams the recording instead, with the same headers', async () => {
@@ -142,10 +147,9 @@ test('the fade-out timer fades the soundscape and the radio out together, then s
   expect(player.pause).toHaveBeenCalled();
   // Volume is put back for next time.
   expect(player.volume).toBe(1);
-  // Nobody touched the phone for 15 minutes, so the screensaver took over;
-  // a tap brings the controls back, showing Rain stopped.
-  expect(screen.getByTestId('zen-screensaver')).toBeOnTheScreen();
-  await user.press(screen.getByRole('button', { name: 'Wake Zen controls' }));
+  // Sitting untouched never opens the screensaver (only a lock does), so
+  // the controls are still there, showing Rain stopped.
+  expect(screen.queryByTestId('zen-screensaver')).toBeNull();
   expect(screen.getByRole('button', { name: 'Play Rain' })).toBeOnTheScreen();
 });
 
@@ -164,9 +168,9 @@ test('the screensaver (after a lock) shows the room and what is playing, with no
   await user.press(screen.getByRole('button', { name: 'Play Rain' }));
   await advance(200);
   await openTab(user, 'Radio');
-  await probe.setState('background');
+  await probe.lock();
   await advance(500);
-  await probe.setState('active');
+  await probe.unlock();
   await advance(500);
   expect(screen.getByTestId('zen-screensaver')).toBeOnTheScreen();
   expect(screen.getByText('Rain · On the window')).toBeOnTheScreen();
@@ -201,10 +205,11 @@ test('each scene loops its own video, muted, mixed with the app audio, from the 
   expect(lastPlayer().playing).toBe(true);
 });
 
-test('credits list every recording and photograph with its licence', async () => {
+test('credits (in Profile) list every recording and photograph with its licence', async () => {
   const user = userEvent.setup();
-  await openHub(user);
-  await user.press(screen.getByRole('button', { name: 'Sound, video and photo credits' }));
+  await bootIntoTabs(user);
+  await openTab(user, 'Profile');
+  await user.press(screen.getByText('Credits'));
   await advance(300);
   const scenes = Object.values(SCENES);
   for (const s of [...SOUNDSCAPES, ...scenes, ...scenes.map((x) => x.video)]) {

@@ -103,10 +103,11 @@ describe('home screen widget settings', () => {
     const name = station.props.accessibilityLabel.replace(/^Play /, '');
     await user.press(station);
     await advance(200);
-    expect(widget.setNowPlaying).toHaveBeenLastCalledWith(name, 'Live on BOA Radio');
+    // With the station's id, for its record artwork, and that it's on air.
+    expect(widget.setNowPlaying).toHaveBeenLastCalledWith(name, 'Live on BOA Radio', expect.any(String), true);
     await openTab(user, 'Home');
     await user.press(screen.getByRole('button', { name: 'Pause' }));
     await advance(200);
-    expect(widget.setNowPlaying).toHaveBeenLastCalledWith(name, 'Paused');
+    expect(widget.setNowPlaying).toHaveBeenLastCalledWith(name, 'Paused', expect.any(String), false);
   });
 });

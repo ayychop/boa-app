@@ -38,8 +38,10 @@ export function MediaProvider({ children }) {
       openEpisode: (production, episode = production.episodes[0]) => openVideo({ production, kind: 'episode', episode }),
       openPodcast,
       close: () => setScreening(null),
+      // What's on the big screen, for the Creative Hub's "Watching" status.
+      watching: screening ? screening.production.title : null,
     }),
-    [openVideo, openPodcast],
+    [openVideo, openPodcast, screening],
   );
 
   return (

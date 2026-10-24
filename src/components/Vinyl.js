@@ -14,12 +14,30 @@ import Animated, {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import StationLogo from './StationLogo';
+import BoaLogo from './BoaLogo';
+import { useStationLogo } from '../api/stationArt';
+import { colors } from '../theme';
 
 const REVOLUTION_MS = 9000;
 // Brushed-steel ring: alternating light/dark stops read as metal once the
 // gradient is clipped to a circle.
 const METAL = ['#F2F2F4', '#8A8A90', '#FAFAFB', '#5E5E64', '#D9D9DD', '#77777D'];
 const GROOVES = [0.94, 0.86, 0.79, 0.72, 0.65, 0.58, 0.52];
+
+// The centre label: the station's logo (a working one found by
+// api/stationArt.js if the listed one is dead), else the BOA Network logo on
+// gold. While it's still looking, the listed logo or the station's initials.
+function RecordLabel({ station, size }) {
+  const logo = useStationLogo(station);
+  if (logo === null) {
+    return (
+      <View style={[StyleSheet.absoluteFill, styles.boaLabel]} testID="vinyl-boa-label">
+        <BoaLogo height={size * 0.26} color="#050506" />
+      </View>
+    );
+  }
+  return <StationLogo station={logo ? { ...station, logo } : station} size={size} rounded={size / 2} fit="cover" />;
+}
 
 /**
  * A vinyl record with the station logo as its centre label.
@@ -115,7 +133,7 @@ export default function Vinyl({ station, size, spinning, status = null, focused 
         ))}
         <View style={[styles.label, { width: label, height: label, borderRadius: label / 2 }]}>
           {station ? (
-            <StationLogo station={station} size={label} rounded={label / 2} fit="cover" />
+            <RecordLabel station={station} size={label} />
           ) : (
             <View style={[StyleSheet.absoluteFill, styles.blankLabel]} />
           )}
@@ -154,6 +172,7 @@ export default function Vinyl({ station, size, spinning, status = null, focused 
 }
 
 const styles = StyleSheet.create({
+  boaLabel: { backgroundColor: colors.gold, alignItems: 'center', justifyContent: 'flex-start', paddingTop: '16%' },
   shadow: {
     boxShadow: '0px 30px 60px rgba(0,0,0,0.65), 0px 8px 18px rgba(0,0,0,0.5)',
   },

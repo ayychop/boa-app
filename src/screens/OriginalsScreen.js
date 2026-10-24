@@ -88,7 +88,8 @@ function EpisodeCard({ production, episode, width }) {
   const media = useMedia();
   return (
     <Tappable onPress={() => media.openEpisode(production, episode)} accessibilityRole="button" accessibilityLabel={`Play ${episode.title}`}>
-      <Poster production={{ ...production, backdrop: episode.image, status: 'available' }} width={width} showTitle={false} fit="contain" />
+      {/* Edge to edge: the still fills its frame, no blurred letterbox. */}
+      <Poster production={{ ...production, backdrop: episode.image, status: 'available' }} width={width} showTitle={false} fit="cover" />
       <View style={styles.episodeCaption}>
         <Slate>Ep 01</Slate>
         <Text style={styles.episodeTitle}>{episode.title}</Text>

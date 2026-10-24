@@ -105,23 +105,26 @@ test('locking the phone: straight to the Zen screensaver, never a modal, 25 cycl
   const user = userEvent.setup();
   await bootIntoTabs(user);
   await openTab(user, 'Radio');
+  let from = 'radio-stage';
   for (let i = 0; i < 25; i++) {
-    await probe.setState(i % 2 ? 'inactive' : 'background');
+    await probe.lock(i % 2 ? 'inactive' : 'background');
     await advance(500);
     // Navigated while locked: the screensaver is already there, no tab bar.
     expect(screen.getByTestId('zen-screensaver')).toBeOnTheScreen();
     expect(tabButton('Home')).toBeNull();
     expect(modals()).toHaveLength(0);
-    await probe.setState('active');
+    await probe.unlock();
     await advance(400);
     expect(screen.getByTestId('zen-screensaver')).toBeOnTheScreen();
-    // A tap brings the controls and the tab bar back.
+    // A tap goes back to the tab you locked the phone on, with the tab bar.
     await user.press(screen.getByRole('button', { name: 'Wake Zen controls' }));
     await advance(300);
-    expect(screen.getByTestId('zen-screen')).toBeOnTheScreen();
+    expect(screen.queryByTestId('zen-screensaver')).toBeNull();
+    expect(screen.getByTestId(from)).toBeOnTheScreen();
     expect(tabButton('Home')).toBeOnTheScreen();
-    // And the app answers: off to another tab and back to Radio.
-    await openTab(user, i % 2 ? 'Talent' : 'Radio');
+    // And the app answers: off to another tab, which the next lock leaves from.
+    await openTab(user, i % 2 ? 'Radio' : 'Talent');
+    from = i % 2 ? 'radio-stage' : 'talent-scroll';
   }
   await openTab(user, 'Radio');
   expect(screen.getByText(FIRST_STATION)).toBeOnTheScreen();
@@ -133,9 +136,9 @@ test('locking while Zen is open with its controls turns it into the screensaver'
   await bootIntoTabs(user);
   await openTab(user, 'Zen');
   expect(screen.getByTestId('zen-screen')).toBeOnTheScreen();
-  await probe.setState('background');
+  await probe.lock();
   await advance(500);
-  await probe.setState('active');
+  await probe.unlock();
   await advance(300);
   expect(screen.getAllByTestId('zen-screensaver')).toHaveLength(1);
   expect(screen.queryByTestId('zen-screen')).toBeNull();
@@ -144,9 +147,9 @@ test('locking while Zen is open with its controls turns it into the screensaver'
 test('leaving the Zen tab ends the screensaver, so coming back shows the controls', async () => {
   const user = userEvent.setup();
   await bootIntoTabs(user);
-  await probe.setState('background');
+  await probe.lock();
   await advance(500);
-  await probe.setState('active');
+  await probe.unlock();
   await user.press(screen.getByRole('button', { name: 'Wake Zen controls' }));
   await openTab(user, 'Home');
   await openTab(user, 'Zen');
@@ -155,22 +158,28 @@ test('leaving the Zen tab ends the screensaver, so coming back shows the control
 
 test('the vibe check never drops into Zen on lock', async () => {
   await bootApp();
-  await probe.setState('background');
+  await probe.lock();
   await advance(1000);
-  await probe.setState('active');
+  await probe.unlock();
   await advance(400);
   expect(screen.queryByTestId('zen-screensaver')).toBeNull();
   expect(screen.getByText('Get started')).toBeOnTheScreen();
 });
 
-test('left idle for a minute, the app drifts to the Zen screensaver; a tap brings the controls back', async () => {
+test('only a lock opens the screensaver: not sitting idle, not leaving the app', async () => {
   const user = userEvent.setup();
   await bootIntoTabs(user);
-  await advance(62000);
-  expect(screen.getByTestId('zen-screensaver')).toBeOnTheScreen();
-  await user.press(screen.getByRole('button', { name: 'Wake Zen controls' }));
-  await advance(300);
-  expect(screen.getByTestId('zen-screen')).toBeOnTheScreen();
+  await openTab(user, 'Radio');
+  // Left alone for a few minutes.
+  await advance(180000);
+  expect(screen.queryByTestId('zen-screensaver')).toBeNull();
+  // Home button / app switcher / Shazam: background, but the screen stays on.
+  await probe.setState('background');
+  await advance(5000);
+  await probe.setState('active');
+  await advance(400);
+  expect(screen.queryByTestId('zen-screensaver')).toBeNull();
+  expect(screen.getByText(FIRST_STATION)).toBeOnTheScreen();
 });
 
 describe('nothing sits under the tab bar, with real phone insets', () => {

@@ -24,8 +24,9 @@ export default function Poster({ production, width, ratio = 16 / 9, showTitle = 
 
   const caption = showTitle && !(titled && !portrait);
   // Placeholder art carries the brand line at the top, but only on a card
-  // tall enough to hold it clear of the caption below.
-  const brandLine = !art && height >= (caption ? 150 : 70);
+  // tall enough to hold it clear of the caption below. A coming-soon card
+  // says "Coming soon" and nothing else.
+  const brandLine = !art && !soon && height >= (caption ? 150 : 70);
 
   return (
     <View style={[styles.frame, { width, height, borderRadius: rounded }]}>

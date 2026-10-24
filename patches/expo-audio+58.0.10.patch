@@ -45,3 +45,97 @@ index fb2d0b5..3780fd4 100644
    val currentOffsetFromLive: Double?
      get() {
        val offset = ref.currentLiveOffset
+diff --git a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/AudioControlsService.kt b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/AudioControlsService.kt
+index 53c36f7..b9fa6ce 100644
+--- a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/AudioControlsService.kt
++++ b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/service/AudioControlsService.kt
+@@ -7,6 +7,7 @@ import android.app.PendingIntent
+ import android.content.Context
+ import android.content.Intent
+ import android.media.AudioManager
++import android.net.Uri
+ import android.content.pm.ServiceInfo
+ import android.graphics.Bitmap
+ import android.graphics.BitmapFactory
+@@ -157,6 +158,11 @@ class AudioControlsService : MediaSessionService() {
+ 
+   private fun buildContentIntent(): PendingIntent? {
+     val appIntent = packageManager.getLaunchIntentForPackage(packageName) ?: return null
++    // BOA: tapping the notification or the lock screen's media panel opens
++    // the app on what's playing (the Radio tab for a station), not on
++    // whatever screen it was left on.
++    appIntent.data = Uri.parse(NOW_PLAYING_URI)
++    appIntent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
+     return PendingIntent.getActivity(
+       this,
+       0,
+@@ -419,13 +425,44 @@ class AudioControlsService : MediaSessionService() {
+         seekTo((currentPosition - backwardMs).coerceAtLeast(0))
+       }
+ 
++      // BOA: one stream is one media item, so ExoPlayer never offers
++      // next/previous by itself. Advertise them when JS asked for them, so
++      // Android's lock screen and media panel draw real skip buttons, and
++      // hand the press to JS, which knows the station list.
++      private val showNext = options?.showNextTrack == true && playable.supportsNextTrack
++      private val showPrevious = options?.showPreviousTrack == true && playable.supportsPreviousTrack
++
+       override fun getAvailableCommands(): Player.Commands {
+         val commands = super.getAvailableCommands().buildUpon()
+         if (isLive) {
+           commands.remove(Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM)
+         }
++        if (showNext) commands.addAll(Player.COMMAND_SEEK_TO_NEXT, Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM)
++        if (showPrevious) commands.addAll(Player.COMMAND_SEEK_TO_PREVIOUS, Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM)
+         return commands.build()
+       }
++
++      override fun isCommandAvailable(command: Int): Boolean = availableCommands.contains(command)
++
++      override fun hasNextMediaItem(): Boolean = showNext || super.hasNextMediaItem()
++
++      override fun hasPreviousMediaItem(): Boolean = showPrevious || super.hasPreviousMediaItem()
++
++      override fun seekToNext() {
++        if (showNext) playable.nextTrack() else super.seekToNext()
++      }
++
++      override fun seekToNextMediaItem() {
++        if (showNext) playable.nextTrack() else super.seekToNextMediaItem()
++      }
++
++      override fun seekToPrevious() {
++        if (showPrevious) playable.previousTrack() else super.seekToPrevious()
++      }
++
++      override fun seekToPreviousMediaItem() {
++        if (showPrevious) playable.previousTrack() else super.seekToPreviousMediaItem()
++      }
+     }
+   }
+ 
+@@ -460,6 +497,7 @@ class AudioControlsService : MediaSessionService() {
+         val session = MediaSession.Builder(context, sessionPlayer)
+           .setId("ExpoAudioLockScreenSession_${playable.player.hashCode()}")
+           .setCallback(AudioMediaSessionCallback(this@AudioControlsService))
++          .apply { buildContentIntent()?.let { setSessionActivity(it) } }
+           .build()
+ 
+         // Replace the basic media session with a session connected to our playback service.
+@@ -540,6 +578,7 @@ class AudioControlsService : MediaSessionService() {
+         val session = MediaSession.Builder(context, sessionPlayer)
+           .setId("ExpoAudioLockScreenSession_${playable.player.hashCode()}")
+           .setCallback(AudioMediaSessionCallback(this@AudioControlsService))
++          .apply { buildContentIntent()?.let { setSessionActivity(it) } }
+           .build()
+ 
+         playable.mediaSession.release()
+@@ -685,6 +724,8 @@ class AudioControlsService : MediaSessionService() {
+ 
+   companion object {
+     private const val CHANNEL_ID = "expo_audio_channel"
++    // BOA: the app's own deep link for "open on what's playing".
++    private const val NOW_PLAYING_URI = "boa://now-playing"
+     private const val ACTION_PLAY = "expo.modules.audio.action.PLAY"
+     private const val ACTION_PAUSE = "expo.modules.audio.action.PAUSE"
+     private const val ACTION_TOGGLE = "expo.modules.audio.action.TOGGLE"

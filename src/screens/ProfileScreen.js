@@ -17,7 +17,9 @@ import useBottomSpace from '../hooks/useBottomSpace';
 import useLayout from '../hooks/useLayout';
 import { useZen } from '../context/ZenContext';
 import WidgetSettings from '../components/widget/WidgetSettings';
+import CreditsSheet from '../components/zen/CreditsSheet';
 import { colors, fonts, radius, space, type } from '../theme';
+import { useOpenHub } from '../components/hub/hubNav';
 
 // No accounts yet, so the profile has a placeholder name.
 const LISTENER_NAME = 'BOA Listener';
@@ -42,7 +44,9 @@ export default function ProfileScreen({ navigation }) {
   // of tiles (two columns, three once there's room).
   const { width, wide } = useLayout();
   const { openZen } = useZen();
+  const openHub = useOpenHub();
   const [widgetOpen, setWidgetOpen] = useState(false);
+  const [creditsOpen, setCreditsOpen] = useState(false);
   const inner = Math.min(width, 1100) - space.xl * 2;
   const columns = inner >= 960 ? 3 : 2;
   const tileWidth = Math.floor((inner - GRID_GAP * (columns - 1)) / columns);
@@ -51,6 +55,9 @@ export default function ProfileScreen({ navigation }) {
 
   const actions = [
     { icon: 'sparkles-outline', label: 'Zen Mode', detail: 'Sleep sounds, timer and screensaver', onPress: () => openZen(false) },
+    { icon: 'people-circle-outline', label: 'Creative Hub', detail: 'Find talent and message creatives', onPress: () => openHub() },
+    { icon: 'alarm-outline', label: 'Alarms', detail: 'Wake up to a sound or a station', onPress: () => navigation.navigate('AlarmSettings') },
+    { icon: 'ribbon-outline', label: 'Credits', detail: "Zen's sounds, videos and photos", onPress: () => setCreditsOpen(true) },
     { icon: 'apps-outline', label: 'Home screen widget', detail: 'Colour and transparency', onPress: () => setWidgetOpen(true) },
     { icon: 'person-add-outline', label: 'Get seen', detail: 'Submit as talent', onPress: forms.openGetSeen },
     { icon: 'chatbubble-ellipses-outline', label: 'Contact BOA', detail: 'Bookings, press, hello', onPress: () => forms.openContact() },
@@ -218,6 +225,7 @@ export default function ProfileScreen({ navigation }) {
         <Slate style={{ marginTop: space.xxl, opacity: 0.6 }}>© 2026 BOA Network · Made in the United Kingdom</Slate>
       </ScrollView>
       <WidgetSettings open={widgetOpen} onClose={() => setWidgetOpen(false)} />
+      <CreditsSheet open={creditsOpen} onClose={() => setCreditsOpen(false)} />
     </View>
   );
 }

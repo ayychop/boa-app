@@ -42,7 +42,18 @@ export function instrument() {
       listeners.forEach((fn) => fn(next));
     });
   };
-  return { errors, setState };
+  // Locking: the screen turns off and the app goes to the background
+  // (inactive, briefly, on some phones). Unlocking: the reverse.
+  const screenEvents = require('../modules/boa-screen');
+  const lock = async (next = 'background') => {
+    await act(async () => screenEvents.__emit('off'));
+    await setState(next);
+  };
+  const unlock = async () => {
+    await act(async () => screenEvents.__emit('on'));
+    await setState('active');
+  };
+  return { errors, setState, lock, unlock };
 }
 
 let current = PORTRAIT;

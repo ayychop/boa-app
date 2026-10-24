@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Ionicons "moon" (MIT, ionic.io/ionicons), arcs converted to curves. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+  android:width="24dp"
+  android:height="24dp"
+  android:viewportWidth="512"
+  android:viewportHeight="512">
+  <path
+    android:fillColor="#FFFFFFFF"
+    android:pathData="M264 480C135.87 480 32 376.13 32 248c0-94 54-178.28 137.61-214.67C175.64 30.7 182.66 32.03 187.32 36.68 191.97 41.34 193.3 48.36 190.67 54.39 181.07 76.43 176 104.66 176 136c0 110.28 89.72 200 200 200 31.34 0 59.57-5.07 81.61-14.67C463.64 318.7 470.66 320.03 475.32 324.68 479.97 329.34 481.3 336.36 478.67 342.39 442.28 426 358 480 264 480z" />
+</vector>

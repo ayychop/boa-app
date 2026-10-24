@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Ionicons "water" (MIT, ionic.io/ionicons), arcs converted to curves. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+  android:width="24dp"
+  android:height="24dp"
+  android:viewportWidth="512"
+  android:viewportHeight="512">
+  <path
+    android:fillColor="#FFFFFFFF"
+    android:pathData="M265.12 60.12C262.84 57.46 259.51 55.92 256 55.92 252.5 55.92 249.17 57.46 246.89 60.12 215.23 97.15 112 225.17 112 320c0 88.37 55.64 144 144 144s144-55.63 144-144c0-94.83-103.23-222.85-134.88-259.88zM272 412C268.1 412.01 264.44 410.12 262.18 406.94 259.93 403.76 259.36 399.68 260.66 396 262.34 391.15 266.94 387.92 272.07 388 305.14 387.93 331.93 361.14 332 328.07 331.92 322.94 335.15 318.34 340 316.66 343.68 315.36 347.76 315.93 350.94 318.18 354.12 320.44 356.01 324.1 356 328 355.95 374.37 318.37 411.95 272 412z" />
+</vector>

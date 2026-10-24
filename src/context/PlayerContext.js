@@ -86,10 +86,11 @@ export function PlayerProvider({ children }) {
     if (current?.kind === 'radio') engine.setNowPlaying(current.id, track);
   }, [current, track]);
 
-  // The home screen widget shows the station and the song (or "Paused").
+  // The home screen widget shows the station, the song (or "Paused") and
+  // the station's record; with nothing loaded, the BOA logo.
   useEffect(() => {
     if (!current) widget.setNowPlaying(null, null);
-    else widget.setNowPlaying(current.name, isPlaying ? track || 'Live on BOA Radio' : 'Paused');
+    else widget.setNowPlaying(current.name, isPlaying ? track || 'Live on BOA Radio' : 'Paused', current.id, isPlaying);
   }, [current, track, isPlaying]);
 
   // Tapping a record or cover: pause it if it's the one playing, else play

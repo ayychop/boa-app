@@ -29,11 +29,28 @@ class BoaWidgetModule : Module() {
       refresh()
     }
 
-    // What's on, shown under the clock: the station, then the song if known.
-    AsyncFunction("setNowPlaying") { title: String?, subtitle: String? ->
+    // What's on, under the clock: the station, then the song if known; the
+    // station's record artwork (a file:// PNG, or null for the BOA logo);
+    // and whether it's on air (the green dot).
+    AsyncFunction("setNowPlaying") { title: String?, subtitle: String?, artwork: String?, playing: Boolean ->
       prefs().edit()
         .putString(KEY_TITLE, title)
         .putString(KEY_SUBTITLE, subtitle)
+        .putString(KEY_ARTWORK, artwork)
+        .putBoolean(KEY_PLAYING, playing)
+        .apply()
+      refresh()
+    }
+
+    // Today's weather: "14°", an icon name (sun, moon, partly, cloud,
+    // cloud_night, rain, storm, snow), the place and the rain outlook.
+    // A null temperature clears it.
+    AsyncFunction("setWeather") { temp: String?, icon: String?, place: String?, detail: String? ->
+      prefs().edit()
+        .putString(KEY_WX_TEMP, temp)
+        .putString(KEY_WX_ICON, icon)
+        .putString(KEY_WX_PLACE, place)
+        .putString(KEY_WX_DETAIL, detail)
         .apply()
       refresh()
     }
@@ -64,5 +81,11 @@ class BoaWidgetModule : Module() {
     const val KEY_OPACITY = "opacity"
     const val KEY_TITLE = "title"
     const val KEY_SUBTITLE = "subtitle"
+    const val KEY_ARTWORK = "artwork"
+    const val KEY_PLAYING = "playing"
+    const val KEY_WX_TEMP = "wx_temp"
+    const val KEY_WX_ICON = "wx_icon"
+    const val KEY_WX_PLACE = "wx_place"
+    const val KEY_WX_DETAIL = "wx_detail"
   }
 }

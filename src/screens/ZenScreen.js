@@ -1,5 +1,5 @@
 import { Component, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Image, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Image, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { setStatusBarHidden } from 'expo-status-bar';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import { useVideoPlayer, VideoView } from 'expo-video';
@@ -11,6 +11,7 @@ import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
 import Animated, {
   cancelAnimation,
   Easing,
+  interpolateColor,
   FadeIn,
   FadeInDown,
   FadeOut,
@@ -18,6 +19,7 @@ import Animated, {
   useReducedMotion,
   useSharedValue,
   withDelay,
+  withSpring,
   withRepeat,
   withSequence,
   withTiming,
@@ -33,7 +35,7 @@ import { MEDIA_HEADERS, SCENES, SLEEP_TIMERS, SOUNDSCAPES, soundscapeById } from
 import * as ambientAudio from '../audio/ambient';
 import { cachedSource } from '../utils/mediaCache';
 import { haptics } from '../utils/haptics';
-import { shiftHex } from '../utils/color';
+import { shiftHex, withAlpha } from '../utils/color';
 import DriftingFog from '../components/DriftingFog';
 import Grain from '../components/Grain';
 import { PulseDot, Slate } from '../components/ui';
@@ -435,34 +437,69 @@ function GlassButton({ icon, label, onPress, size = 48, primary, children }) {
   );
 }
 
-// One soundscape: tap to play it on a loop, tap again to pause.
+// One soundscape, in its own colour (Rain deep blue, Deep sleep violet,
+// 432 Hz gold, Brown noise earth): tap to play it on a loop, tap again to
+// pause. The card glows up into its colour when it's on, on the UI thread.
 function SoundCard({ sound, state }) {
   const on = state.id === sound.id && (state.status === 'playing' || state.status === 'loading');
   const loading = state.id === sound.id && state.status === 'loading';
   const failed = state.id === sound.id && state.status === 'error';
+  const tone = sound.tone ?? colors.gold;
+  const lit = useSharedValue(on ? 1 : 0);
+  const press = useSharedValue(1);
+  useEffect(() => {
+    lit.value = withTiming(on ? 1 : 0, { duration: 520, easing: DIM });
+  }, [on, lit]);
+  // Worked out here, on the JS thread; the worklet only blends them.
+  const fills = [withAlpha(tone, 0.12), withAlpha(tone, 0.42)];
+  const edges = [withAlpha(tone, 0.28), withAlpha(tone, 0.95)];
+  const frame = useAnimatedStyle(() => ({
+    backgroundColor: interpolateColor(lit.value, [0, 1], fills),
+    borderColor: interpolateColor(lit.value, [0, 1], edges),
+    transform: [{ scale: press.value }],
+  }));
+  const ink = on ? '#FFFFFF' : colors.text;
   return (
     <Pressable
       onPress={() => {
         haptics.selection();
         ambientAudio.toggle(sound.id);
       }}
+      onPressIn={() => {
+        press.value = withTiming(0.95, { duration: 90 });
+      }}
+      onPressOut={() => {
+        press.value = withSpring(1, { duration: 380, dampingRatio: 0.55 });
+      }}
       accessibilityRole="button"
       accessibilityLabel={`${on ? 'Pause' : 'Play'} ${sound.label}`}
       accessibilityState={{ selected: on }}
-      style={({ pressed }) => [styles.card, on && styles.cardOn, pressed && { transform: [{ scale: 0.96 }] }]}
+      testID={`soundscape-${sound.id}`}
     >
-      <View style={styles.cardTop}>
-        <Ionicons name={sound.icon} size={20} color={on ? colors.gold : colors.text} />
-        {loading ? <ActivityIndicator size="small" color={colors.gold} /> : on ? <Equalizer /> : null}
-      </View>
-      <Text style={[styles.cardLabel, on && { color: colors.gold }]} numberOfLines={1}>
-        {sound.label}
-      </Text>
-      <Text style={styles.cardDetail} numberOfLines={1}>
-        {failed ? "Couldn't load. Tap to retry" : sound.detail}
-      </Text>
+      <Animated.View style={[styles.card, frame]}>
+        <View style={styles.cardTop}>
+          <Ionicons name={sound.icon} size={20} color={on ? '#FFFFFF' : tone} />
+          {loading ? <ActivityIndicator size="small" color="#FFFFFF" /> : on ? <Equalizer color="#FFFFFF" /> : null}
+        </View>
+        <Text style={[styles.cardLabel, { color: ink }]} numberOfLines={1}>
+          {sound.label}
+        </Text>
+        <Text style={[styles.cardDetail, on && { color: 'rgba(255,255,255,0.8)' }]} numberOfLines={1}>
+          {failed ? "Couldn't load. Tap to retry" : sound.detail}
+        </Text>
+      </Animated.View>
     </Pressable>
   );
+}
+
+// The room takes on the soundscape's colour: a wash over the scene that
+// cross-fades from one tone to the next.
+function ToneWash({ tone }) {
+  const target = tone ? withAlpha(tone, 0.22) : 'rgba(0,0,0,0)';
+  const style = useAnimatedStyle(() => ({
+    backgroundColor: withTiming(target, { duration: 1400, easing: DIM }),
+  }));
+  return <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, style]} testID="zen-tone-wash" />;
 }
 
 // Fade-out timer: Off, or 15 to 90 minutes, then the sound drifts away.
@@ -531,41 +568,10 @@ function Transport() {
   );
 }
 
-// Who made the sounds, videos and pictures, and under which licence.
-function Credits({ onClose }) {
-  const items = [
-    ...SOUNDSCAPES.map((s) => ({ key: s.id, kind: 'Sound', ...s })),
-    ...Object.values(SCENES).flatMap((s) => [
-      { key: `video-${s.id}`, kind: 'Video', ...s.video },
-      { key: `photo-${s.id}`, kind: 'Photo', ...s },
-    ]),
-  ];
-  return (
-    <Animated.View entering={FadeIn.duration(250)} exiting={FadeOut.duration(200)} style={styles.credits}>
-      <View style={styles.rowHead}>
-        <Slate dot>Credits</Slate>
-        <GlassButton icon="close" label="Close credits" onPress={onClose} size={36} />
-      </View>
-      <ScrollView style={{ maxHeight: 340 }} contentContainerStyle={{ gap: space.md, paddingTop: space.md }}>
-        {items.map((c) => (
-          <Pressable key={c.key} onPress={() => Linking.openURL(c.source)} accessibilityRole="link">
-            <Text style={styles.creditTitle}>
-              {c.kind} · {c.title}
-            </Text>
-            <Text style={styles.creditDetail}>
-              {c.author} · {c.license}
-            </Text>
-          </Pressable>
-        ))}
-      </ScrollView>
-    </Animated.View>
-  );
-}
-
 /**
  * The Zen tab: a Sleep & Meditation Hub. With its controls: the room (a
  * looping video scene over a photograph), the clock, soundscapes, the
- * fade-out timer, radio controls and credits. As the screensaver (after the
+ * fade-out timer and radio controls (the credits live in Profile). As the screensaver (after the
  * phone locks or the app sits idle): just the room, the clock and what's
  * playing, with the tab bar and status bar hidden; a tap brings the
  * controls back. It is an ordinary tab screen, so nothing ever sits over
@@ -580,7 +586,6 @@ function ZenRoom() {
   const sound = useAmbientAudio();
   const { isPlaying } = usePlayer();
   const bottomSpace = useBottomSpace(space.md);
-  const [creditsOpen, setCreditsOpen] = useState(false);
   const hint = useSharedValue(0);
 
   // Leaving the tab ends the screensaver, so coming back shows controls.
@@ -625,6 +630,13 @@ function ZenRoom() {
 
   const hintStyle = useAnimatedStyle(() => ({ opacity: hint.value }));
 
+  // Every soundscape downloads quietly once you're here, so the next tap
+  // plays from the phone.
+  useEffect(() => {
+    if (focused) ambientAudio.warmUp();
+  }, [focused]);
+  const playingScape = sound.id && (sound.status === 'playing' || sound.status === 'loading') ? soundscapeById(sound.id) : null;
+
   const sceneId = soundscapeById(sound.id)?.scene ?? 'night';
   const short = height < 500;
   const top = Math.max(insets.top, space.lg);
@@ -633,7 +645,9 @@ function ZenRoom() {
   const bottom = ambient ? Math.max(insets.bottom, space.lg) : bottomSpace;
   const edge = { left: space.xl, right: space.xl };
   const panelBeside = !ambient && short;
-  const panelHeight = short ? 0 : 296;
+  // Tall enough for the soundscapes, the timer and the radio's controls
+  // without scrolling.
+  const panelHeight = short ? 0 : 312;
   const clockArea = {
     top: top + (ambient ? 0 : 56),
     bottom: ambient ? bottom + 40 : panelBeside ? bottom : bottom + panelHeight + space.md,
@@ -646,6 +660,7 @@ function ZenRoom() {
   return (
     <View style={styles.screen} testID={ambient ? 'zen-screensaver' : 'zen-screen'}>
       <Atmosphere sceneId={sceneId} width={width} height={height} running={focused} />
+      <ToneWash tone={playingScape?.tone} />
       {ambient && (
         <Pressable style={StyleSheet.absoluteFill} onPress={wake} accessibilityRole="button" accessibilityLabel="Wake Zen controls" />
       )}
@@ -680,26 +695,20 @@ function ZenRoom() {
             ]}
           >
             <ScrollView contentContainerStyle={styles.panelBody} showsVerticalScrollIndicator={false}>
-              <Slate>Soundscapes</Slate>
+              {/* The radio's controls share the top row, so they are always
+                  in view. */}
+              <View style={styles.panelHead}>
+                <Slate>Soundscapes</Slate>
+                <Transport />
+              </View>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.cards}>
                 {SOUNDSCAPES.map((s) => (
                   <SoundCard key={s.id} sound={s} state={sound} />
                 ))}
               </ScrollView>
               <TimerRow />
-              <View style={styles.footer}>
-                <Pressable onPress={() => setCreditsOpen(true)} hitSlop={10} accessibilityRole="button" accessibilityLabel="Sound, video and photo credits">
-                  <Text style={styles.creditsLink}>Credits</Text>
-                </Pressable>
-                <Transport />
-              </View>
             </ScrollView>
           </View>
-          {creditsOpen && (
-            <View style={[StyleSheet.absoluteFill, styles.creditsWrap]} pointerEvents="box-none">
-              <Credits onClose={() => setCreditsOpen(false)} />
-            </View>
-          )}
         </Animated.View>
       )}
 
@@ -781,18 +790,16 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.12)',
     overflow: 'hidden',
   },
-  panelBody: { padding: space.lg, gap: space.lg },
-  cards: { gap: space.sm, paddingTop: space.sm },
+  panelBody: { paddingHorizontal: space.lg, paddingTop: space.md, paddingBottom: space.lg, gap: space.md },
+  panelHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 48 },
+  cards: { gap: space.sm },
   card: {
-    width: 128,
+    width: 132,
     padding: space.md,
     borderRadius: radius.lg,
-    backgroundColor: 'rgba(243,239,232,0.06)',
     borderWidth: 1,
-    borderColor: 'rgba(243,239,232,0.12)',
     gap: 4,
   },
-  cardOn: { borderColor: 'rgba(226,168,75,0.7)', backgroundColor: 'rgba(226,168,75,0.12)' },
   cardTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', height: 22, marginBottom: 6 },
   cardLabel: { fontFamily: fonts.semibold, fontSize: 15, color: colors.text, letterSpacing: -0.2 },
   cardDetail: { fontFamily: fonts.medium, fontSize: 11.5, color: colors.textMuted },
@@ -813,8 +820,6 @@ const styles = StyleSheet.create({
   chipOn: { backgroundColor: colors.gold, borderColor: colors.gold },
   chipText: { fontFamily: fonts.semibold, fontSize: 13, color: colors.text },
   chipTextOn: { color: colors.bg },
-  footer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  creditsLink: { fontFamily: fonts.mono, fontSize: 11, letterSpacing: 1.6, textTransform: 'uppercase', color: colors.textFaint },
   transport: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   glass: {
     alignItems: 'center',
@@ -824,18 +829,6 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.16)',
   },
   glassPrimary: { backgroundColor: colors.text, borderColor: colors.text },
-  creditsWrap: { alignItems: 'center', justifyContent: 'center', padding: space.xl, backgroundColor: 'rgba(5,5,6,0.55)' },
-  credits: {
-    width: '100%',
-    maxWidth: 460,
-    padding: space.lg,
-    borderRadius: radius.xl,
-    backgroundColor: 'rgba(14,14,16,0.96)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
-  },
-  creditTitle: { fontFamily: fonts.semibold, fontSize: 14, color: colors.text },
-  creditDetail: { fontFamily: fonts.medium, fontSize: 12, color: colors.textMuted, marginTop: 2 },
   hintRow: { position: 'absolute', alignItems: 'center' },
   hint: { fontFamily: fonts.mono, fontSize: 10.5, letterSpacing: 2, textTransform: 'uppercase', color: colors.textFaint },
 });

@@ -1,19 +1,30 @@
 import { createAudioPlayer } from 'expo-audio';
-import { soundscapeById } from '../data/sleep';
-import { cachedSource } from '../utils/mediaCache';
+import { MEDIA_HEADERS, SOUNDSCAPES, soundscapeById } from '../data/sleep';
+import { cachedSource, cachedUri, prefetch } from '../utils/mediaCache';
+import * as radio from './engine';
 
 // Soundscape engine for the Sleep & Meditation Hub: one looping expo-audio
-// player, separate from the radio's, so rain can sit under a station or
-// play on its own. expo-audio holds audio focus for the whole app, so the
-// two players never pause each other.
+// player, separate from the radio's. Starting a soundscape pauses the radio
+// straight away: you came to Zen for the rain, not the rain and a station.
 //
-// On a phone each recording is downloaded once into the cache and looped
-// from there (utils/mediaCache.js); if the download fails it streams.
+// It starts at once: from the cache if the recording is already on the
+// phone, otherwise streaming while a copy downloads in the background for
+// next time (utils/mediaCache.js).
 let player = null;
 let state = { id: null, status: 'idle', volume: 1 };
 let fadeTimer = null;
 let gen = 0;
 const listeners = new Set();
+
+// Whether the radio is on, so starting a soundscape only pauses it then.
+let radioStatus = 'idle';
+radio.subscribe((r) => {
+  radioStatus = r.status;
+});
+
+function pauseRadio() {
+  if (radioStatus === 'playing' || radioStatus === 'loading') radio.pause();
+}
 
 function emit(patch) {
   state = { ...state, ...patch };
@@ -22,6 +33,22 @@ function emit(patch) {
 
 /** A local copy of the soundscape, downloading it the first time. */
 export const localSource = (soundscape) => cachedSource('soundscapes', `${soundscape.id}.mp3`, soundscape.uri);
+
+/**
+ * Something that plays now: the cached copy, else the stream (and the
+ * download starts in the background, so the next play is from the phone).
+ */
+function instantSource(soundscape) {
+  const local = cachedUri('soundscapes', `${soundscape.id}.mp3`);
+  if (local) return { uri: local };
+  localSource(soundscape);
+  return { uri: soundscape.uri, headers: MEDIA_HEADERS };
+}
+
+/** Downloads every soundscape in the background (the Zen tab calls this). */
+export function warmUp() {
+  return prefetch(SOUNDSCAPES.map((s) => ({ folder: 'soundscapes', name: `${s.id}.mp3`, uri: s.uri })));
+}
 
 function stopFade() {
   clearInterval(fadeTimer);
@@ -33,16 +60,16 @@ export async function play(id) {
   const soundscape = soundscapeById(id);
   if (!soundscape) return;
   stopFade();
+  pauseRadio();
   if (state.id === id && player && state.status !== 'error') {
     player.volume = state.volume;
     player.play();
     return emit({ status: 'playing' });
   }
-  const attempt = ++gen;
+  ++gen;
   emit({ id, status: 'loading' });
   try {
-    const source = await localSource(soundscape);
-    if (attempt !== gen) return; // switched or stopped while downloading
+    const source = instantSource(soundscape);
     if (!player) {
       player = createAudioPlayer(source, { updateInterval: 1000 });
       player.addListener('playbackStatusUpdate', (s) => {
@@ -56,7 +83,6 @@ export async function play(id) {
     player.play();
     emit({ status: 'playing' });
   } catch (err) {
-    if (attempt !== gen) return;
     console.warn(`[ambient] couldn't play ${id}`, err?.message ?? err);
     emit({ status: 'error' });
   }

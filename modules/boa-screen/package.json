@@ -1,0 +1,7 @@
+{
+  "name": "boa-screen",
+  "version": "1.0.0",
+  "private": true,
+  "main": "index.js",
+  "description": "Tells the app when the phone's screen turns off or on (lock, timeout, power button)."
+}

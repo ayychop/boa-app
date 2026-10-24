@@ -87,6 +87,8 @@ jest.mock('expo-audio', () => {
 // test says otherwise, and remember what was fetched with which headers.
 jest.mock('expo-file-system', () => {
   const files = new Map(); // uri -> size
+  const bytes = new Map(); // uri -> first bytes, for images
+  const PNG = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0x0d];
   const join = (...parts) => parts.map((p) => (typeof p === 'string' ? p : p.uri)).join('/');
   class Directory {
     constructor(...parts) {
@@ -107,9 +109,19 @@ jest.mock('expo-file-system', () => {
     get size() {
       return files.get(this.uri) ?? 0;
     }
+    bytesSync() {
+      return new Uint8Array(bytes.get(this.uri) ?? []);
+    }
+    delete() {
+      files.delete(this.uri);
+      bytes.delete(this.uri);
+    }
   }
+  // Images (station logos) arrive as a real-sized PNG.
   File.downloadFileAsync = jest.fn(async (url, dest) => {
-    files.set(dest.uri, 1024);
+    const image = /\.(png|jpe?g|webp|gif)(\?|$)/i.test(url);
+    files.set(dest.uri, image ? 8192 : 1024);
+    if (image) bytes.set(dest.uri, PNG);
     return dest;
   });
   return { Directory, File, Paths: { cache: { uri: 'file:///cache' } }, __files: files };
@@ -218,4 +230,52 @@ jest.mock('expo-font', () => ({
   isLoaded: () => true,
   isLoading: () => false,
 }));
+// The screen off/on broadcast (an Android native module in the app); tests
+// fire it with __emit('off' | 'on').
+jest.mock('./modules/boa-screen', () => {
+  const listeners = new Set();
+  return {
+    isAvailable: true,
+    addScreenListener: jest.fn((fn) => {
+      listeners.add(fn);
+      return () => listeners.delete(fn);
+    }),
+    __emit: (state) => listeners.forEach((fn) => fn(state)),
+  };
+});
+
+// Alarms: scheduled notifications, never actually delivered in tests.
+jest.mock('expo-notifications', () => {
+  const sub = () => ({ remove: jest.fn() });
+  return {
+    AndroidImportance: { MAX: 5 },
+    AndroidNotificationPriority: { MAX: 'max' },
+    AndroidNotificationVisibility: { PUBLIC: 1 },
+    AndroidAudioUsage: { ALARM: 4 },
+    SchedulableTriggerInputTypes: { DATE: 'date', WEEKLY: 'weekly' },
+    setNotificationHandler: jest.fn(),
+    setNotificationChannelAsync: jest.fn(() => Promise.resolve(null)),
+    getPermissionsAsync: jest.fn(() => Promise.resolve({ granted: false, canAskAgain: true })),
+    requestPermissionsAsync: jest.fn(() => Promise.resolve({ granted: true })),
+    scheduleNotificationAsync: jest.fn(() => Promise.resolve('notification-id')),
+    cancelScheduledNotificationAsync: jest.fn(() => Promise.resolve()),
+    addNotificationReceivedListener: jest.fn(sub),
+    addNotificationResponseReceivedListener: jest.fn(sub),
+  };
+});
+
+// Weather: location never granted unless a test says so.
+jest.mock('expo-location', () => ({
+  Accuracy: { Low: 2, Balanced: 3 },
+  getForegroundPermissionsAsync: jest.fn(() => Promise.resolve({ granted: false, status: 'undetermined', canAskAgain: true })),
+  requestForegroundPermissionsAsync: jest.fn(() => Promise.resolve({ granted: false, status: 'denied', canAskAgain: false })),
+  getLastKnownPositionAsync: jest.fn(() => Promise.resolve(null)),
+  getCurrentPositionAsync: jest.fn(() => Promise.resolve({ coords: { latitude: 5.6, longitude: -0.19 } })),
+  reverseGeocodeAsync: jest.fn(() => Promise.resolve([{ city: 'Accra' }])),
+}));
+
+// The Creative Hub stays unconfigured, so tests never reach the real project
+// even when .env.local is filled in.
+jest.mock('./src/lib/supabase', () => ({ supabase: null, isConfigured: false, projectHost: null }));
+
 global.fetch = jest.fn(() => Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve([]), text: () => Promise.resolve('') }));
