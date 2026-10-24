@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { AppState, Platform, View } from 'react-native';
+import { AppState, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { colors, fonts, radius, space } from '../theme';
 import { usePlayer } from './PlayerContext';
 import { useUser } from './UserContext';
 import { overlayOpen } from '../utils/overlays';
@@ -22,6 +23,14 @@ const DisplayContext = createContext(null);
  */
 export function DisplayProvider({ children }) {
   const [zen, setZen] = useState(null);
+  // If Zen Mode ever fails to draw, what went wrong shows here for a few
+  // seconds instead of the button seeming to do nothing.
+  const [zenError, setZenError] = useState(null);
+  useEffect(() => {
+    if (!zenError) return;
+    const id = setTimeout(() => setZenError(null), 8000);
+    return () => clearTimeout(id);
+  }, [zenError]);
   const lastActivity = useRef(Date.now());
 
   const touch = useCallback(() => {
@@ -129,7 +138,15 @@ export function DisplayProvider({ children }) {
       >
         {children}
       </View>
-      {zen && <ZenMode key={zen} mode={zen} onExit={exitZen} />}
+      {zen && <ZenMode key={zen} mode={zen} onExit={exitZen} onError={(e) => setZenError(String(e?.message ?? e))} />}
+      {zenError && (
+        <Pressable style={styles.banner} onPress={() => setZenError(null)} accessibilityRole="alert">
+          <Text style={styles.bannerTitle}>Zen Mode couldn't open</Text>
+          <Text style={styles.bannerBody} numberOfLines={3}>
+            {zenError}
+          </Text>
+        </Pressable>
+      )}
     </DisplayContext.Provider>
   );
 }
@@ -139,3 +156,21 @@ export function useDisplay() {
   if (!ctx) throw new Error('useDisplay must be used inside <DisplayProvider>');
   return ctx;
 }
+
+const styles = StyleSheet.create({
+  banner: {
+    position: 'absolute',
+    top: 48,
+    left: space.lg,
+    right: space.lg,
+    padding: space.md,
+    borderRadius: radius.lg,
+    backgroundColor: 'rgba(20,20,24,0.96)',
+    borderWidth: 1,
+    borderColor: 'rgba(226,168,75,0.5)',
+    zIndex: 9999,
+    elevation: 24,
+  },
+  bannerTitle: { fontFamily: fonts.semibold, fontSize: 14, color: colors.gold },
+  bannerBody: { fontFamily: fonts.medium, fontSize: 12.5, color: colors.textMuted, marginTop: 4 },
+});

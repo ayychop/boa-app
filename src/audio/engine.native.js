@@ -231,11 +231,64 @@ let lockScreenOn = false;
 let pendingLockScreen = null;
 let askedForNotifications = false;
 
-const lockScreenMetadata = (item) => ({
-  title: item.name,
-  artist: item.artist || 'BOA Radio',
-  artworkUrl: item.logo || undefined,
-});
+// Spotify-style lock screen: the song as the title and the station as the
+// artist once the stream says what's on ("Artist - Title" splits into both),
+// the station and "BOA Radio" until then; BOA Networks as the album; and a
+// record with the station's logo as its label for the artwork (rendered on
+// the device, see components/RecordArtwork.js), else the bare logo.
+let nowPlaying = null; // { id, text }
+const artworkById = new Map(); // station id -> file:// uri of its record art
+
+export function splitTrack(text) {
+  const m = /^\s*(.+?)\s+[-\u2013]\s+(.+?)\s*$/.exec(text || '');
+  return m ? { artist: m[1], title: m[2] } : null;
+}
+
+export function lockScreenMetadata(item) {
+  const live = isLive(item);
+  const track = nowPlaying?.id === item.id ? nowPlaying.text : null;
+  const split = splitTrack(track);
+  let title = item.name;
+  let artist = item.artist || 'BOA Radio';
+  if (live && split) {
+    title = split.title;
+    artist = `${split.artist} · ${item.name}`;
+  } else if (live && track) {
+    title = track;
+    artist = item.name;
+  } else if (live) {
+    artist = 'BOA Radio · Live';
+  }
+  return {
+    title,
+    artist,
+    albumTitle: 'BOA Networks',
+    artworkUrl: artworkById.get(item.id) || item.logo || undefined,
+  };
+}
+
+function refreshLockScreen() {
+  if (!player || !current || !lockScreenOn) return;
+  try {
+    player.updateLockScreenMetadata(lockScreenMetadata(current));
+  } catch (err) {
+    console.warn('[audio] lock screen update failed', err);
+  }
+}
+
+/** The track a station is playing, for the lock screen (null when unknown). */
+export function setNowPlaying(id, text) {
+  if (nowPlaying?.id === id && nowPlaying?.text === text) return;
+  nowPlaying = { id, text: text || null };
+  if (current?.id === id) refreshLockScreen();
+}
+
+/** A rendered record image (file:// uri) to show on the lock screen. */
+export function setArtwork(id, uri) {
+  if (!uri || artworkById.get(id) === uri) return;
+  artworkById.set(id, uri);
+  if (current?.id === id) refreshLockScreen();
+}
 
 function showOnLockScreen(item) {
   if (!player) return;
@@ -280,6 +333,31 @@ export async function pause() {
   gen += 1;
   emit({ status: 'paused', retry: 0 });
   player?.pause();
+}
+
+/**
+ * Fades playback out over `ms` (ease-out), then pauses and restores the
+ * volume. Used by the sleep timer so the music drifts off rather than cuts.
+ */
+export function fadeOut(ms = 30000) {
+  if (!player || !wantPlaying) return Promise.resolve(pause());
+  const started = Date.now();
+  return new Promise((resolve) => {
+    const id = setInterval(() => {
+      const t = Math.min(1, (Date.now() - started) / ms);
+      if (!wantPlaying) {
+        clearInterval(id);
+        player.volume = 1;
+        return resolve();
+      }
+      player.volume = (1 - t) * (1 - t);
+      if (t < 1) return;
+      clearInterval(id);
+      pause();
+      player.volume = 1;
+      resolve();
+    }, 100);
+  });
 }
 
 export async function seek(seconds) {

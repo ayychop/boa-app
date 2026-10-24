@@ -36,7 +36,88 @@ jest.mock('./src/audio/engine', () => {
       return () => subs.delete(fn);
     },
     setRemoteControls: jest.fn(),
+    fadeOut: jest.fn(async () => emit({ status: 'paused' })),
+    setNowPlaying: jest.fn(),
+    setArtwork: jest.fn(),
   };
+});
+
+// expo-audio: in-memory players that record what the app asks of them, so
+// tests can check sources, looping, volume and lock screen metadata.
+jest.mock('expo-audio', () => {
+  const players = [];
+  const createAudioPlayer = jest.fn((source) => {
+    const listeners = {};
+    const player = {
+      source,
+      loop: false,
+      volume: 1,
+      playing: false,
+      play: jest.fn(() => {
+        player.playing = true;
+      }),
+      pause: jest.fn(() => {
+        player.playing = false;
+      }),
+      replace: jest.fn((next) => {
+        player.source = next;
+      }),
+      seekTo: jest.fn(async () => {}),
+      setPlaybackRate: jest.fn(),
+      setActiveForLockScreen: jest.fn(),
+      updateLockScreenMetadata: jest.fn(),
+      addListener: jest.fn((event, fn) => {
+        (listeners[event] ??= []).push(fn);
+        return { remove: jest.fn() };
+      }),
+      emit: (event, payload) => (listeners[event] ?? []).forEach((fn) => fn(payload)),
+    };
+    players.push(player);
+    return player;
+  });
+  return {
+    createAudioPlayer,
+    setAudioModeAsync: jest.fn(() => Promise.resolve()),
+    requestNotificationPermissionsAsync: jest.fn(() => Promise.resolve({ granted: true })),
+    __players: players,
+  };
+});
+
+// expo-file-system: a fake cache directory; downloads "succeed" unless a
+// test says otherwise, and remember what was fetched with which headers.
+jest.mock('expo-file-system', () => {
+  const files = new Map(); // uri -> size
+  const join = (...parts) => parts.map((p) => (typeof p === 'string' ? p : p.uri)).join('/');
+  class Directory {
+    constructor(...parts) {
+      this.uri = join(...parts);
+    }
+    get exists() {
+      return true;
+    }
+    create() {}
+  }
+  class File {
+    constructor(...parts) {
+      this.uri = join(...parts);
+    }
+    get exists() {
+      return files.has(this.uri);
+    }
+    get size() {
+      return files.get(this.uri) ?? 0;
+    }
+  }
+  File.downloadFileAsync = jest.fn(async (url, dest) => {
+    files.set(dest.uri, 1024);
+    return dest;
+  });
+  return { Directory, File, Paths: { cache: { uri: 'file:///cache' } }, __files: files };
+});
+
+jest.mock('react-native-view-shot', () => {
+  let n = 0;
+  return { captureRef: jest.fn(() => Promise.resolve(`file:///cache/record-${++n}.png`)) };
 });
 
 // Network: fixed stations instead of live directories.

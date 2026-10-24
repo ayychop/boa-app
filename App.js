@@ -40,6 +40,7 @@ import { DisplayProvider } from './src/context/DisplayContext';
 import OnboardingScreen from './src/screens/OnboardingScreen';
 import Intro from './src/components/Intro';
 import MiniPlayer from './src/components/MiniPlayer';
+import RecordArtwork from './src/components/RecordArtwork';
 import HomeScreen from './src/screens/HomeScreen';
 import RadioScreen from './src/screens/RadioScreen';
 import OriginalsScreen from './src/screens/OriginalsScreen';
@@ -214,6 +215,8 @@ function MainTabs({ narrow }) {
         <Tab.Screen name="Talent" component={Talent} />
         <Tab.Screen name="Profile" component={Profile} />
       </Tab.Navigator>
+      {/* Draws the lock screen's record artwork for the station playing. */}
+      <RecordArtwork />
     </NavigationContainer>
   );
 }

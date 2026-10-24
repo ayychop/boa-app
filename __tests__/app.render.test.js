@@ -75,7 +75,7 @@ test.each(['Home', 'Radio'])('the Zen button on %s opens Zen Mode with its contr
   await user.press(buttons[buttons.length - 1]);
   await advance(1200);
   expect(screen.getByRole('button', { name: 'Close Zen Mode' })).toBeOnTheScreen();
-  expect(screen.getByText('Zen Mode')).toBeOnTheScreen();
+  expect(screen.getByText('Sleep & Meditation')).toBeOnTheScreen();
   await user.press(screen.getByRole('button', { name: 'Close Zen Mode' }));
   await advance(400);
   expect(screen.queryByRole('button', { name: 'Close Zen Mode' })).not.toBeOnTheScreen();

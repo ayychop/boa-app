@@ -17,7 +17,9 @@ import { fetchStationsByTag, GENRES } from '../api/radio';
 import { backupStations, curatedStations } from '../data/radioStations';
 import { checkAhead, healList, markAlive, markDead, useDeadStations } from '../api/stationHealth';
 import { MAX_RETRIES } from '../audio/engine';
-import { glowFor } from '../api/stationColor';
+import { FALLBACK_GLOW, glowFor } from '../api/stationColor';
+import { withAlpha } from '../utils/color';
+import { LinearGradient } from 'expo-linear-gradient';
 import { usePlayer } from '../context/PlayerContext';
 import useNowPlaying from '../hooks/useNowPlaying';
 import RecordCarousel, { carouselItemWidth } from '../components/RecordCarousel';
@@ -124,6 +126,28 @@ function StationText({ station, track, status, meta, compact, saved, onSave, hif
           {meta}
         </Text>
       </View>
+    </Animated.View>
+  );
+}
+
+// The whole stage takes on the record's colour: a wash from the top that
+// sinks into the black, crossfading as you swipe from record to record.
+function StageWash({ color }) {
+  const tint = color || FALLBACK_GLOW;
+  return (
+    <Animated.View
+      key={tint}
+      entering={FadeIn.duration(700)}
+      exiting={FadeOut.duration(700)}
+      pointerEvents="none"
+      style={StyleSheet.absoluteFill}
+      testID="stage-wash"
+    >
+      <LinearGradient
+        colors={[withAlpha(tint, 0.34), withAlpha(tint, 0.1), 'rgba(5,5,6,0)']}
+        locations={[0, 0.45, 0.85]}
+        style={StyleSheet.absoluteFill}
+      />
     </Animated.View>
   );
 }
@@ -266,7 +290,7 @@ export default function RadioScreen({ route, navigation }) {
 
   // Pull glow colours for the record in focus and its neighbours, so the
   // colour is usually ready before you swipe to it. brandColor wins, then the
-  // logo's colour, then a warm gold fallback (see glowFor).
+  // logo's colour, then BOA gold (see glowFor).
   useEffect(() => {
     let alive = true;
     stations.slice(Math.max(0, index - 1), index + 3).forEach((s) => {
@@ -422,6 +446,7 @@ export default function RadioScreen({ route, navigation }) {
 
   return (
     <View style={styles.screen}>
+      <StageWash color={active ? glows[active.id] : null} />
       {stage && <FogPlane x={scrollX} width={stage.width} span={itemWidth * stations.length} />}
 
       <View

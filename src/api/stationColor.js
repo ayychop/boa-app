@@ -1,5 +1,6 @@
 import { Platform } from 'react-native';
 import ImageColors from 'react-native-image-colors';
+import { colors } from '../theme';
 
 // Extracted glow colour per station, Spotify-style. Results (including
 // "no usable colour") are cached for the session.
@@ -70,9 +71,8 @@ export function getStationGlow(station) {
   return promise;
 }
 
-// When a logo gives us nothing usable: a deep, warm brand gold, so the stage
-// still glows faintly instead of going dead black.
-export const FALLBACK_GLOW = '#2A1F10';
+// When a logo is blank, all greys, or can't be read at all: BOA gold.
+export const FALLBACK_GLOW = colors.gold;
 
 /**
  * A colour that's already known, without starting any extraction: the
@@ -87,8 +87,8 @@ export function cachedGlow(station) {
 
 /**
  * The glow behind a station's record, in priority order: the station's own
- * `brandColor` (curated data), the most vibrant colour in its logo, then
- * the warm gold fallback. Always resolves to a colour.
+ * `brandColor` (curated data), the most vibrant colour in its logo
+ * (react-native-image-colors), then BOA gold. Always resolves to a colour.
  */
 export function glowFor(station) {
   if (station?.brandColor) return Promise.resolve(station.brandColor);

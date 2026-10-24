@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- BOA Radio home screen widget: the record and a live clock. TextClock
+     keeps time on its own, so the widget never needs to wake the app. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+  android:id="@+id/boa_widget_root"
+  android:layout_width="match_parent"
+  android:layout_height="match_parent"
+  android:background="@drawable/boa_widget_bg"
+  android:padding="16dp">
+
+  <LinearLayout
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:gravity="center_vertical"
+    android:orientation="horizontal">
+
+    <ImageView
+      android:layout_width="84dp"
+      android:layout_height="84dp"
+      android:contentDescription="@string/boa_widget_record"
+      android:src="@drawable/boa_widget_record" />
+
+    <LinearLayout
+      android:layout_width="0dp"
+      android:layout_height="wrap_content"
+      android:layout_marginStart="16dp"
+      android:layout_weight="1"
+      android:orientation="vertical">
+
+      <TextClock
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:fontFamily="sans-serif-light"
+        android:format12Hour="h:mm"
+        android:format24Hour="HH:mm"
+        android:includeFontPadding="false"
+        android:textColor="#F3EFE8"
+        android:textSize="44sp" />
+
+      <TextClock
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:format12Hour="EEEE d MMMM"
+        android:format24Hour="EEEE d MMMM"
+        android:maxLines="1"
+        android:textColor="#B3D9D4C8"
+        android:textSize="12sp" />
+
+      <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:fontFamily="monospace"
+        android:letterSpacing="0.15"
+        android:maxLines="1"
+        android:text="@string/boa_widget_cta"
+        android:textColor="#E2A84B"
+        android:textSize="10sp" />
+    </LinearLayout>
+  </LinearLayout>
+</FrameLayout>

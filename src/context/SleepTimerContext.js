@@ -2,12 +2,16 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import { Pressable, StyleSheet } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { usePlayer } from './PlayerContext';
+import * as ambient from '../audio/ambient';
 import SleepTimerMenu from '../components/SleepTimerMenu';
 
 const SleepTimerContext = createContext(null);
 // Ticks once a second while a timer runs; kept apart so only countdown
 // labels re-render, not everything that can start a timer.
 const RemainingContext = createContext(0);
+
+// How long the timer's fade-out takes once it runs out.
+export const FADE_MS = 30000;
 
 export const SLEEP_OPTIONS = [
   { minutes: 15, label: '15 minutes' },
@@ -25,11 +29,12 @@ export function formatRemaining(ms) {
 }
 
 /**
- * Sleep timer: pauses playback when it runs out, then dims the whole app a
- * little, the way a room goes quiet. Any tap brings the light back.
+ * Sleep timer: when it runs out the radio and the hub's soundscape fade out
+ * together, then the whole app dims a little, the way a room goes quiet.
+ * Any tap brings the light back.
  */
 export function SleepTimerProvider({ children }) {
-  const { pause, isPlaying } = usePlayer();
+  const { fadeOut, isPlaying } = usePlayer();
   const [endsAt, setEndsAt] = useState(null);
   const [remaining, setRemaining] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -42,13 +47,14 @@ export function SleepTimerProvider({ children }) {
       setRemaining(left);
       if (left > 0) return;
       setEndsAt(null);
-      if (isPlaying) pause();
-      setDimmed(true);
+      // The music and any soundscape drift off together over half a
+      // minute, then the room dims.
+      Promise.all([isPlaying ? fadeOut(FADE_MS) : null, ambient.fadeOut(FADE_MS)]).finally(() => setDimmed(true));
     };
     tick();
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
-  }, [endsAt, isPlaying, pause]);
+  }, [endsAt, isPlaying, fadeOut]);
 
   const start = useCallback((minutes) => {
     setDimmed(false);

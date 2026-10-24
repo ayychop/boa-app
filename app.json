@@ -85,7 +85,8 @@
             "density"
           ]
         }
-      ]
+      ],
+      "./plugins/withBoaWidget"
     ],
     "owner": "boanets-team",
     "extra": {

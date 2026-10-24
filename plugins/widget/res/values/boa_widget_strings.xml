@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="boa_widget_label">BOA Radio</string>
+  <string name="boa_widget_description">The BOA record and the time. Tap to tune in.</string>
+  <string name="boa_widget_record">BOA record</string>
+  <string name="boa_widget_cta">BOA RADIO · TAP TO TUNE IN</string>
+</resources>

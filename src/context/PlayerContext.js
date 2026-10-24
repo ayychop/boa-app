@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import * as engine from '../audio/engine';
 import { haptics } from '../utils/haptics';
+import useNowPlaying from '../hooks/useNowPlaying';
 
 const PlayerContext = createContext(null);
 // Position ticks several times a second; keep it in its own context so only
@@ -77,6 +78,13 @@ export function PlayerProvider({ children }) {
 
   const isPlaying = core.status === 'playing' || core.status === 'loading';
 
+  // What the station says is on, passed to the lock screen as the title.
+  const polledTrack = useNowPlaying(current, current?.kind === 'radio');
+  const track = core.title || polledTrack;
+  useEffect(() => {
+    if (current?.kind === 'radio') engine.setNowPlaying(current.id, track);
+  }, [current, track]);
+
   // Tapping a record or cover: pause it if it's the one playing, else play
   // it (with the list it sits in as the queue).
   const toggle = useCallback(
@@ -102,6 +110,8 @@ export function PlayerProvider({ children }) {
       toggle,
       next,
       previous,
+      // Drift off: fades the audio out, then pauses (the sleep timer).
+      fadeOut: engine.fadeOut,
       // Live radio with somewhere to step to.
       canStep: current?.kind === 'radio' && queue.current.length > 1,
       seek: engine.seek,

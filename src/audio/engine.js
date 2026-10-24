@@ -168,6 +168,28 @@ export function pause() {
   emit({ status: 'paused', retry: 0 });
 }
 
+/** Fades the stream out over `ms`, then pauses (see engine.native.js). */
+export function fadeOut(ms = 30000) {
+  const el = audio;
+  if (!el || el.paused) return Promise.resolve(pause());
+  const started = Date.now();
+  return new Promise((resolve) => {
+    const id = setInterval(() => {
+      const t = Math.min(1, (Date.now() - started) / ms);
+      el.volume = (1 - t) * (1 - t);
+      if (t < 1) return;
+      clearInterval(id);
+      pause();
+      el.volume = 1;
+      resolve();
+    }, 100);
+  });
+}
+
+// The browser's media session shows the logo; these keep the native API.
+export function setNowPlaying() {}
+export function setArtwork() {}
+
 export function seek(seconds) {
   const el = getAudio();
   if (!el || isLive(current)) return;
