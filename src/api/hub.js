@@ -1,6 +1,3 @@
-import * as WebBrowser from 'expo-web-browser';
-import { makeRedirectUri } from 'expo-auth-session';
-import * as Linking from 'expo-linking';
 import { supabase } from '../lib/supabase';
 
 // The Creative Hub's calls to the BOA HUB Supabase project. Access rules
@@ -66,59 +63,88 @@ function check({ data, error }) {
 
 // ------------------------------------------------------------------- auth
 
-// Where Supabase sends you back after Google or an email link: the app's
-// own scheme (app.json), network.boa://auth-callback in an installed
-// build. It must match Supabase's Redirect URLs (network.boa://**).
-// (Google's own Console lists Supabase's callback,
-// https://<project>.supabase.co/auth/v1/callback, not this.)
-export const authRedirect = () => makeRedirectUri({ scheme: 'network.boa', path: 'auth-callback' });
+// Where Supabase sends you back from the confirmation email: the app's own
+// scheme (app.json). It must be in Supabase's Redirect URLs
+// (network.boa://**). The app routes it to completeAuthLink (App.js).
+export const AUTH_REDIRECT = 'network.boa://auth-callback';
+export const authRedirect = () => AUTH_REDIRECT;
 
-export async function signInWithEmail(email, password) {
-  return check(await need().auth.signInWithPassword({ email: email.trim(), password }));
-}
+export const EXISTING_EMAIL = 'An account with this email already exists. Sign in instead.';
 
-export async function signUpWithEmail(email, password) {
-  return check(await need().auth.signUp({ email: email.trim(), password, options: { emailRedirectTo: authRedirect() } }));
-}
-
-const LINK_GRACE_MS = 800;
-
-// On the web the sign-in popup closes itself through this.
-WebBrowser.maybeCompleteAuthSession();
-
-/** Finishes an OAuth return (network.boa://auth-callback?code=...): a session, or null. */
-async function completeOAuth(sb, returnUrl) {
-  const params = new URL(returnUrl.replace('#', '?')).searchParams;
-  const code = params.get('code');
-  if (code) return check(await sb.auth.exchangeCodeForSession(code));
-  const error = params.get('error_description') || params.get('error');
-  if (error) throw new Error(error);
-  return null;
+/** An Error with a code the screen can act on (e.g. offer to resend the email). */
+function authError(code, message) {
+  return Object.assign(new Error(message), { code });
 }
 
 /**
- * Google, through the system browser: Supabase's OAuth page comes back to
- * network.boa://auth-callback with a code, exchanged here for a session (PKCE).
- * Some Android browsers hand the redirect to the app as an ordinary link
- * and report the browser as dismissed, so the link is caught here too.
+ * Signs in with email and password. Unconfirmed accounts get
+ * code 'email_not_confirmed', so the screen can offer to resend the link.
  */
-export async function signInWithGoogle() {
-  const sb = need();
-  const redirectTo = authRedirect();
-  const { url } = check(await sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo, skipBrowserRedirect: true } }));
-  let linked = null;
-  const sub = Linking.addEventListener('url', (e) => {
-    if (e?.url?.startsWith(redirectTo)) linked = e.url;
-  });
-  try {
-    const result = await WebBrowser.openAuthSessionAsync(url, redirectTo);
-    // The link can land a moment after the browser reports it closed.
-    if (result.type !== 'success' && !linked) await new Promise((r) => setTimeout(r, LINK_GRACE_MS));
-    const returned = result.type === 'success' ? result.url : linked;
-    return returned ? await completeOAuth(sb, returned) : null;
-  } finally {
-    sub?.remove?.();
+export async function signInWithEmail(email, password) {
+  const { data, error } = await need().auth.signInWithPassword({ email: email.trim(), password });
+  if (!error) return data;
+  const message = error.message || '';
+  if (error.code === 'email_not_confirmed' || /not confirmed/i.test(message)) {
+    throw authError('email_not_confirmed', `Confirm your email first: we sent a link to ${email.trim()}.`);
   }
+  if (error.code === 'invalid_credentials' || /invalid login credentials/i.test(message)) {
+    throw authError('invalid_credentials', "That email and password don't match an account.");
+  }
+  throw authError(error.code ?? null, message || 'Something went wrong');
+}
+
+/**
+ * Creates an account. With "Confirm email" on, Supabase sends a link to
+ * network.boa://auth-callback and there's no session until it's tapped
+ * ({ session: null }). An email that's already registered: with
+ * confirmation on, Supabase doesn't say so (so nobody can find out who has
+ * an account) but returns a user with no identities; either way the
+ * listener hears EXISTING_EMAIL.
+ */
+export async function signUpWithEmail(email, password) {
+  const { data, error } = await need().auth.signUp({ email: email.trim(), password, options: { emailRedirectTo: AUTH_REDIRECT } });
+  if (error) {
+    if (error.code === 'user_already_exists' || /already registered|already exists/i.test(error.message || '')) {
+      throw authError('user_already_exists', EXISTING_EMAIL);
+    }
+    throw authError(error.code ?? null, error.message || 'Something went wrong');
+  }
+  if (data?.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+    throw authError('user_already_exists', EXISTING_EMAIL);
+  }
+  return data;
+}
+
+/** Sends the confirmation email again. */
+export async function resendConfirmation(email) {
+  const { error } = await need().auth.resend({ type: 'signup', email: email.trim(), options: { emailRedirectTo: AUTH_REDIRECT } });
+  if (error) throw authError(error.code ?? null, error.message || "Couldn't send the email");
+}
+
+/**
+ * Completes a confirmation link (network.boa://auth-callback...), in
+ * whichever form Supabase sends it: ?code= (PKCE), ?token_hash=&type=, or
+ * #access_token=&refresh_token=. Returns the session. A link opened on a
+ * different phone (or one already used) still confirmed the email, so the
+ * error says to sign in with the password.
+ */
+export async function completeAuthLink(url) {
+  const sb = need();
+  const params = new URLSearchParams([new URL(url).search, new URL(url).hash].map((p) => p.replace(/^[?#]/, '')).filter(Boolean).join('&'));
+  const failed = params.get('error_description') || params.get('error');
+  if (failed) throw authError(params.get('error_code') ?? 'link_error', failed.replace(/\+/g, ' '));
+  try {
+    if (params.get('code')) return check(await sb.auth.exchangeCodeForSession(params.get('code'))).session;
+    if (params.get('token_hash')) {
+      return check(await sb.auth.verifyOtp({ token_hash: params.get('token_hash'), type: params.get('type') || 'signup' })).session;
+    }
+    if (params.get('access_token') && params.get('refresh_token')) {
+      return check(await sb.auth.setSession({ access_token: params.get('access_token'), refresh_token: params.get('refresh_token') })).session;
+    }
+  } catch {
+    throw authError('confirmed_sign_in', 'Your email is confirmed. Sign in with your email and password.');
+  }
+  return null;
 }
 
 export async function signOut() {

@@ -6,15 +6,16 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useHub } from '../../context/HubContext';
 import * as casting from '../../api/casting';
 import { ROLES } from '../../api/hub';
-import { productions } from '../../data/boaContent';
 import BottomSheet from '../BottomSheet';
 import { Chip, Field } from '../kit';
 import { Button, Slate } from '../ui';
 import { haptics } from '../../utils/haptics';
 import { colors, fonts, radius, space, type } from '../../theme';
 
-// BOA's own productions show their key art; Mind States UK is the flagship.
-const ORIGINAL_ART = productions.find((p) => p.id === 'mind-states-uk');
+// BOA's casting calls have their own image, not the show's poster (that's
+// on the Originals): a film set, a light held over the performers.
+// "On Set II" by Wesley Tingey (Unsplash, via Wikimedia Commons), CC0.
+const CASTING_ART = require('../../../assets/images/casting-on-set.jpg');
 
 const STATUS_LABEL = { submitted: 'Applied', shortlisted: 'Shortlisted', declined: 'Not this time', hired: 'Hired' };
 
@@ -57,10 +58,18 @@ function VerifiedGigBadge() {
 function OriginalCard({ call, applied, onApply, index }) {
   return (
     <Animated.View entering={FadeInDown.delay(index * 70).springify().damping(18)} style={styles.originalCard} testID={`casting-${call.id}`}>
-      {ORIGINAL_ART?.poster ? <Image source={ORIGINAL_ART.backdrop ?? ORIGINAL_ART.poster} style={StyleSheet.absoluteFill} resizeMode="cover" /> : null}
+      <Image source={CASTING_ART} style={StyleSheet.absoluteFill} resizeMode="cover" testID="casting-art" />
+      {/* BOA's gold light over the black-and-white set, then night below. */}
       <LinearGradient
-        colors={['rgba(5,5,6,0.25)', 'rgba(5,5,6,0.55)', 'rgba(5,5,6,0.96)']}
-        locations={[0, 0.4, 1]}
+        colors={['rgba(226,168,75,0.38)', 'rgba(226,168,75,0.06)', 'rgba(5,5,6,0)']}
+        locations={[0, 0.45, 0.7]}
+        start={{ x: 0.85, y: 0 }}
+        end={{ x: 0.2, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
+      <LinearGradient
+        colors={['rgba(5,5,6,0.2)', 'rgba(5,5,6,0.5)', 'rgba(5,5,6,0.97)']}
+        locations={[0, 0.42, 1]}
         style={StyleSheet.absoluteFill}
       />
       <OriginalBadge />

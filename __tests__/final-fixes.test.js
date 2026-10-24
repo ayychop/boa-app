@@ -120,7 +120,7 @@ test('unlocking with a fingerprint while the screensaver shows goes straight bac
   expect(screen.getByTestId('radio-stage')).toBeOnTheScreen();
 });
 
-test('the BOA Listener card opens sign-in, with Continue with Google', async () => {
+test('the BOA Listener card opens sign-in', async () => {
   const user = userEvent.setup();
   await bootIntoTabs(user);
   await openTab(user, 'Profile');

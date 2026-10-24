@@ -4,7 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
 
 // The BOA HUB Supabase project: the Creative Hub's database (profiles,
-// messages, reports), its auth (email and Google), avatar storage and
+// messages, reports), its auth (email and password), avatar storage and
 // presence. Its address and public anon key come from the environment,
 // never from the source:
 //

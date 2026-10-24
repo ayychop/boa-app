@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import * as Linking from 'expo-linking';
 import { StatusBar } from 'expo-status-bar';
-import { Platform, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Alert, Platform, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { DarkTheme, NavigationContainer, useIsFocused } from '@react-navigation/native';
 import { BottomTabBar, createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -43,6 +43,7 @@ import { WeatherProvider } from './src/context/WeatherContext';
 import { AlarmProvider, useAlarms } from './src/context/AlarmContext';
 import { HubProvider } from './src/context/HubContext';
 import { currentTab, goToTab, navigationRef, openPage } from './src/navigation/ref';
+import { completeAuthLink } from './src/api/hub';
 import OnboardingScreen from './src/screens/OnboardingScreen';
 import Intro from './src/components/Intro';
 import MiniPlayer from './src/components/MiniPlayer';
@@ -283,15 +284,25 @@ function AlarmRinger({ navReady }) {
 
 /**
  * Where a network.boa:// link goes: `weather` (the widget's weather) to the
- * forecast, `now-playing` (the rest of the widget) to the Radio tab. The
- * OAuth return (auth-callback) is handled by the sign-in itself; anything
- * else just opens the app. Exported for the tests.
+ * forecast, `now-playing` (the rest of the widget) to the Radio tab, and
+ * `auth-callback` (the confirmation email) signs you in, then opens the
+ * Chat tab to set up your Hub profile. Anything else just opens the app.
+ * Exported for the tests.
  */
 export function routeLink(url) {
   const m = /^network\.boa:\/\/+([^/?#]+)/i.exec(url || '');
   const target = m?.[1]?.toLowerCase();
   if (target === 'weather') return openPage('Forecast');
   if (target === 'now-playing') return goToTab('Radio');
+  if (target === 'auth-callback') {
+    completeAuthLink(url)
+      .then(() => goToTab('Chat'))
+      .catch((err) => {
+        goToTab('Chat');
+        Alert.alert(err.code === 'confirmed_sign_in' ? 'Email confirmed' : "That link didn't work", err.message);
+      });
+    return true;
+  }
   return false;
 }
 

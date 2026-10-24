@@ -49,27 +49,90 @@ function NotConfigured() {
   );
 }
 
+// The way in: email and password. Create an account (a confirmation link
+// is emailed; tapping it on this phone signs you in) or sign in.
 function SignIn() {
-  const [mode, setMode] = useState('signIn');
+  const [mode, setMode] = useState('signIn'); // signIn | signUp
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [show, setShow] = useState(false);
   const [busy, setBusy] = useState(null);
-  const [message, setMessage] = useState(null);
+  const [error, setError] = useState(null); // { text, code }
+  const [sentTo, setSentTo] = useState(null); // the inbox a link went to
+  const [resent, setResent] = useState(false);
   const emailOk = EMAIL.test(email.trim());
   const passOk = password.length >= 8;
+  const matches = mode === 'signIn' || password === confirm;
+  const ready = emailOk && passOk && matches;
 
-  const run = async (which, fn) => {
-    setBusy(which);
-    setMessage(null);
+  const switchTo = (next) => {
+    setMode(next);
+    setError(null);
+    setConfirm('');
+  };
+
+  const submit = async () => {
+    if (!ready || busy) return;
+    setBusy('submit');
+    setError(null);
     try {
-      const res = await fn();
-      if (which === 'signUp' && !res?.session) setMessage({ ok: true, text: 'Check your email to confirm your address, then sign in.' });
+      if (mode === 'signIn') {
+        await hub.signInWithEmail(email, password);
+      } else {
+        const res = await hub.signUpWithEmail(email, password);
+        // "Confirm email" is on: no session until the link is tapped.
+        if (!res?.session) {
+          setSentTo(email.trim());
+          setResent(false);
+        }
+      }
     } catch (err) {
-      setMessage({ ok: false, text: err.message });
+      setError({ text: err.message, code: err.code ?? null });
     } finally {
       setBusy(null);
     }
   };
+
+  const resend = async (to) => {
+    setBusy('resend');
+    try {
+      await hub.resendConfirmation(to);
+      setResent(true);
+      setError(null);
+    } catch (err) {
+      setError({ text: err.message, code: err.code ?? null });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  if (sentTo) {
+    return (
+      <Hero>
+        <Ionicons name="mail-open-outline" size={30} color={colors.gold} style={{ marginTop: space.lg }} />
+        <Text style={[type.h1, { marginTop: space.md }]} testID="hub-check-inbox">
+          Check your <Text style={type.serif}>inbox.</Text>
+        </Text>
+        <Text style={[type.bodyMuted, { marginTop: space.sm }]}>
+          We sent a confirmation link to {sentTo}. Open it on this phone and you're straight in. It can take a minute, and sometimes lands in spam.
+        </Text>
+        {resent ? <Text style={[styles.message, { color: colors.live }]}>Sent again.</Text> : null}
+        {error ? <Text style={styles.message}>{error.text}</Text> : null}
+        <Button label={busy === 'resend' ? 'Sending' : 'Resend the email'} icon="refresh" variant="ghost" disabled={!!busy} onPress={() => resend(sentTo)} style={{ marginTop: space.xl }} />
+        <Pressable
+          onPress={() => {
+            setSentTo(null);
+            switchTo('signIn');
+          }}
+          style={styles.switch}
+          accessibilityRole="button"
+        >
+          <Text style={styles.switchText}>Back to sign in</Text>
+        </Pressable>
+      </Hero>
+    );
+  }
 
   return (
     <>
@@ -81,53 +144,108 @@ function SignIn() {
           Actors, directors, musicians and crew. Get discovered, find collaborators, message in private.
         </Text>
       </Hero>
-      <Pressable
-        onPress={() => run('google', hub.signInWithGoogle)}
-        accessibilityRole="button"
-        testID="hub-google"
-        style={({ pressed }) => [styles.google, pressed && { opacity: 0.85 }]}
-      >
-        {busy === 'google' ? <ActivityIndicator color={colors.bg} /> : <Ionicons name="logo-google" size={18} color={colors.bg} />}
-        <Text style={styles.googleText}>Continue with Google</Text>
-      </Pressable>
-      <View style={styles.or}>
-        <View style={styles.rule} />
-        <Text style={styles.orText}>or with email</Text>
-        <View style={styles.rule} />
+
+      {/* Sign in or create an account. */}
+      <View style={styles.modes} accessibilityRole="tablist">
+        {[
+          ['signIn', 'Sign in'],
+          ['signUp', 'Create account'],
+        ].map(([id, label]) => {
+          const on = mode === id;
+          return (
+            <Pressable
+              key={id}
+              onPress={() => switchTo(id)}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: on }}
+              testID={`hub-mode-${id}`}
+              style={[styles.mode, on && styles.modeOn]}
+            >
+              <Text style={[styles.modeText, on && styles.modeTextOn]}>{label}</Text>
+            </Pressable>
+          );
+        })}
       </View>
+
       <Field
         label="Email"
         value={email}
-        onChangeText={setEmail}
+        onChangeText={(t) => {
+          setEmail(t);
+          setError(null);
+        }}
         keyboardType="email-address"
         autoCapitalize="none"
+        autoCorrect={false}
         autoComplete="email"
         textContentType="emailAddress"
         placeholder="you@example.com"
+        error={email && !emailOk ? 'That doesn\u2019t look like an email address.' : null}
         testID="hub-email"
+        style={{ marginTop: space.xl }}
       />
       <Field
         label="Password"
         value={password}
-        onChangeText={setPassword}
-        secureTextEntry
+        onChangeText={(t) => {
+          setPassword(t);
+          setError(null);
+        }}
+        secureTextEntry={!show}
+        autoCapitalize="none"
         autoComplete={mode === 'signUp' ? 'new-password' : 'current-password'}
         textContentType={mode === 'signUp' ? 'newPassword' : 'password'}
         placeholder="At least 8 characters"
+        hint={mode === 'signUp' && password && !passOk ? `${8 - password.length} more character${8 - password.length === 1 ? '' : 's'}` : null}
         testID="hub-password"
-        style={{ marginTop: space.md }}
-      />
-      {message ? <Text style={[styles.message, message.ok && { color: colors.live }]}>{message.text}</Text> : null}
-      <Button
-        label={busy === mode ? 'One moment' : mode === 'signIn' ? 'Sign in' : 'Create account'}
-        icon="arrow-forward"
-        disabled={!emailOk || !passOk || !!busy}
-        onPress={() => run(mode, () => (mode === 'signIn' ? hub.signInWithEmail(email, password) : hub.signUpWithEmail(email, password)))}
         style={{ marginTop: space.lg }}
       />
-      <Pressable onPress={() => setMode(mode === 'signIn' ? 'signUp' : 'signIn')} style={styles.switch} accessibilityRole="button">
-        <Text style={styles.switchText}>{mode === 'signIn' ? 'New to the Hub? Create an account' : 'Already on the Hub? Sign in'}</Text>
+      {mode === 'signUp' ? (
+        <Field
+          label="Confirm password"
+          value={confirm}
+          onChangeText={setConfirm}
+          secureTextEntry={!show}
+          autoCapitalize="none"
+          autoComplete="new-password"
+          textContentType="newPassword"
+          error={confirm && password !== confirm ? "Those passwords don't match." : null}
+          testID="hub-password-confirm"
+          style={{ marginTop: space.lg }}
+        />
+      ) : null}
+      <Pressable onPress={() => setShow(!show)} accessibilityRole="button" style={styles.show} testID="hub-show-password">
+        <Ionicons name={show ? 'eye-off-outline' : 'eye-outline'} size={16} color={colors.textMuted} />
+        <Text style={styles.showText}>{show ? 'Hide password' : 'Show password'}</Text>
       </Pressable>
+
+      {error ? (
+        <Text style={styles.message} testID="hub-auth-error">
+          {error.text}
+        </Text>
+      ) : null}
+      {error?.code === 'user_already_exists' ? (
+        <Pressable onPress={() => switchTo('signIn')} style={styles.inline} accessibilityRole="button">
+          <Text style={styles.switchText}>Sign in with {email.trim()}</Text>
+        </Pressable>
+      ) : null}
+      {error?.code === 'email_not_confirmed' ? (
+        <Pressable onPress={() => resend(email)} style={styles.inline} accessibilityRole="button" testID="hub-resend">
+          <Text style={styles.switchText}>{busy === 'resend' ? 'Sending' : 'Resend the confirmation email'}</Text>
+        </Pressable>
+      ) : null}
+      {resent && !sentTo ? <Text style={[styles.message, { color: colors.live }]}>Sent. Check your inbox.</Text> : null}
+
+      <Button
+        label={busy === 'submit' ? 'One moment' : mode === 'signIn' ? 'Sign in' : 'Create account'}
+        icon="arrow-forward"
+        disabled={!ready || !!busy}
+        onPress={submit}
+        style={{ marginTop: space.xl }}
+      />
+      {mode === 'signUp' ? (
+        <Text style={styles.fine}>We'll email you a link to confirm it's you. Your email stays private.</Text>
+      ) : null}
     </>
   );
 }
@@ -406,7 +524,7 @@ function Onboarding({ onDone }) {
 
 /**
  * What the way into the Hub shows at each stage: a notice if the app isn't
- * connected to BOA HUB, sign-in (Google or email), then onboarding. Shared
+ * connected to BOA HUB, sign-in (email and password), then onboarding. Shared
  * by the welcome page and the Chat tab.
  */
 export function HubGate({ stage }) {
@@ -465,19 +583,15 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     marginBottom: space.xl,
   },
-  google: {
-    flexDirection: 'row',
-    gap: space.sm,
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: 52,
-    borderRadius: radius.pill,
-    backgroundColor: colors.text,
-  },
-  googleText: { fontFamily: fonts.semibold, fontSize: 15, color: colors.bg },
-  or: { flexDirection: 'row', alignItems: 'center', gap: space.md, marginVertical: space.xl },
-  rule: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: colors.borderStrong },
-  orText: { fontFamily: fonts.mono, fontSize: 10, letterSpacing: 1.6, color: colors.textFaint, textTransform: 'uppercase' },
+  modes: { flexDirection: 'row', padding: 4, borderRadius: radius.pill, backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
+  mode: { flex: 1, height: 42, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
+  modeOn: { backgroundColor: colors.gold },
+  modeText: { fontFamily: fonts.semibold, fontSize: 14, color: colors.textMuted },
+  modeTextOn: { color: colors.bg },
+  show: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', paddingVertical: space.sm, marginTop: space.sm },
+  showText: { fontFamily: fonts.medium, fontSize: 13, color: colors.textMuted },
+  inline: { alignSelf: 'flex-start', paddingVertical: space.sm },
+  fine: { fontFamily: fonts.medium, fontSize: 12, color: colors.textFaint, textAlign: 'center', marginTop: space.md },
   message: { fontFamily: fonts.medium, fontSize: 13, color: '#FF8A8A', marginTop: space.md },
   switch: { alignSelf: 'center', padding: space.md, marginTop: space.sm },
   switchText: { fontFamily: fonts.semibold, fontSize: 13.5, color: colors.gold },

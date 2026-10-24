@@ -45,20 +45,8 @@ describe('the Daily Spark', () => {
   });
 });
 
-test('Google sign-in returns to exactly network.boa://auth-callback, built by makeRedirectUri', () => {
-  // As in an installed build: the real app.json as the manifest, standalone.
-  const expoConfig = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'app.json'), 'utf8')).expo;
-  let redirect;
-  jest.isolateModules(() => {
-    jest.doMock('expo-constants', () => {
-      const constants = { expoConfig, manifest: expoConfig, executionEnvironment: 'standalone', appOwnership: null };
-      return { __esModule: true, default: constants, ...constants, ExecutionEnvironment: { Bare: 'bare', Standalone: 'standalone', StoreClient: 'storeClient' } };
-    });
-    redirect = require('../src/api/hub').authRedirect();
-  });
-  expect(redirect).toBe('network.boa://auth-callback');
-  const src = fs.readFileSync(path.join(__dirname, '..', 'src/api/hub.js'), 'utf8');
-  expect(src).toContain("makeRedirectUri({ scheme: 'network.boa', path: 'auth-callback' })");
+test('the confirmation email returns to exactly network.boa://auth-callback', () => {
+  expect(require('../src/api/hub').AUTH_REDIRECT).toBe('network.boa://auth-callback');
 });
 
 test('the reset migration recreates the Hub with quote_category, in one transaction', () => {
@@ -102,8 +90,13 @@ describe('in the app', () => {
     expect(screen.getByTestId(/^forecast-(screen|empty)$/)).toBeOnTheScreen();
     expect(await go('network.boa://now-playing')).toBe(true);
     expect(screen.getByTestId('radio-stage')).toBeOnTheScreen();
-    expect(routeLink('network.boa://auth-callback?code=x')).toBe(false);
     expect(routeLink('https://example.com')).toBe(false);
+    // The confirmation email's link: handled (here the test app has no
+    // Supabase, so it lands on Chat and says what went wrong).
+    const alert = jest.spyOn(require('react-native').Alert, 'alert').mockImplementation(() => {});
+    expect(await go('network.boa://auth-callback?code=x')).toBe(true);
+    expect(screen.getByText('Messages')).toBeOnTheScreen();
+    expect(alert).toHaveBeenCalledWith("That link didn't work", expect.any(String));
   });
 
   test('Profile shows the Daily Spark on frosted glass with the kind', async () => {

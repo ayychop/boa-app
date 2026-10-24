@@ -55,7 +55,7 @@ export default function ProfileScreen({ navigation }) {
     ? `@${profile.username} · Creative Hub`
     : stage === 'needsProfile'
       ? 'Tap to finish your profile'
-      : 'Tap to sign in · Google or email';
+      : 'Tap to sign in or join with your email';
   // The card is the way in: sign-in (then onboarding) until there's an
   // account, and your Hub profile after.
   const openAccount = () => (signedIn ? navigation.navigate('HubProfile') : navigation.navigate('HubWelcome', { next: 'back' }));
