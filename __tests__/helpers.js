@@ -53,7 +53,10 @@ export function instrument() {
     await act(async () => screenEvents.__emit('on'));
     await setState('active');
   };
-  return { errors, setState, lock, unlock };
+  const emit = async (state) => {
+    await act(async () => screenEvents.__emit(state));
+  };
+  return { errors, setState, lock, unlock, emit };
 }
 
 let current = PORTRAIT;

@@ -297,7 +297,7 @@ function Atmosphere({ sceneId, width, height, running }) {
       <DriftingFog width={width} height={height} opacity={0.45} />
       <Grain width={width} height={height} opacity={0.05} />
       <LinearGradient
-        colors={['rgba(5,5,6,0.74)', 'rgba(5,5,6,0.5)', 'rgba(5,5,6,0.58)', 'rgba(5,5,6,0.92)']}
+        colors={['rgba(5,5,6,0.62)', 'rgba(5,5,6,0.36)', 'rgba(5,5,6,0.46)', 'rgba(5,5,6,0.9)']}
         locations={[0, 0.32, 0.6, 1]}
         style={StyleSheet.absoluteFill}
       />
@@ -497,16 +497,6 @@ function SoundCard({ sound, state }) {
   );
 }
 
-// The room takes on the soundscape's colour: a wash over the scene that
-// cross-fades from one tone to the next.
-function ToneWash({ tone }) {
-  const target = tone ? withAlpha(tone, 0.22) : 'rgba(0,0,0,0)';
-  const style = useAnimatedStyle(() => ({
-    backgroundColor: withTiming(target, { duration: 1400, easing: DIM }),
-  }));
-  return <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, style]} testID="zen-tone-wash" />;
-}
-
 // Fade-out timer: Off, or 15 to 90 minutes, then the sound drifts away.
 function TimerRow() {
   const { active, start, cancel } = useSleepTimer();
@@ -686,7 +676,6 @@ function ZenRoom() {
   useEffect(() => {
     if (focused) ambientAudio.warmUp();
   }, [focused]);
-  const playingScape = sound.id && (sound.status === 'playing' || sound.status === 'loading') ? soundscapeById(sound.id) : null;
 
   const sceneId = soundscapeById(sound.id)?.scene ?? 'night';
   const short = height < 500;
@@ -713,7 +702,6 @@ function ZenRoom() {
   return (
     <View style={styles.screen} testID={ambient ? 'zen-screensaver' : 'zen-screen'}>
       <Atmosphere sceneId={sceneId} width={width} height={height} running={focused} />
-      <ToneWash tone={playingScape?.tone} />
       {ambient && (
         <Pressable
           style={StyleSheet.absoluteFill}

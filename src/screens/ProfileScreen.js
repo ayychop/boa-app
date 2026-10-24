@@ -20,8 +20,10 @@ import WidgetSettings from '../components/widget/WidgetSettings';
 import CreditsSheet from '../components/zen/CreditsSheet';
 import { colors, fonts, radius, space, type } from '../theme';
 import { useOpenHub } from '../components/hub/hubNav';
+import { useHub } from '../context/HubContext';
+import { Avatar } from '../components/kit';
 
-// No accounts yet, so the profile has a placeholder name.
+// Until you sign in, the profile card has a placeholder name.
 const LISTENER_NAME = 'BOA Listener';
 
 const GRID_GAP = 12;
@@ -45,6 +47,17 @@ export default function ProfileScreen({ navigation }) {
   const { width, wide } = useLayout();
   const { openZen } = useZen();
   const openHub = useOpenHub();
+  const { stage, profile } = useHub();
+  const signedIn = stage === 'ready' && !!profile;
+  const name = signedIn ? profile.display_name || `@${profile.username}` : LISTENER_NAME;
+  const nameSub = signedIn
+    ? `@${profile.username} · Creative Hub`
+    : stage === 'needsProfile'
+      ? 'Tap to finish your profile'
+      : 'Tap to sign in · Google or email';
+  // The card is the way in: sign-in (then onboarding) until there's an
+  // account, and your Hub profile after.
+  const openAccount = () => (signedIn ? navigation.navigate('HubProfile') : navigation.navigate('HubWelcome', { next: 'back' }));
   const [widgetOpen, setWidgetOpen] = useState(false);
   const [creditsOpen, setCreditsOpen] = useState(false);
   const inner = Math.min(width, 1100) - space.xl * 2;
@@ -68,25 +81,37 @@ export default function ProfileScreen({ navigation }) {
   return (
     <View style={styles.screen}>
       <ScrollView testID="profile-scroll" contentContainerStyle={[styles.content, wide && styles.contentWide, { paddingTop: insets.top + space.xxl, paddingBottom: bottom }]}>
-        <View style={styles.card}>
+        <Tappable
+          onPress={openAccount}
+          scaleTo={0.98}
+          accessibilityRole="button"
+          accessibilityLabel={`${name}. ${signedIn ? 'Open your Creative Hub profile' : 'Sign in'}`}
+          testID="profile-card"
+          style={styles.card}
+        >
           <Fog opacity={0.28} />
           {/* Big wordmark behind the avatar: the profile sits on the brand. */}
           <LogoWatermark height={136} opacity={0.06} style={{ left: -30, top: 70 }} />
           <Viewfinder inset={12} size={12} />
           <BoaLogo height={34} />
           <View style={styles.identity}>
-            <View style={[styles.avatar, user.isPremium && styles.avatarPremium]}>
-              <Ionicons name="person" size={26} color={user.isPremium ? colors.bg : colors.textMuted} />
-            </View>
+            {signedIn ? (
+              <Avatar uri={profile.avatar_url} name={name} size={56} />
+            ) : (
+              <View style={[styles.avatar, user.isPremium && styles.avatarPremium]}>
+                <Ionicons name="person" size={26} color={user.isPremium ? colors.bg : colors.textMuted} />
+              </View>
+            )}
             <View style={{ flex: 1, minWidth: 0 }}>
               <View style={styles.nameRow}>
                 <Text style={styles.name} numberOfLines={1}>
-                  {LISTENER_NAME}
+                  {name}
                 </Text>
                 {user.isPremium && <GoldBadge label="PREMIUM" icon="diamond" />}
               </View>
-              <Text style={styles.nameSub}>Sign-in is on its way · saved on this device</Text>
+              <Text style={styles.nameSub}>{nameSub}</Text>
             </View>
+            <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
           </View>
           {user.vibes.length > 0 && (
             <View style={styles.vibes}>
@@ -97,7 +122,7 @@ export default function ProfileScreen({ navigation }) {
               ))}
             </View>
           )}
-        </View>
+        </Tappable>
 
         {user.isPremium ? (
           <Pressable onPress={openPremium} accessibilityRole="button" style={({ pressed }) => [styles.premiumActive, pressed && { opacity: 0.85 }]}>

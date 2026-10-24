@@ -240,6 +240,11 @@ jest.mock('./modules/boa-screen', () => {
       listeners.add(fn);
       return () => listeners.delete(fn);
     }),
+    // The lock screen: unlocked unless a test says otherwise.
+    isLocked: jest.fn(() => false),
+    showOverLock: jest.fn(async () => true),
+    unlock: jest.fn(async () => true),
+    clearOverLock: jest.fn(async () => {}),
     __emit: (state) => listeners.forEach((fn) => fn(state)),
   };
 });

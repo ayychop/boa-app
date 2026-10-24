@@ -14,15 +14,18 @@ export function PageHeader({ title, onBack, backIcon = 'chevron-back', right, ki
   const insets = useSafeAreaInsets();
   return (
     <View style={[styles.header, { paddingTop: insets.top + space.sm }]}>
-      <Pressable
-        onPress={onBack}
-        hitSlop={12}
-        accessibilityRole="button"
-        accessibilityLabel="Back"
-        style={({ pressed }) => [styles.round, pressed && { opacity: 0.6 }]}
-      >
-        <Ionicons name={backIcon} size={22} color={colors.text} />
-      </Pressable>
+      {/* A tab's own screen has nowhere to go back to. */}
+      {onBack ? (
+        <Pressable
+          onPress={onBack}
+          hitSlop={12}
+          accessibilityRole="button"
+          accessibilityLabel="Back"
+          style={({ pressed }) => [styles.round, pressed && { opacity: 0.6 }]}
+        >
+          <Ionicons name={backIcon} size={22} color={colors.text} />
+        </Pressable>
+      ) : null}
       <View style={{ flex: 1, minWidth: 0 }}>
         {kicker ? <Text style={styles.kicker}>{kicker}</Text> : null}
         <Text style={styles.title} numberOfLines={1} accessibilityRole="header">

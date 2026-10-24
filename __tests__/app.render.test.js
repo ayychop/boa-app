@@ -12,10 +12,11 @@ const FIRST_STATION = curatedStations('afrobeats')[0].name;
 // What each tab must always show; a missing one fails the render.
 const TABS = [
   ['Home', ['Trending on BOA Radio', '01 · Afrobeats · Hip Hop · R&B · Amapiano']],
-  ['Radio', ['Radio', 'Afrobeats', FIRST_STATION, 'Song info']],
-  ['Zen', ['Sleep & Meditation', 'Soundscapes']],
   ['BOA Originals', ['Episodes']],
+  ['Radio', ['Radio', 'Afrobeats', FIRST_STATION, 'Song info']],
+  ['Chat', ['Messages']],
   ['Talent', ['roster.']],
+  ['Zen', ['Sleep & Meditation', 'Soundscapes']],
   ['Profile', ['Zen Mode', 'My Library', 'Home screen widget']],
 ];
 

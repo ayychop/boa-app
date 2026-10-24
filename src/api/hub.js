@@ -75,22 +75,44 @@ export async function signUpWithEmail(email, password) {
   return check(await need().auth.signUp({ email: email.trim(), password, options: { emailRedirectTo: authRedirect() } }));
 }
 
+const LINK_GRACE_MS = 800;
+
+// On the web the sign-in popup closes itself through this.
+WebBrowser.maybeCompleteAuthSession();
+
+/** Finishes an OAuth return (boa://auth-callback?code=...): a session, or null. */
+async function completeOAuth(sb, returnUrl) {
+  const params = new URL(returnUrl.replace('#', '?')).searchParams;
+  const code = params.get('code');
+  if (code) return check(await sb.auth.exchangeCodeForSession(code));
+  const error = params.get('error_description') || params.get('error');
+  if (error) throw new Error(error);
+  return null;
+}
+
 /**
  * Google, through the system browser: Supabase's OAuth page comes back to
  * boa://auth-callback with a code, exchanged here for a session (PKCE).
+ * Some Android browsers hand the redirect to the app as an ordinary link
+ * and report the browser as dismissed, so the link is caught here too.
  */
 export async function signInWithGoogle() {
   const sb = need();
   const redirectTo = authRedirect();
   const { url } = check(await sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo, skipBrowserRedirect: true } }));
-  const result = await WebBrowser.openAuthSessionAsync(url, redirectTo);
-  if (result.type !== 'success') return null;
-  const params = new URL(result.url.replace('#', '?')).searchParams;
-  const code = params.get('code');
-  if (code) return check(await sb.auth.exchangeCodeForSession(code));
-  const error = params.get('error_description');
-  if (error) throw new Error(error);
-  return null;
+  let linked = null;
+  const sub = Linking.addEventListener('url', (e) => {
+    if (e?.url?.startsWith(redirectTo)) linked = e.url;
+  });
+  try {
+    const result = await WebBrowser.openAuthSessionAsync(url, redirectTo);
+    // The link can land a moment after the browser reports it closed.
+    if (result.type !== 'success' && !linked) await new Promise((r) => setTimeout(r, LINK_GRACE_MS));
+    const returned = result.type === 'success' ? result.url : linked;
+    return returned ? await completeOAuth(sb, returned) : null;
+  } finally {
+    sub?.remove?.();
+  }
 }
 
 export async function signOut() {

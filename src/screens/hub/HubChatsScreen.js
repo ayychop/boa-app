@@ -52,8 +52,11 @@ function ThreadRow({ conv, online, onPress, index, myId }) {
   );
 }
 
-/** Your conversations, latest first, kept live as messages arrive. */
-export default function HubChatsScreen({ navigation }) {
+/**
+ * Your conversations, latest first, kept live as messages arrive. Also the
+ * Chat tab's list (`inTab`): no back button, and padded clear of the tab bar.
+ */
+export default function HubChatsScreen({ navigation, inTab = false, bottomPadding }) {
   const insets = useSafeAreaInsets();
   const { userId, isOnline, blocked } = useHub();
   const [rows, setRows] = useState([]);
@@ -109,11 +112,11 @@ export default function HubChatsScreen({ navigation }) {
   const visible = rows.filter((c) => !blocked.has(c.otherId));
 
   return (
-    <View style={styles.screen} testID="hub-chats">
+    <View style={styles.screen} testID={inTab ? 'chat-tab' : 'hub-chats'}>
       <PageHeader
         kicker="Creative Hub"
         title="Messages"
-        onBack={() => navigation.goBack()}
+        onBack={inTab ? undefined : () => navigation.goBack()}
         right={<IconButton icon="people-outline" label="Find talent" onPress={() => navigation.navigate('HubDirectory')} />}
       />
       <FlatList
@@ -129,7 +132,7 @@ export default function HubChatsScreen({ navigation }) {
           />
         )}
         refreshControl={<RefreshControl refreshing={state === 'refreshing'} onRefresh={() => load(true)} tintColor={colors.gold} />}
-        contentContainerStyle={{ paddingBottom: insets.bottom + space.xxl, flexGrow: 1 }}
+        contentContainerStyle={{ paddingBottom: bottomPadding ?? insets.bottom + space.xxl, flexGrow: 1 }}
         ListEmptyComponent={
           state === 'loading' ? (
             <ActivityIndicator color={colors.gold} style={{ marginTop: space.xxxl }} />

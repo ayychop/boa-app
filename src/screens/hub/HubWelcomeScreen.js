@@ -338,9 +338,30 @@ function Onboarding({ onDone }) {
 }
 
 /**
- * The way into the Creative Hub: a notice if the app isn't connected to
- * BOA HUB, sign-in (Google or email), then onboarding. Once the profile
- * exists it carries on to the page that was asked for.
+ * What the way into the Hub shows at each stage: a notice if the app isn't
+ * connected to BOA HUB, sign-in (Google or email), then onboarding. Shared
+ * by the welcome page and the Chat tab.
+ */
+export function HubGate({ stage }) {
+  return (
+    <Animated.View entering={FadeInDown.springify().damping(18)}>
+      {stage === 'off' ? (
+        <NotConfigured />
+      ) : stage === 'loading' || stage === 'ready' ? (
+        <ActivityIndicator color={colors.gold} style={{ marginTop: space.xxxl }} />
+      ) : stage === 'signedOut' ? (
+        <SignIn />
+      ) : (
+        <Onboarding onDone={() => {}} />
+      )}
+    </Animated.View>
+  );
+}
+
+/**
+ * The way into the Creative Hub. Once the profile exists it carries on to
+ * the page that was asked for, or (next: 'back') returns to where it was
+ * opened from, such as the Profile tab.
  */
 export default function HubWelcomeScreen({ navigation, route }) {
   const insets = useSafeAreaInsets();
@@ -348,7 +369,9 @@ export default function HubWelcomeScreen({ navigation, route }) {
   const next = route.params?.next ?? 'HubDirectory';
   const nextParams = route.params?.nextParams;
   useEffect(() => {
-    if (stage === 'ready') navigation.replace(next, nextParams);
+    if (stage !== 'ready') return;
+    if (next === 'back') navigation.goBack();
+    else navigation.replace(next, nextParams);
   }, [stage, navigation, next, nextParams]);
 
   return (
@@ -356,17 +379,7 @@ export default function HubWelcomeScreen({ navigation, route }) {
       <PageHeader kicker="Creative Hub" title={stage === 'needsProfile' ? 'Your profile' : 'BOA HUB'} backIcon="close" onBack={() => navigation.goBack()} />
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + space.xxl }]} keyboardShouldPersistTaps="handled">
-          <Animated.View entering={FadeInDown.springify().damping(18)}>
-            {stage === 'off' ? (
-              <NotConfigured />
-            ) : stage === 'loading' || stage === 'ready' ? (
-              <ActivityIndicator color={colors.gold} style={{ marginTop: space.xxxl }} />
-            ) : stage === 'signedOut' ? (
-              <SignIn />
-            ) : (
-              <Onboarding onDone={() => {}} />
-            )}
-          </Animated.View>
+          <HubGate stage={stage} />
         </ScrollView>
       </KeyboardAvoidingView>
     </View>

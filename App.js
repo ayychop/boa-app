@@ -52,6 +52,7 @@ import ZenScreen from './src/screens/ZenScreen';
 import OriginalsScreen from './src/screens/OriginalsScreen';
 import TalentScreen from './src/screens/TalentScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
+import ChatScreen from './src/screens/ChatScreen';
 import ForecastScreen from './src/screens/ForecastScreen';
 import AlarmSettingsScreen from './src/screens/AlarmSettingsScreen';
 import AlarmRingingScreen from './src/screens/AlarmRingingScreen';
@@ -89,10 +90,11 @@ const TAB_TITLES = { Originals: 'BOA Originals' };
 
 const ICONS = {
   Home: ['home', 'home-outline'],
-  Radio: ['radio', 'radio-outline'],
-  Zen: ['sparkles', 'sparkles-outline'],
   Originals: ['film', 'film-outline'],
+  Radio: ['radio', 'radio-outline'],
+  Chat: ['chatbubbles', 'chatbubbles-outline'],
   Talent: ['people', 'people-outline'],
+  Zen: ['sparkles', 'sparkles-outline'],
   Profile: ['person', 'person-outline'],
 };
 
@@ -100,8 +102,9 @@ const ICONS = {
 // new tab is readable almost at once and then just settles.
 const EASE_OUT_EXPO = Easing.bezier(0.16, 1, 0.3, 1);
 
-// Tabs are switched constantly, so this stays small: a short fade and an 8pt
-// rise, opacity-only under Reduce Motion. Also keeps every screen clear of a
+// Tabs are switched constantly, so this stays small: a short fade, and
+// opacity only, so a tab's buttons are where they'll stay from the first
+// frame (nothing slides into place). Also keeps every screen clear of a
 // notch or camera cutout when the phone is on its side.
 function TabTransition({ children }) {
   const focused = useIsFocused();
@@ -114,11 +117,7 @@ function TabTransition({ children }) {
     else progress.value = withTiming(1, { duration: reduceMotion ? 180 : 340, easing: EASE_OUT_EXPO });
   }, [focused, reduceMotion, progress]);
 
-  const style = useAnimatedStyle(() => ({
-    flex: 1,
-    opacity: progress.value,
-    transform: [{ translateY: reduceMotion ? 0 : (1 - progress.value) * 8 }],
-  }));
+  const style = useAnimatedStyle(() => ({ flex: 1, opacity: progress.value }));
 
   return <Animated.View style={[style, { paddingHorizontal: side }]}>{children}</Animated.View>;
 }
@@ -138,7 +137,7 @@ function TabIcon({ name, focused, color, size }) {
   const style = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
   return (
     <Animated.View style={style}>
-      <Ionicons name={ICONS[name][focused ? 0 : 1]} size={size - 3} color={color} />
+      <Ionicons name={ICONS[name][focused ? 0 : 1]} size={size} color={color} />
     </Animated.View>
   );
 }
@@ -158,6 +157,7 @@ const Zen = withTransition(ZenScreen);
 const Originals = withTransition(OriginalsScreen);
 const Talent = withTransition(TalentScreen);
 const Profile = withTransition(ProfileScreen);
+const Chat = withTransition(ChatScreen);
 
 // Tab bar and mini player float over the screens so content scrolls beneath
 // the blur; screens pad themselves with useBottomSpace().
@@ -192,9 +192,19 @@ function TabBarBackground() {
 const ANDROID_MIN_BOTTOM_INSET = 20;
 const ANDROID_BOTTOM_COMFORT = 10;
 
+// Seven tabs share the bar, so the icons and labels are sized from each
+// tab's slot: 18pt icons on the narrowest phones up to 24pt on tablets.
+const TAB_COUNT = 7;
+const tabSizing = (slot) => ({
+  icon: Math.round(Math.min(24, Math.max(18, slot * 0.36))),
+  label: slot < 54 ? 9 : slot < 70 ? 9.5 : 10.5,
+});
+
 function Tabs({ narrow }) {
   const insets = useSafeAreaInsets();
-  const { side, short } = useLayout();
+  const { side, short, width } = useLayout();
+  // useLayout's width is already inside the side gutters the bar pads by.
+  const sizing = tabSizing(width / TAB_COUNT);
   // The tab bar pads itself by this, so its icons and labels always sit
   // above the system gesture bar or navigation buttons.
   const bottomInset =
@@ -222,9 +232,10 @@ function Tabs({ narrow }) {
           // it takes as little of the short screen as it can.
           ...(short && { height: 40 + bottomInset }),
         },
+        tabBarItemStyle: { paddingHorizontal: 0 },
         tabBarBackground: () => <TabBarBackground />,
-        // Six tabs: each label stays on one line and shrinks to fit its
-        // slot (down to 75%) rather than wrapping into the icon or
+        // Seven tabs: each label stays on one line and shrinks to fit its
+        // slot (down to 65%) rather than wrapping into the icon or
         // clipping, so "BOA Originals" fits on the narrowest phones.
         // Spelled out for screen readers: a custom label means React
         // Navigation no longer builds one.
@@ -233,24 +244,25 @@ function Tabs({ narrow }) {
           <Text
             numberOfLines={1}
             adjustsFontSizeToFit
-            minimumFontScale={0.75}
+            minimumFontScale={0.65}
             allowFontScaling={false}
-            style={[styles.tabLabel, { color, fontSize: narrow ? 9.5 : 10 }]}
+            style={[styles.tabLabel, { color, fontSize: narrow ? Math.min(9, sizing.label) : sizing.label }]}
           >
             {children}
           </Text>
         ),
-        tabBarIcon: ({ focused, color, size }) => (
-          <TabIcon name={route.name} focused={focused} color={color} size={size} />
+        tabBarIcon: ({ focused, color }) => (
+          <TabIcon name={route.name} focused={focused} color={color} size={sizing.icon} />
         ),
       })}
       screenListeners={{ tabPress: () => haptics.selection() }}
     >
       <Tab.Screen name="Home" component={Home} />
-      <Tab.Screen name="Radio" component={Radio} />
-      <Tab.Screen name="Zen" component={Zen} />
       <Tab.Screen name="Originals" component={Originals} options={{ title: 'BOA Originals' }} />
+      <Tab.Screen name="Radio" component={Radio} />
+      <Tab.Screen name="Chat" component={Chat} />
       <Tab.Screen name="Talent" component={Talent} />
+      <Tab.Screen name="Zen" component={Zen} />
       <Tab.Screen name="Profile" component={Profile} />
     </Tab.Navigator>
   );
@@ -329,6 +341,10 @@ export default function App() {
     JetBrainsMono_400Regular,
     JetBrainsMono_500Medium,
     InstrumentSerif_400Regular_Italic,
+    // Every icon is a glyph in this font. Loaded with the rest, so icons
+    // (Shazam, YouTube Music, the tab bar) draw on their first frame rather
+    // than popping in once the font arrives.
+    ...Ionicons.font,
   });
 
   // The native splash covers the wait for the fonts; the intro takes over
@@ -377,5 +393,5 @@ function Root({ narrow }) {
 
 const styles = StyleSheet.create({
   tabBarWrap: { position: 'absolute', left: 0, right: 0, bottom: 0 },
-  tabLabel: { fontFamily: fonts.semibold, letterSpacing: -0.1, textAlign: 'center', maxWidth: '100%', paddingHorizontal: 2 },
+  tabLabel: { fontFamily: fonts.semibold, letterSpacing: -0.1, textAlign: 'center', maxWidth: '100%', paddingHorizontal: 1 },
 });

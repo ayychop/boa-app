@@ -3,7 +3,9 @@ import { fetchNowPlaying } from '../api/nowPlaying';
 
 // Shared, polled "now playing" titles keyed by station id, so the Radio stage
 // and the mini player show the same thing without double-fetching.
-const POLL_MS = 30000;
+// Short enough that Song info (Shazam, YouTube Music) follows a new track
+// within seconds of it starting.
+const POLL_MS = 15000;
 const titles = new Map(); // id -> string | null
 const listeners = new Set();
 const polls = new Map(); // id -> { count, timer }

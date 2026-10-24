@@ -1,11 +1,10 @@
-import { useEffect, useState } from 'react';
+import { memo, useEffect, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useIsFocused } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
   Easing,
   FadeIn,
-  FadeInDown,
   useAnimatedStyle,
   useReducedMotion,
   useSharedValue,
@@ -42,27 +41,29 @@ const GENRE_KICKER = GENRES.slice(0, 4)
 
 const METAL = ['#F2F2F4', '#8A8A90', '#FAFAFB', '#5E5E64', '#D9D9DD'];
 
-function Hero({ production, width, height, bottomInset = 0, topInset = 0 }) {
-  const insets = useSafeAreaInsets();
-  const media = useMedia();
+/**
+ * The hero's background: the key art on its slow Ken Burns push-in, the
+ * smoke, the shade and the watermark. Its own layer, behind the UI and
+ * never touching it: the motion lives on the UI thread inside this view,
+ * which takes no touches, so nothing in front of it can move with it.
+ */
+const HeroBackdrop = memo(function HeroBackdrop({ production, width, height, bodyTop }) {
   const reduceMotion = useReducedMotion();
   const zoom = useSharedValue(1);
 
-  // Slow Ken Burns push-in on the key art.
   useEffect(() => {
     if (reduceMotion) return;
     zoom.value = withRepeat(withTiming(1.09, { duration: 14000, easing: Easing.inOut(Easing.quad) }), -1, true);
   }, [reduceMotion, zoom]);
   const zoomStyle = useAnimatedStyle(() => ({ transform: [{ scale: zoom.value }] }));
-  const { node: art, titleInFrame, titleBottom } = heroArt(production, width, height, zoomStyle);
+  const { node: art, titleBottom } = heroArt(production, width, height, zoomStyle);
   // Lift the poster so its baked-in title clears the text block below it.
   // The Ken Burns zoom pushes the title down a little, so allow for that too.
-  const [bodyTop, setBodyTop] = useState(null);
   const zoomDrift = reduceMotion || titleBottom == null ? 0 : (titleBottom - height / 2) * 0.09;
   const lift = titleBottom != null && bodyTop != null ? Math.min(0, bodyTop - space.xl - titleBottom - zoomDrift) : 0;
 
   return (
-    <View style={{ width, height, overflow: 'hidden' }}>
+    <View pointerEvents="none" style={[StyleSheet.absoluteFill, { overflow: 'hidden' }]} testID="home-hero-backdrop">
       <View style={[StyleSheet.absoluteFill, { transform: [{ translateY: lift }] }]}>{art}</View>
       <Fog opacity={0.16} />
       <LinearGradient
@@ -78,57 +79,72 @@ function Hero({ production, width, height, bottomInset = 0, topInset = 0 }) {
         style={{ left: (width - Math.min(width * 0.8, 760)) / 2, top: height * 0.22 }}
       />
       <Viewfinder inset={16} />
+    </View>
+  );
+});
 
-      <View
-        style={[styles.heroTop, { top: insets.top + space.xl + topInset }]}
-      >
-        <View>
-          <View style={styles.logoRow}>
-            <BoaLogo height={30} />
-            <PulseDot size={7} style={styles.vybDot} />
+function Hero({ production, width, height, bottomInset = 0, topInset = 0 }) {
+  const insets = useSafeAreaInsets();
+  const media = useMedia();
+  const { titleInFrame } = heroArt(production, width, height);
+  const [bodyTop, setBodyTop] = useState(null);
+
+  return (
+    <View style={{ width, height, overflow: 'hidden' }}>
+      <HeroBackdrop production={production} width={width} height={height} bodyTop={bodyTop} />
+
+      {/* The UI layer: plain views, fixed in place. No transforms or
+          entering motion, so the buttons stay exactly where they are while
+          the art moves behind them. */}
+      <View style={StyleSheet.absoluteFill} pointerEvents="box-none" testID="home-hero-ui">
+        <View style={[styles.heroTop, { top: insets.top + space.xl + topInset }]}>
+          <View>
+            <View style={styles.logoRow}>
+              <BoaLogo height={30} />
+              <PulseDot size={7} style={styles.vybDot} />
+            </View>
+            {width >= 600 && (
+              <Slate color={colors.gold} style={{ marginTop: 6 }}>
+                Best of all networks
+              </Slate>
+            )}
           </View>
-          {width >= 600 && (
-            <Slate color={colors.gold} style={{ marginTop: 6 }}>
-              Best of all networks
-            </Slate>
-          )}
+          <View style={{ alignItems: 'flex-end', gap: 6, flexShrink: 1 }}>
+            <ZenButton style={{ marginBottom: 6 }} />
+            {/* Local weather; tap for the coming days. */}
+            <WeatherPill onOpen={() => openPage('Forecast')} />
+            {width >= 600 && <Slate style={{ marginTop: 4 }}>2.39 : 1 · United Kingdom</Slate>}
+          </View>
         </View>
-        <View style={{ alignItems: 'flex-end', gap: 6, flexShrink: 1 }}>
-          <ZenButton style={{ marginBottom: 6 }} />
-          {/* Local weather; tap for the coming days. */}
-          <WeatherPill onOpen={() => openPage('Forecast')} />
-          {width >= 600 && <Slate style={{ marginTop: 4 }}>2.39 : 1 · United Kingdom</Slate>}
+
+        <View
+          style={[styles.heroBody, { bottom: space.xxl + bottomInset }]}
+          onLayout={(e) => setBodyTop(e.nativeEvent.layout.y)}
+        >
+          <Slate color={colors.gold} lines={2}>
+            BOA Original · {metaLine(production)}
+          </Slate>
+          {/* When the art's own title is in frame, don't paint it twice; keep
+              it for screen readers. */}
+          <Text style={titleInFrame ? styles.srOnly : styles.heroTitle} accessibilityRole="header">
+            {production.title}
+          </Text>
+          <Text style={[type.bodyMuted, { maxWidth: 560 }]} numberOfLines={3}>
+            {production.logline}
+          </Text>
+          <View style={styles.heroActions}>
+            {production.episodes[0] && (
+              <Button label="Episode 1" icon="play" onPress={() => media.openEpisode(production)} />
+            )}
+            <Button
+              label="Watch Trailer"
+              icon="film-outline"
+              variant={production.episodes[0] ? 'ghost' : 'primary'}
+              onPress={() => media.openTrailer(production)}
+            />
+          </View>
         </View>
       </View>
-
-      <Animated.View
-        entering={FadeInDown.delay(150).springify().damping(18)}
-        style={[styles.heroBody, { bottom: space.xxl + bottomInset }]}
-        onLayout={(e) => setBodyTop(e.nativeEvent.layout.y)}
-      >
-        <Slate color={colors.gold} lines={2}>
-          BOA Original · {metaLine(production)}
-        </Slate>
-        {/* When the art's own title is in frame, don't paint it twice; keep
-            it for screen readers. */}
-        <Text style={titleInFrame ? styles.srOnly : styles.heroTitle} accessibilityRole="header">
-          {production.title}
-        </Text>
-        <Text style={[type.bodyMuted, { maxWidth: 560 }]} numberOfLines={3}>
-          {production.logline}
-        </Text>
-        <View style={styles.heroActions}>
-          {production.episodes[0] && (
-            <Button label="Episode 1" icon="play" onPress={() => media.openEpisode(production)} />
-          )}
-          <Button
-            label="Watch Trailer"
-            icon="film-outline"
-            variant={production.episodes[0] ? 'ghost' : 'primary'}
-            onPress={() => media.openTrailer(production)}
-          />
-        </View>
-      </Animated.View>
     </View>
   );
 }

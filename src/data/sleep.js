@@ -8,6 +8,9 @@
 // otherwise, so every media request sends this one.
 export const MEDIA_HEADERS = { 'User-Agent': 'BOANetworks/1.0 (Android; +https://boanetworks.com)' };
 
+// Every soundscape has a room of its own: rain on a window, a dark starry
+// night, an aurora for 432 Hz, a fire for brown noise.
+//
 // Each scene is a looping video (muted, played from the cache) over a still
 // photograph that shows until the video's first frame, and stays if the
 // video can't play. Android and the web get Commons' VP9 WebM; iOS, which
@@ -32,6 +35,22 @@ export const SCENES = {
   night: {
     id: 'night',
     video: {
+      uri: 'https://upload.wikimedia.org/wikipedia/commons/transcoded/a/a1/Starry_sky_with_North_Star_circled.webm/Starry_sky_with_North_Star_circled.webm.480p.vp9.webm',
+      ios: 'https://upload.wikimedia.org/wikipedia/commons/transcoded/a/a1/Starry_sky_with_North_Star_circled.webm/Starry_sky_with_North_Star_circled.webm.360p.mpeg4.mov',
+      title: 'Starry sky with North Star circled',
+      author: 'Thomas Bresson',
+      license: 'CC BY 3.0',
+      source: 'https://commons.wikimedia.org/wiki/File:Starry_sky_with_North_Star_circled.webm',
+    },
+    uri: 'https://upload.wikimedia.org/wikipedia/commons/thumb/6/64/Starry_sky_foggy_night_%28Unsplash%29.jpg/1280px-Starry_sky_foggy_night_%28Unsplash%29.jpg',
+    title: 'Starry sky foggy night',
+    author: 'Martin Sattler',
+    license: 'CC0 1.0',
+    source: 'https://commons.wikimedia.org/wiki/File:Starry_sky_foggy_night_(Unsplash).jpg',
+  },
+  aurora: {
+    id: 'aurora',
+    video: {
       uri: 'https://upload.wikimedia.org/wikipedia/commons/transcoded/c/c5/Alaskan_Aurora_Time_Lapse_%28SVS15077%29.webm/Alaskan_Aurora_Time_Lapse_%28SVS15077%29.webm.480p.vp9.webm',
       ios: 'https://upload.wikimedia.org/wikipedia/commons/transcoded/c/c5/Alaskan_Aurora_Time_Lapse_%28SVS15077%29.webm/Alaskan_Aurora_Time_Lapse_%28SVS15077%29.webm.360p.mpeg4.mov',
       title: 'Alaskan Aurora Time Lapse',
@@ -39,11 +58,27 @@ export const SCENES = {
       license: 'Public domain',
       source: 'https://commons.wikimedia.org/wiki/File:Alaskan_Aurora_Time_Lapse_(SVS15077).webm',
     },
-    uri: 'https://upload.wikimedia.org/wikipedia/commons/thumb/6/64/Starry_sky_foggy_night_%28Unsplash%29.jpg/1280px-Starry_sky_foggy_night_%28Unsplash%29.jpg',
-    title: 'Starry sky foggy night',
-    author: 'Martin Sattler',
+    uri: 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/bf/Colorful_aurora_borealis_%28Unsplash%29.jpg/1280px-Colorful_aurora_borealis_%28Unsplash%29.jpg',
+    title: 'Colorful aurora borealis',
+    author: 'Alan Labisch',
     license: 'CC0 1.0',
-    source: 'https://commons.wikimedia.org/wiki/File:Starry_sky_foggy_night_(Unsplash).jpg',
+    source: 'https://commons.wikimedia.org/wiki/File:Colorful_aurora_borealis_(Unsplash).jpg',
+  },
+  fire: {
+    id: 'fire',
+    video: {
+      uri: 'https://upload.wikimedia.org/wikipedia/commons/transcoded/6/65/Fire_burning_in_a_fireplace_in_Bosnia_and_Herzegovina_%282026%29-bs.webm/Fire_burning_in_a_fireplace_in_Bosnia_and_Herzegovina_%282026%29-bs.webm.480p.vp9.webm',
+      ios: 'https://upload.wikimedia.org/wikipedia/commons/transcoded/6/65/Fire_burning_in_a_fireplace_in_Bosnia_and_Herzegovina_%282026%29-bs.webm/Fire_burning_in_a_fireplace_in_Bosnia_and_Herzegovina_%282026%29-bs.webm.360p.mpeg4.mov',
+      title: 'Fire burning in a fireplace in Bosnia and Herzegovina',
+      author: 'Minja Klarić',
+      license: 'CC BY-SA 4.0',
+      source: 'https://commons.wikimedia.org/wiki/File:Fire_burning_in_a_fireplace_in_Bosnia_and_Herzegovina_(2026)-bs.webm',
+    },
+    uri: 'https://upload.wikimedia.org/wikipedia/commons/thumb/1/1d/Glowing_Embers_%28Unsplash%29.jpg/1280px-Glowing_Embers_%28Unsplash%29.jpg',
+    title: 'Glowing Embers',
+    author: 'Peter Forster',
+    license: 'CC0 1.0',
+    source: 'https://commons.wikimedia.org/wiki/File:Glowing_Embers_(Unsplash).jpg',
   },
 };
 
@@ -83,7 +118,7 @@ export const SOUNDSCAPES = [
     label: '432 Hz',
     detail: 'Meditation frequency',
     icon: 'pulse-outline',
-    scene: 'night',
+    scene: 'aurora',
     uri: 'https://archive.org/download/jamendo-621224/01-2292847-Megis-Deep%20Healing%20432Hz%20_1_.mp3',
     title: 'Deep Healing 432Hz (1)',
     author: 'Megis',
@@ -97,7 +132,7 @@ export const SOUNDSCAPES = [
     label: 'Brown noise',
     detail: 'Low, warm rumble',
     icon: 'water-outline',
-    scene: 'night',
+    scene: 'fire',
     uri: 'https://archive.org/download/TenMinutesOfWhiteNoisePinkNoiseAndBrownianNoise/BrownianNoise_64kb.mp3',
     title: 'Ten minutes of Brownian noise',
     author: 'Internet Archive community upload',

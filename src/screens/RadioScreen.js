@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
@@ -97,41 +97,45 @@ function SaveHeart({ saved, onPress }) {
 function StationText({ station, track, status, meta, compact, saved, onSave, hifi }) {
   const onAir = status === 'playing';
   return (
-    <Animated.View
-      key={station.id}
-      entering={FadeInDown.springify().damping(18).stiffness(160)}
-      exiting={FadeOut.duration(120)}
-      style={styles.textBlock}
-    >
-      <View style={styles.nameRow}>
-        <Text style={[styles.name, compact && styles.nameCompact, { flexShrink: 1 }]} numberOfLines={2} accessibilityRole="header">
-          {station.name}
-        </Text>
-        <SaveHeart saved={saved} onPress={onSave} />
-      </View>
-      {/* Keyed on the title so a new track crossfades in. */}
-      <Animated.View key={track || 'live'} entering={FadeIn.duration(350)} style={styles.trackRow}>
-        {track ? (
-          <Text style={styles.subtitle} numberOfLines={1}>
-            <Text style={styles.subtitleLead}>Now playing: </Text>
-            {track}
+    <View style={styles.textBlock}>
+      <Animated.View
+        key={station.id}
+        entering={FadeInDown.springify().damping(18).stiffness(160)}
+        exiting={FadeOut.duration(120)}
+        style={styles.textInner}
+      >
+        <View style={styles.nameRow}>
+          <Text style={[styles.name, compact && styles.nameCompact, { flexShrink: 1 }]} numberOfLines={2} accessibilityRole="header">
+            {station.name}
           </Text>
-        ) : (
-          <>
-            {/* The Vyb dot: gold while waiting, neon green once it's on air. */}
-            <PulseDot color={onAir ? colors.live : colors.gold} size={7} />
-            <Text style={styles.subtitle}>Live Broadcast</Text>
-          </>
-        )}
+          <SaveHeart saved={saved} onPress={onSave} />
+        </View>
+        {/* Keyed on the title so a new track crossfades in. */}
+        <Animated.View key={track || 'live'} entering={FadeIn.duration(350)} style={styles.trackRow}>
+          {track ? (
+            <Text style={styles.subtitle} numberOfLines={1}>
+              <Text style={styles.subtitleLead}>Now playing: </Text>
+              {track}
+            </Text>
+          ) : (
+            <>
+              {/* The Vyb dot: gold while waiting, neon green once it's on air. */}
+              <PulseDot color={onAir ? colors.live : colors.gold} size={7} />
+              <Text style={styles.subtitle}>Live Broadcast</Text>
+            </>
+          )}
+        </Animated.View>
+        <View style={styles.metaRow}>
+          {hifi && <GoldBadge label="HI-FI" />}
+          <Text style={styles.meta} numberOfLines={1}>
+            {meta}
+          </Text>
+        </View>
       </Animated.View>
-      <View style={styles.metaRow}>
-        {hifi && <GoldBadge label="HI-FI" />}
-        <Text style={styles.meta} numberOfLines={1}>
-          {meta}
-        </Text>
-      </View>
+      {/* Outside the station's entrance, so Shazam and YouTube Music are
+          there the moment a title is known, with no fade or spring. */}
       <SongInfo track={track} />
-    </Animated.View>
+    </View>
   );
 }
 
@@ -156,7 +160,7 @@ function SongButton({ icon, label, onPress, primary, a11y }) {
 // Song info: what's playing, and where to take it. With a title from the
 // stream, Shazam and a YouTube Music search for it; without one, Shazam
 // can still name it from the sound.
-function SongInfo({ track }) {
+const SongInfo = memo(function SongInfo({ track }) {
   const parts = splitTrack(track);
   return (
     <View style={styles.songInfo} testID="song-info">
@@ -179,7 +183,7 @@ function SongInfo({ track }) {
       )}
     </View>
   );
-}
+});
 
 // The whole stage takes on the record's colour: a wash from the top that
 // sinks into the black, crossfading as you swipe from record to record.
@@ -610,6 +614,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: space.sm,
   },
+  textInner: { alignSelf: 'stretch', alignItems: 'center', gap: space.sm },
   name: {
     color: colors.text,
     fontSize: 40,

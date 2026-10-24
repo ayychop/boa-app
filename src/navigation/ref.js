@@ -6,7 +6,7 @@ import { createNavigationContainerRef } from '@react-navigation/native';
 // pages (the forecast, alarms, the Creative Hub's threads) stacked over them.
 export const navigationRef = createNavigationContainerRef();
 
-export const TABS = ['Home', 'Radio', 'Zen', 'Originals', 'Talent', 'Profile'];
+export const TABS = ['Home', 'Originals', 'Radio', 'Chat', 'Talent', 'Zen', 'Profile'];
 
 /** The screen on screen (a tab, or a page over the tabs), or null before navigation is ready. */
 export const currentTab = () => (navigationRef.isReady() ? navigationRef.getCurrentRoute()?.name ?? null : null);
