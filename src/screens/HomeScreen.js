@@ -29,6 +29,7 @@ import { Button, Fog, LogoWatermark, PulseDot, SectionHeader, Slate, Tappable, V
 import useBottomSpace from '../hooks/useBottomSpace';
 import useLayout, { WIDE } from '../hooks/useLayout';
 import MiniPlayer, { useMiniPlayerSpace } from '../components/MiniPlayer';
+import ZenButton from '../components/display/ZenButton';
 import { colors, fonts, space, type } from '../theme';
 
 // The Radio tab's own genre filters, so the two never disagree. The first
@@ -91,6 +92,7 @@ function Hero({ production, width, height, bottomInset = 0, topInset = 0 }) {
           )}
         </View>
         <View style={{ alignItems: 'flex-end', gap: 6, flexShrink: 1 }}>
+          <ZenButton style={{ marginBottom: 6 }} />
           <Slate dot>Scene 01 · Take 01</Slate>
           <Slate>{width >= 600 ? '2.39 : 1 · United Kingdom' : '2.39 : 1 · UK'}</Slate>
         </View>

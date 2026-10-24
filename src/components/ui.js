@@ -88,7 +88,7 @@ export function SectionHeader({ index, kicker, title, action, onAction, style })
   return (
     <View style={[styles.section, style]}>
       <View style={{ flex: 1 }}>
-        <Slate>{[index, kicker].filter(Boolean).join(' · ')}</Slate>
+        <Slate lines={2}>{[index, kicker].filter(Boolean).join(' · ')}</Slate>
         <Text style={[type.title, { marginTop: 6 }]}>{title}</Text>
       </View>
       {action && (

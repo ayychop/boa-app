@@ -50,18 +50,37 @@ export function DisplayProvider({ children }) {
   onboardedRef.current = onboarded;
 
   // Locking the phone (or leaving the app) takes the app to 'inactive' or
-  // 'background': mount passive Zen then, so it is on screen when you come
-  // back. The vibe check is left alone. Idle timers only run in the
+  // 'background'. Nothing is mounted then: the app is off screen and
+  // mounting there is what froze it. It is only noted, and passive Zen
+  // fades in once the app is active again, so the screensaver is what you
+  // come back to. The vibe check is left alone. Idle timers only run in the
   // foreground, and coming back counts as a touch.
   const [foreground, setForeground] = useState(AppState.currentState === 'active' || AppState.currentState == null);
+  const wasLocked = useRef(false);
+  const zenRef = useRef(zen);
+  zenRef.current = zen;
   useEffect(() => {
+    let resume;
     const sub = AppState.addEventListener('change', (next) => {
-      const fg = next === 'active';
-      if (fg) touch();
-      else if ((next === 'inactive' || next === 'background') && onboardedRef.current) enterZen('passive');
-      setForeground(fg);
+      if (next === 'active') {
+        touch();
+        setForeground(true);
+        if (wasLocked.current) {
+          wasLocked.current = false;
+          // A beat for the window to settle before anything mounts.
+          clearTimeout(resume);
+          resume = setTimeout(() => enterZen('passive'), 250);
+        }
+      } else if (next === 'inactive' || next === 'background') {
+        clearTimeout(resume);
+        if (onboardedRef.current && !zenRef.current) wasLocked.current = true;
+        setForeground(false);
+      }
     });
-    return () => sub.remove();
+    return () => {
+      clearTimeout(resume);
+      sub.remove();
+    };
   }, [touch, enterZen]);
 
   // Passive Zen after idling: the app proper, nothing in front of it and

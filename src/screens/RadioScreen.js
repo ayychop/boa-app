@@ -25,8 +25,7 @@ import GlowField, { FogPlane } from '../components/GlowField';
 import Vinyl from '../components/Vinyl';
 import { useMiniPlayerSpace } from '../components/MiniPlayer';
 import useLayout from '../hooks/useLayout';
-import { useDisplay } from '../context/DisplayContext';
-import { ZenIcon } from '../components/icons';
+import ZenButton from '../components/display/ZenButton';
 import Reactions from '../components/Reactions';
 import { GoldBadge, PulseDot } from '../components/ui';
 import { genreForVibes, useUser } from '../context/UserContext';
@@ -291,7 +290,6 @@ export default function RadioScreen({ route, navigation }) {
   // A phone on its side is too short to stack the record over its track
   // info, so they sit side by side: the record on the left, the info on
   // the right. Rotating re-measures the stage and re-sizes everything.
-  const display = useDisplay();
   const { short } = useLayout();
   const landscape = short && !!stage && stage.width > stage.height;
   const recordWidth = stage ? (landscape ? stage.width / 2 : stage.width) : 0;
@@ -443,15 +441,7 @@ export default function RadioScreen({ route, navigation }) {
               <Text style={{ color: colors.textFaint }}> / {String(stations.length).padStart(2, '0')}</Text>
             </Text>
           )}
-          <Pressable
-            onPress={() => display.enterZen('active')}
-            hitSlop={10}
-            accessibilityRole="button"
-            accessibilityLabel="Start Zen Mode"
-            style={({ pressed }) => [styles.zenButton, pressed && { transform: [{ scale: 0.92 }] }]}
-          >
-            <ZenIcon size={16} color={colors.text} />
-          </Pressable>
+          <ZenButton />
         </View>
       </View>
       {!short && pills}
@@ -505,16 +495,6 @@ const styles = StyleSheet.create({
   headerShort: { paddingBottom: space.xs },
   title: { fontFamily: fonts.semibold, color: colors.text, fontSize: 28, letterSpacing: -1 },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: space.md },
-  zenButton: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(243,239,232,0.07)',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.borderStrong,
-  },
   counter: { fontFamily: fonts.mono, color: colors.textMuted, fontSize: 12, letterSpacing: 1.5 },
   pillsScroll: { flexGrow: 0, flexShrink: 0 },
   pills: { paddingHorizontal: space.lg, gap: 2, alignItems: 'center' },
