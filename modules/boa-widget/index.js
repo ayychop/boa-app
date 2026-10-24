@@ -17,6 +17,11 @@ export function setStyle(color, opacity) {
   return native ? native.setStyle(color, opacity).catch(() => {}) : Promise.resolve();
 }
 
+/** The widget's style: 'glass', 'compact' or 'record'. */
+export function setLayout(layout) {
+  return native?.setLayout ? native.setLayout(layout).catch(() => {}) : Promise.resolve();
+}
+
 function send() {
   if (!native) return Promise.resolve();
   const { title = null, subtitle = null, id = null, playing = false } = last ?? {};

@@ -10,6 +10,7 @@ import { Avatar, Chip, Field, PageHeader } from '../../components/kit';
 import { Button, Fog, Slate, Viewfinder } from '../../components/ui';
 import BoaLogo from '../../components/BoaLogo';
 import { haptics } from '../../utils/haptics';
+import { QUOTE_CATEGORIES } from '../../data/quotes';
 import { colors, fonts, radius, space, type } from '../../theme';
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -140,6 +141,7 @@ function Onboarding({ onDone }) {
   const [avatar, setAvatar] = useState(null); // picked asset
   const [bio, setBio] = useState('');
   const [roles, setRoles] = useState([]);
+  const [spark, setSpark] = useState(null); // quote category id
   const [dob, setDob] = useState({ d: '', m: '', y: '' });
   const [agreed, setAgreed] = useState(false);
   // When "I am 18 or over" was ticked: sent as adult_confirmed_at.
@@ -199,13 +201,14 @@ function Onboarding({ onDone }) {
         }
       }
       await finishOnboarding(
-        { username: handle, display_name: displayName.trim() || null, avatar_url, bio: bio.trim() || null, roles },
+        { username: handle, display_name: displayName.trim() || null, avatar_url, bio: bio.trim() || null, roles, quote_category: spark },
         { adultConfirmedAt: agreedAt },
       );
       haptics.success();
       if (photoFailed) Alert.alert('Your photo wasn’t added', `${photoFailed} You can add one any time from Hub settings.`);
       onDone();
     } catch (err) {
+      console.warn('[hub] Join the Hub failed', JSON.stringify({ code: err?.code ?? null, message: err?.message, details: err?.details ?? null }));
       setError(/duplicate|unique/i.test(err.message) ? 'That username was just taken. Go back and pick another.' : err.message);
     } finally {
       setBusy(false);
@@ -276,6 +279,43 @@ function Onboarding({ onDone }) {
             hint={`${bio.length}/280`}
             style={{ marginTop: space.xl }}
           />
+        </>
+      ),
+    },
+    {
+      title: 'Your Daily Spark',
+      ok: !!spark,
+      body: (
+        <>
+          <Text style={[type.bodyMuted, { marginBottom: space.lg }]}>
+            One line a day on your Profile, in the kind you choose. You can see a new one every morning.
+          </Text>
+          <View style={styles.sparks}>
+            {QUOTE_CATEGORIES.map((c) => {
+              const on = spark === c.id;
+              return (
+                <Pressable
+                  key={c.id}
+                  onPress={() => {
+                    haptics.selection();
+                    setSpark(c.id);
+                  }}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: on }}
+                  accessibilityLabel={`${c.label}, ${c.theme}`}
+                  testID={`hub-spark-${c.id}`}
+                  style={({ pressed }) => [styles.spark, on && styles.sparkOn, pressed && { opacity: 0.85 }]}
+                >
+                  <Ionicons name={c.icon} size={20} color={on ? colors.bg : colors.gold} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.sparkLabel, on && { color: colors.bg }]}>{c.label}</Text>
+                    <Text style={[styles.sparkTheme, on && { color: 'rgba(5,5,6,0.7)' }]}>{c.theme}</Text>
+                  </View>
+                  {on && <Ionicons name="checkmark-circle" size={20} color={colors.bg} />}
+                </Pressable>
+              );
+            })}
+          </View>
         </>
       ),
     },
@@ -404,7 +444,7 @@ export default function HubWelcomeScreen({ navigation, route }) {
   return (
     <View style={styles.screen} testID="hub-welcome">
       <PageHeader kicker="Creative Hub" title={stage === 'needsProfile' ? 'Your profile' : 'BOA HUB'} backIcon="close" onBack={() => navigation.goBack()} />
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + space.xxl }]} keyboardShouldPersistTaps="handled">
           <HubGate stage={stage} />
         </ScrollView>
@@ -469,4 +509,18 @@ const styles = StyleSheet.create({
   boxOn: { backgroundColor: colors.gold, borderColor: colors.gold },
   agreeText: { flex: 1, fontFamily: fonts.medium, fontSize: 13.5, color: colors.text },
   nav: { flexDirection: 'row', justifyContent: 'flex-end', gap: space.md, marginTop: space.xxl },
+  sparks: { gap: space.sm },
+  spark: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    padding: space.lg,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  sparkOn: { backgroundColor: colors.gold, borderColor: colors.gold },
+  sparkLabel: { fontFamily: fonts.semibold, fontSize: 16, color: colors.text },
+  sparkTheme: { fontFamily: fonts.medium, fontSize: 12, color: colors.textMuted, marginTop: 2 },
 });

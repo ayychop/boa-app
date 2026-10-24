@@ -6,6 +6,7 @@
   <string name="boa_widget_logo">BOA Network</string>
   <string name="boa_widget_weather">Weather. Tap for the forecast.</string>
   <string name="boa_widget_cta">BOA RADIO · TAP TO TUNE IN</string>
+  <string name="boa_widget_cta_short">TAP TO TUNE IN</string>
   <string name="boa_widget_wx_blank">--°</string>
   <string name="boa_widget_wx_setup">Tap for weather</string>
 </resources>

@@ -3,11 +3,19 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as widget from '../../modules/boa-widget';
 
 const KEY = 'boa:widget:v1';
-export const DEFAULT_WIDGET_STYLE = { color: '#141416', opacity: 0.55 };
+export const DEFAULT_WIDGET_STYLE = { color: '#141416', opacity: 0.55, layout: 'glass' };
+
+// The widget's styles, in the order the settings offer them.
+export const WIDGET_LAYOUTS = [
+  { id: 'glass', label: 'Glass', detail: 'Clock, weather and radio' },
+  { id: 'compact', label: 'Compact', detail: 'One slim row' },
+  { id: 'record', label: 'Record', detail: 'The radio wheel' },
+];
 
 /**
- * The home screen widget's glass: tint and opacity, saved on the device and
- * pushed to the widget whenever it changes.
+ * The home screen widget's look: its style (layout), and its glass's tint
+ * and opacity, saved on the device and pushed to the widget whenever they
+ * change.
  */
 export default function useWidgetStyle() {
   const [style, setStyleState] = useState(DEFAULT_WIDGET_STYLE);
@@ -25,6 +33,7 @@ export default function useWidgetStyle() {
       const next = { ...prev, ...patch };
       AsyncStorage.setItem(KEY, JSON.stringify(next)).catch(() => {});
       widget.setStyle(next.color, next.opacity);
+      if (next.layout !== prev.layout) widget.setLayout(next.layout);
       return next;
     });
   }, []);

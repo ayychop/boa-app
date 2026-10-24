@@ -49,14 +49,19 @@ describe('creating a profile', () => {
     expect(mockInsert).not.toHaveBeenCalled();
   });
 
-  test('a stale schema cache reads as a short, retryable message', async () => {
-    mockInsert.result = Promise.resolve({
-      data: null,
-      error: { message: "Could not find the 'adult_confirmed_at' column of 'profiles' in the schema cache" },
-    });
-    await expect(hub.createProfile('user-me', FIELDS, { adultConfirmedAt: new Date().toISOString() })).rejects.toThrow(
-      'The Hub is finishing an update. Please try again in a minute.',
-    );
+  test('a failed insert logs the exact database error and says what went wrong', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const message = "Could not find the 'adult_confirmed_at' column of 'profiles' in the schema cache";
+    mockInsert.result = Promise.resolve({ data: null, error: { code: 'PGRST204', message, details: null, hint: null } });
+    const ticked = '2026-10-24T18:30:00.000Z';
+    const failure = await hub.createProfile('user-me', FIELDS, { adultConfirmedAt: ticked }).catch((e) => e);
+    expect(failure.message).toBe(`The Hub's database isn't up to date, so your profile couldn't be saved. (${message})`);
+    expect(failure.code).toBe('PGRST204');
+    const [label, logged] = warn.mock.calls.find((c) => c[0] === '[hub] createProfile insert failed');
+    expect(label).toBeTruthy();
+    expect(JSON.parse(logged)).toMatchObject({ code: 'PGRST204', message, adult_confirmed_at: ticked });
+    expect(JSON.parse(logged).columns).toEqual(expect.arrayContaining(['adult_confirmed_at', 'terms_accepted_at', 'username']));
+    warn.mockRestore();
   });
 });
 

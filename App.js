@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import * as Linking from 'expo-linking';
 import { StatusBar } from 'expo-status-bar';
 import { Platform, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { DarkTheme, NavigationContainer, useIsFocused } from '@react-navigation/native';
@@ -41,7 +42,7 @@ import { ZenProvider, useZen } from './src/context/ZenContext';
 import { WeatherProvider } from './src/context/WeatherContext';
 import { AlarmProvider, useAlarms } from './src/context/AlarmContext';
 import { HubProvider } from './src/context/HubContext';
-import { currentTab, navigationRef, openPage } from './src/navigation/ref';
+import { currentTab, goToTab, navigationRef, openPage } from './src/navigation/ref';
 import OnboardingScreen from './src/screens/OnboardingScreen';
 import Intro from './src/components/Intro';
 import MiniPlayer from './src/components/MiniPlayer';
@@ -279,6 +280,33 @@ function AlarmRinger({ navReady }) {
   return null;
 }
 
+/**
+ * Where a network.boa:// link goes: `weather` (the widget's weather) to the
+ * forecast, `now-playing` (the rest of the widget) to the Radio tab. The
+ * OAuth return (auth-callback) is handled by the sign-in itself; anything
+ * else just opens the app. Exported for the tests.
+ */
+export function routeLink(url) {
+  const m = /^network\.boa:\/\/+([^/?#]+)/i.exec(url || '');
+  const target = m?.[1]?.toLowerCase();
+  if (target === 'weather') return openPage('Forecast');
+  if (target === 'now-playing') return goToTab('Radio');
+  return false;
+}
+
+// Links that open the app (cold) or arrive while it runs.
+function DeepLinks({ navReady }) {
+  useEffect(() => {
+    if (!navReady) return;
+    Linking.getInitialURL()
+      .then((url) => url && routeLink(url))
+      .catch(() => {});
+    const sub = Linking.addEventListener('url', (e) => routeLink(e?.url));
+    return () => sub?.remove?.();
+  }, [navReady]);
+  return null;
+}
+
 const PAGE_OPTIONS = { headerShown: false, animation: 'slide_from_right', contentStyle: { backgroundColor: colors.bg } };
 
 // The tabs, with the full-screen pages (the forecast, alarms, the Creative
@@ -305,6 +333,7 @@ function MainTabs({ narrow }) {
         <Stack.Screen name="HubThread" component={HubThreadScreen} />
       </Stack.Navigator>
       <AlarmRinger navReady={navReady} />
+      <DeepLinks navReady={navReady} />
       {/* Draws the lock screen's record artwork for the station playing. */}
       <RecordArtwork />
     </NavigationContainer>

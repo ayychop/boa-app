@@ -127,11 +127,16 @@ test('while the radio plays, the whole Zen background freezes, and moves again o
   await openTab(user, 'Zen');
   await advance(300);
   expect(running).toBe(0);
-  expect(scene().playing).toBe(false);
+  // No video player at all while the radio plays (a still photograph), so
+  // opening Zen can't take the audio focus; the radio is still on.
+  expect(screen.queryByTestId(/^zen-video-/)).toBeNull();
+  expect(radioState().status).toBe('playing');
+  expect(engine.pause).not.toHaveBeenCalled();
 
   await user.press(screen.getByRole('button', { name: 'Pause radio' }));
   await advance(300);
   expect(running).toBeGreaterThanOrEqual(5);
+  expect(screen.getByTestId('zen-video-night')).toBeOnTheScreen();
   expect(scene().playing).toBe(true);
 });
 
@@ -167,6 +172,8 @@ describe('deep links and the widget', () => {
       expect(read(p)).not.toMatch(/(^|[^.\w])boa:\/\//m);
     }
     expect(read('plugins/widget/BoaWidgetProvider.kt')).toContain('network.boa://now-playing');
+    // A view intent: React Native passes links on only from those.
+    expect(read('plugins/widget/BoaWidgetProvider.kt')).toContain('Intent(Intent.ACTION_VIEW, Uri.parse(uri))');
   });
 
   test('the widget layout only uses views a home screen widget can show', () => {
@@ -177,16 +184,28 @@ describe('deep links and the widget', () => {
       'ImageButton', 'ImageView', 'ProgressBar', 'TextView', 'ViewFlipper', 'ListView', 'GridView', 'StackView',
       'AdapterViewFlipper', 'ViewStub', 'TextClock',
     ]);
-    const tags = [...read('plugins/widget/res/layout/boa_widget.xml').matchAll(/<([A-Za-z.]+)[\s>]/g)].map((m) => m[1]);
-    expect(tags.length).toBeGreaterThan(10);
-    expect(tags.filter((t) => !allowed.has(t))).toEqual([]);
+    for (const layout of ['boa_widget', 'boa_widget_compact', 'boa_widget_record']) {
+      const tags = [...read(`plugins/widget/res/layout/${layout}.xml`).matchAll(/<([A-Za-z.]+)[\s>]/g)].map((m) => m[1]);
+      expect(tags.length).toBeGreaterThan(8);
+      expect({ layout, bad: tags.filter((t) => !allowed.has(t)) }).toEqual({ layout, bad: [] });
+    }
   });
 
-  test('every view id the provider sets exists in the layout, and the provider info points at it', () => {
-    const layout = read('plugins/widget/res/layout/boa_widget.xml');
-    const ids = new Set([...layout.matchAll(/@\+id\/(\w+)/g)].map((m) => m[1]));
-    const used = new Set([...read('plugins/widget/BoaWidgetProvider.kt').matchAll(/R\.id\.(\w+)/g)].map((m) => m[1]));
-    expect([...used].filter((id) => !ids.has(id))).toEqual([]);
+  test("every view each style touches is in that style's layout", () => {
+    const kotlin = read('plugins/widget/BoaWidgetProvider.kt');
+    const idsIn = (text) => new Set([...text.matchAll(/R\.id\.(\w+)/g)].map((m) => m[1]));
+    const media = idsIn(kotlin.slice(kotlin.indexOf('private val MEDIA'), kotlin.indexOf('private val STYLES')));
+    for (const [style, layout] of [['glass', 'boa_widget'], ['compact', 'boa_widget_compact'], ['record', 'boa_widget_record']]) {
+      const start = kotlin.indexOf(`"${style}" to Style(`);
+      const block = kotlin.slice(start, kotlin.indexOf('),\n      "', start + 1) > 0 ? kotlin.indexOf('),\n      "', start + 1) : kotlin.indexOf('\n    )', start));
+      const declared = new Set([...media, ...idsIn(block)]);
+      const inLayout = new Set([...read(`plugins/widget/res/layout/${layout}.xml`).matchAll(/@\+id\/(\w+)/g)].map((m) => m[1]));
+      // Declared but missing from the layout would make the launcher refuse it.
+      expect({ style, missing: [...declared].filter((id) => !inLayout.has(id)) }).toEqual({ style, missing: [] });
+    }
+    // The drawing code goes through on() for every view.
+    const draw = kotlin.slice(kotlin.indexOf('fun on(id: Int'), kotlin.indexOf('return views'));
+    expect(draw.split('\n').filter((l) => /views\.set\w+\(R\.id/.test(l) && !/on\(R\.id\.\w+\) \{/.test(l))).toEqual([]);
     const info = read('plugins/widget/res/xml/boa_widget_info.xml');
     expect(info).toContain('android:initialLayout="@layout/boa_widget"');
     expect(Number(info.match(/minWidth="(\d+)dp"/)[1])).toBeGreaterThan(0);

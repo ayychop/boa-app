@@ -1,0 +1,163 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- BOA widget, Compact: one slim row of glass. The time, what's playing
+     (the station's record and its name) and today's temperature. The
+     weather opens the forecast; the rest opens what's playing. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+  android:id="@+id/boa_widget_root"
+  android:layout_width="match_parent"
+  android:layout_height="match_parent">
+
+  <ImageView
+    android:id="@+id/boa_widget_glass"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:importantForAccessibility="no"
+    android:scaleType="fitXY"
+    android:src="@drawable/boa_widget_glass" />
+
+  <ImageView
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:importantForAccessibility="no"
+    android:scaleType="fitXY"
+    android:src="@drawable/boa_widget_sheen" />
+
+  <ImageView
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:importantForAccessibility="no"
+    android:scaleType="fitXY"
+    android:src="@drawable/boa_widget_edge" />
+
+  <LinearLayout
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingStart="16dp"
+    android:paddingEnd="14dp">
+
+    <TextClock
+      android:id="@+id/boa_widget_time"
+      android:layout_width="wrap_content"
+      android:layout_height="wrap_content"
+      android:fontFamily="sans-serif-light"
+      android:format12Hour="h:mm"
+      android:format24Hour="HH:mm"
+      android:includeFontPadding="false"
+      android:maxLines="1"
+      android:textColor="#F3EFE8"
+      android:textSize="30sp" />
+
+    <!-- A FrameLayout, not a View: widgets can only use RemoteViews classes. -->
+    <FrameLayout
+      android:id="@+id/boa_widget_rule"
+      android:layout_width="1dp"
+      android:layout_height="28dp"
+      android:layout_marginStart="12dp"
+      android:layout_marginEnd="12dp"
+      android:background="#1FF3EFE8" />
+
+    <LinearLayout
+      android:id="@+id/boa_widget_media"
+      android:layout_width="0dp"
+      android:layout_height="match_parent"
+      android:layout_weight="1"
+      android:gravity="center_vertical"
+      android:orientation="horizontal">
+
+      <FrameLayout
+        android:layout_width="32dp"
+        android:layout_height="32dp">
+
+        <ImageView
+          android:id="@+id/boa_widget_art"
+          android:layout_width="match_parent"
+          android:layout_height="match_parent"
+          android:contentDescription="@string/boa_widget_record"
+          android:scaleType="fitCenter"
+          android:visibility="gone" />
+
+        <ImageView
+          android:id="@+id/boa_widget_logo"
+          android:layout_width="match_parent"
+          android:layout_height="match_parent"
+          android:contentDescription="@string/boa_widget_logo"
+          android:scaleType="fitCenter"
+          android:src="@drawable/boa_widget_wordmark" />
+      </FrameLayout>
+
+      <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="10dp"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <TextView
+          android:id="@+id/boa_widget_title"
+          android:layout_width="wrap_content"
+          android:layout_height="wrap_content"
+          android:ellipsize="end"
+          android:fontFamily="monospace"
+          android:includeFontPadding="false"
+          android:letterSpacing="0.1"
+          android:maxLines="1"
+          android:text="@string/boa_widget_cta"
+          android:textColor="#E2A84B"
+          android:textSize="9.5sp" />
+
+        <TextView
+          android:id="@+id/boa_widget_subtitle"
+          android:layout_width="wrap_content"
+          android:layout_height="wrap_content"
+          android:layout_marginTop="2dp"
+          android:ellipsize="end"
+          android:fontFamily="sans-serif-medium"
+          android:includeFontPadding="false"
+          android:maxLines="1"
+          android:textColor="#B3F3EFE8"
+          android:textSize="12sp"
+          android:visibility="gone" />
+      </LinearLayout>
+
+      <ImageView
+        android:id="@+id/boa_widget_live"
+        android:layout_width="7dp"
+        android:layout_height="7dp"
+        android:layout_marginStart="6dp"
+        android:importantForAccessibility="no"
+        android:src="@drawable/boa_widget_live"
+        android:visibility="gone" />
+    </LinearLayout>
+
+    <LinearLayout
+      android:id="@+id/boa_widget_weather"
+      android:layout_width="wrap_content"
+      android:layout_height="match_parent"
+      android:layout_marginStart="10dp"
+      android:contentDescription="@string/boa_widget_weather"
+      android:gravity="center_vertical"
+      android:orientation="horizontal">
+
+      <ImageView
+        android:id="@+id/boa_widget_wx_icon"
+        android:layout_width="22dp"
+        android:layout_height="22dp"
+        android:importantForAccessibility="no"
+        android:src="@drawable/boa_wx_partly" />
+
+      <TextView
+        android:id="@+id/boa_widget_wx_temp"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="4dp"
+        android:fontFamily="sans-serif-light"
+        android:includeFontPadding="false"
+        android:maxLines="1"
+        android:text="@string/boa_widget_wx_blank"
+        android:textColor="#F3EFE8"
+        android:textSize="20sp" />
+    </LinearLayout>
+  </LinearLayout>
+</FrameLayout>

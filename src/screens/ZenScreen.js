@@ -227,8 +227,11 @@ function SceneVideo({ scene, running }) {
   const shown = useSharedValue(0);
   const player = useVideoPlayer(null, (p) => {
     p.loop = true;
-    p.muted = true;
+    // Set before it ever plays: silent and mixing, it never asks Android
+    // for the audio focus.
     p.audioMixingMode = 'mixWithOthers';
+    p.muted = true;
+    p.volume = 0;
   });
   const [source, setSource] = useState(null);
 
@@ -284,14 +287,14 @@ function SceneVideo({ scene, running }) {
  * that, drifting smoke, film grain, and a deep shade so text reads and the
  * screen stays dim enough to sleep by.
  */
-function Atmosphere({ sceneId, width, height, running }) {
+function Atmosphere({ sceneId, width, height, running, withVideo = true }) {
   const scene = SCENES[sceneId] ?? SCENES.night;
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
       <MeshGradient width={width} height={height} running={running} />
       <Animated.View key={scene.id} entering={FadeIn.duration(1400)} exiting={FadeOut.duration(1400)} style={StyleSheet.absoluteFill}>
         <ScenePhoto scene={scene} width={width} height={height} running={running} />
-        <SceneVideo scene={scene} running={running} />
+        {withVideo && <SceneVideo scene={scene} running={running} />}
       </Animated.View>
       <DriftingFog width={width} height={height} opacity={0.45} running={running} />
       <Grain width={width} height={height} opacity={0.05} running={running} />
@@ -720,7 +723,10 @@ function ZenRoom() {
 
   return (
     <View style={styles.screen} testID={ambient ? 'zen-screensaver' : 'zen-screen'}>
-      <Atmosphere sceneId={sceneId} width={width} height={height} running={roomMoving} />
+      {/* With the radio on, the room is a still photograph: no video
+          player exists at all, so opening Zen can never take the audio
+          focus from the radio (Android pauses whatever loses it). */}
+      <Atmosphere sceneId={sceneId} width={width} height={height} running={roomMoving} withVideo={!isPlaying} />
       {ambient && (
         <Pressable
           style={StyleSheet.absoluteFill}

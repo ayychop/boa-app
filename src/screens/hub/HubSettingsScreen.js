@@ -8,10 +8,12 @@ import * as hub from '../../api/hub';
 import { Avatar, Chip, Field, PageHeader, SettingRow, Toggle } from '../../components/kit';
 import { Button, Slate } from '../../components/ui';
 import { haptics } from '../../utils/haptics';
+import { QUOTE_CATEGORIES } from '../../data/quotes';
 import { colors, radius, space } from '../../theme';
 
 /**
- * Your Hub profile and privacy: name, photo, bio and roles; whether you're
+ * Your Hub profile and privacy: name, photo, bio and roles; your Daily
+ * Spark's kind; whether you're
  * visible on the Hub and open for work; whether your listening / watching
  * shows; the people you've blocked; and your data (export or delete).
  */
@@ -103,7 +105,7 @@ export default function HubSettingsScreen({ navigation }) {
   return (
     <View style={styles.screen} testID="hub-settings">
       <PageHeader kicker="Creative Hub" title="Hub settings" onBack={() => navigation.goBack()} />
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={{ padding: space.xl, paddingTop: 0, paddingBottom: insets.bottom + space.xxl }} keyboardShouldPersistTaps="handled">
           <View style={styles.photoRow}>
             <Pressable onPress={changePhoto} accessibilityRole="button" accessibilityLabel="Change profile photo">
@@ -157,6 +159,22 @@ export default function HubSettingsScreen({ navigation }) {
               style={{ marginTop: space.lg, alignSelf: 'flex-start' }}
             />
           )}
+
+          {/* The Daily Spark on Profile: saved as soon as it's picked. */}
+          <Slate style={styles.section}>Daily Spark</Slate>
+          <View style={styles.chips}>
+            {QUOTE_CATEGORIES.map((c) => (
+              <Chip
+                key={c.id}
+                label={`${c.label} · ${c.theme}`}
+                selected={profile.quote_category === c.id}
+                onPress={() => {
+                  haptics.selection();
+                  flip('quote_category')(c.id);
+                }}
+              />
+            ))}
+          </View>
 
           <Slate style={styles.section}>Presence</Slate>
           <View style={styles.group}>

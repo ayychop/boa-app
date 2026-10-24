@@ -29,6 +29,13 @@ class BoaWidgetModule : Module() {
       refresh()
     }
 
+    // Which widget style to draw: "glass", "compact" or "record" (anything
+    // else draws glass).
+    AsyncFunction("setLayout") { layout: String ->
+      prefs().edit().putString(KEY_LAYOUT, layout).apply()
+      refresh()
+    }
+
     // What's on, under the clock: the station, then the song if known; the
     // station's record artwork (a file:// PNG, or null for the BOA logo);
     // and whether it's on air (the green dot).
@@ -79,6 +86,7 @@ class BoaWidgetModule : Module() {
     const val PREFS = "boa_widget"
     const val KEY_COLOR = "color"
     const val KEY_OPACITY = "opacity"
+    const val KEY_LAYOUT = "layout"
     const val KEY_TITLE = "title"
     const val KEY_SUBTITLE = "subtitle"
     const val KEY_ARTWORK = "artwork"

@@ -22,6 +22,7 @@ import { colors, fonts, radius, space, type } from '../theme';
 import { useOpenHub } from '../components/hub/hubNav';
 import { useHub } from '../context/HubContext';
 import { Avatar } from '../components/kit';
+import DailySpark from '../components/DailySpark';
 
 // Until you sign in, the profile card has a placeholder name.
 const LISTENER_NAME = 'BOA Listener';
@@ -123,6 +124,12 @@ export default function ProfileScreen({ navigation }) {
             </View>
           )}
         </Tappable>
+
+        {/* Today's line, in the kind chosen when joining the Hub. */}
+        <DailySpark
+          category={signedIn ? profile.quote_category : null}
+          hint={signedIn ? (profile.quote_category ? null : 'Choose your kind in Hub settings.') : 'Sign in to choose your kind: Love, Wealth, Health or Career.'}
+        />
 
         {user.isPremium ? (
           <Pressable onPress={openPremium} accessibilityRole="button" style={({ pressed }) => [styles.premiumActive, pressed && { opacity: 0.85 }]}>

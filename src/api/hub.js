@@ -65,7 +65,13 @@ function check({ data, error }) {
 
 // ------------------------------------------------------------------- auth
 
-export const authRedirect = () => Linking.createURL('auth-callback');
+// Where Supabase sends you back after Google or an email link: the app's
+// own scheme (app.json), spelled out so it's exactly this in every build.
+// It must be in Supabase's Redirect URLs list. (Google's own Console lists
+// Supabase's callback, https://<project>.supabase.co/auth/v1/callback,
+// not this.)
+export const AUTH_REDIRECT = 'network.boa://auth-callback';
+export const authRedirect = () => AUTH_REDIRECT;
 
 export async function signInWithEmail(email, password) {
   return check(await need().auth.signInWithPassword({ email: email.trim(), password }));
@@ -122,7 +128,7 @@ export async function signOut() {
 // --------------------------------------------------------------- profiles
 
 const PROFILE_FIELDS =
-  'id, username, display_name, avatar_url, bio, roles, visible_on_hub, open_for_work, status_kind, status_text, status_updated_at, last_seen_at, created_at';
+  'id, username, display_name, avatar_url, bio, roles, quote_category, visible_on_hub, open_for_work, status_kind, status_text, status_updated_at, last_seen_at, created_at';
 
 export async function getProfile(id) {
   return check(await need().from('profiles').select(PROFILE_FIELDS).eq('id', id).maybeSingle());
@@ -142,23 +148,35 @@ export async function createProfile(userId, fields, { adultConfirmedAt } = {}) {
   if (!adultConfirmedAt || Number.isNaN(Date.parse(adultConfirmedAt))) {
     throw new Error('Please confirm you are 18 or over.');
   }
-  const res = await need()
-    .from('profiles')
-    .insert({
-      id: userId,
-      ...fields,
-      username: fields.username.toLowerCase(),
-      adult_confirmed_at: new Date(adultConfirmedAt).toISOString(),
-      terms_accepted_at: new Date().toISOString(),
-      terms_version: TERMS_VERSION,
-    })
-    .select(PROFILE_FIELDS)
-    .single();
-  // The database still updating after a change to its tables.
-  if (res.error && /schema cache/i.test(res.error.message || '')) {
-    throw new Error("The Hub is finishing an update. Please try again in a minute.");
+  const row = {
+    id: userId,
+    ...fields,
+    username: fields.username.toLowerCase(),
+    adult_confirmed_at: new Date(adultConfirmedAt).toISOString(),
+    terms_accepted_at: new Date().toISOString(),
+    terms_version: TERMS_VERSION,
+  };
+  const res = await need().from('profiles').insert(row).select(PROFILE_FIELDS).single();
+  if (res.error) {
+    const { code = null, message = '', details = null, hint = null } = res.error;
+    // Everything needed to see why, in the device log (adb logcat, Metro):
+    // the database's own error, and what was sent (columns, not contents).
+    console.warn(
+      '[hub] createProfile insert failed',
+      JSON.stringify({ code, message, details, hint, columns: Object.keys(row), adult_confirmed_at: row.adult_confirmed_at }),
+    );
+    // A column the app sends that the database doesn't have (42703, or
+    // PGRST204 from the API's schema cache): the database is behind the app.
+    const missingColumn = code === 'PGRST204' || code === '42703' || /schema cache|does not exist/i.test(message);
+    const err = new Error(
+      missingColumn
+        ? `The Hub's database isn't up to date, so your profile couldn't be saved. (${message})`
+        : `Couldn't create your profile. ${message}`.trim(),
+    );
+    Object.assign(err, { code, details, hint });
+    throw err;
   }
-  return check(res);
+  return res.data;
 }
 
 export async function updateProfile(userId, patch) {

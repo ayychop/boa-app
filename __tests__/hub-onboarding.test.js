@@ -32,6 +32,11 @@ async function fillUpTo18Plus(user, { photo } = {}) {
   await user.press(screen.getByText(photo ? 'Next' : 'Skip'));
   await user.press(screen.getByText('Director'));
   await user.press(screen.getByText('Next'));
+  // The Daily Spark: a kind must be chosen to go on.
+  await user.press(screen.getByText('Next'));
+  expect(screen.getByText('Your Daily Spark')).toBeOnTheScreen();
+  await user.press(screen.getByTestId('hub-spark-wealth'));
+  await user.press(screen.getByText('Next'));
   await user.type(screen.getByTestId('hub-dob-d'), '01');
   await user.type(screen.getByTestId('hub-dob-m'), '02');
   await user.type(screen.getByTestId('hub-dob-y'), '1990');
@@ -54,7 +59,7 @@ test('ticking "I am 18 or over" stamps the time, and Join the Hub sends it as ad
   await user.press(screen.getByText('Join the Hub'));
   await flush();
   expect(mockFinish).toHaveBeenCalledWith(
-    expect.objectContaining({ username: 'ama.directs', roles: ['director'] }),
+    expect.objectContaining({ username: 'ama.directs', roles: ['director'], quote_category: 'wealth' }),
     { adultConfirmedAt: expect.stringMatching(/^2026-10-24T18:30:00\.\d{3}Z$/) },
   );
 });

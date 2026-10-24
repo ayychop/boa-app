@@ -21,7 +21,7 @@ export default function ChatScreen({ navigation }) {
 
   return (
     <View style={styles.screen} testID="chat-gate">
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <ScrollView
           contentContainerStyle={[styles.body, { paddingTop: insets.top + space.xl, paddingBottom: bottom }]}
           keyboardShouldPersistTaps="handled"

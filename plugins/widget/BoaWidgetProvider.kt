@@ -16,8 +16,14 @@ import android.widget.RemoteViews
 import java.io.File
 
 /**
- * BOA home screen widget: a pane of frosted glass with a live clock and the
- * date, today's weather and what's playing. The app saves everything it
+ * BOA home screen widget, in the style picked in the app (Profile > Home
+ * screen widget):
+ * - Glass (boa_widget): the clock and date, today's weather and what's
+ *   playing, on a pane of frosted glass;
+ * - Compact (boa_widget_compact): one slim row, the time, what's playing
+ *   and the temperature;
+ * - Record (boa_widget_record): the minimal radio wheel, the station's
+ *   record large with its name and the song. The app saves everything it
  * shows to shared preferences (the BoaWidget native module) and asks for a
  * redraw; this reads them each time it draws:
  * - the glass's tint and opacity;
@@ -27,8 +33,13 @@ import java.io.File
  * - the weather (icon, temperature, place, rain outlook).
  * The clock is a TextClock, kept current by the launcher. Tapping the
  * weather opens the forecast (network.boa://weather); anywhere else opens
- * what's playing (network.boa://now-playing: the Radio tab when a station
- * is on).
+ * what's playing (network.boa://now-playing: the Radio tab). The links are
+ * ACTION_VIEW intents: React Native only passes a link on to the app from
+ * a view intent, so a launch intent carrying one would go nowhere.
+ *
+ * Each layout has only some of the views, and a widget that sets a view its
+ * layout doesn't have is refused by the launcher, so everything is set
+ * through `on`, which skips views the chosen layout lacks.
  *
  * Nothing it reads is required: before the app has ever run, or if the
  * weather or location never loaded, every value falls back to a default
@@ -43,7 +54,7 @@ class BoaWidgetProvider : AppWidgetProvider() {
         draw(context)
       } catch (e: Exception) {
         Log.w(TAG, "Widget draw failed, showing the plain layout", e)
-        RemoteViews(context.packageName, R.layout.boa_widget)
+        RemoteViews(context.packageName, styleOf(context).layout)
       }
       try {
         appWidgetManager.updateAppWidget(id, views)
@@ -58,7 +69,15 @@ class BoaWidgetProvider : AppWidgetProvider() {
     onUpdate(context, appWidgetManager, intArrayOf(appWidgetId))
   }
 
+  private fun styleOf(context: Context): Style {
+    val name = runCatching {
+      context.getSharedPreferences("boa_widget", Context.MODE_PRIVATE).getString("layout", null)
+    }.getOrNull()
+    return STYLES[name] ?: STYLES.getValue("glass")
+  }
+
   private fun draw(context: Context): RemoteViews {
+    val style = styleOf(context)
     val prefs = context.getSharedPreferences("boa_widget", Context.MODE_PRIVATE)
     // Read defensively: a missing or mistyped value is just a default.
     fun str(key: String) = runCatching { prefs.getString(key, null) }.getOrNull()?.takeIf { it.isNotBlank() }
@@ -67,7 +86,7 @@ class BoaWidgetProvider : AppWidgetProvider() {
     val title = str("title")
     val subtitle = str("subtitle")
     val playing = runCatching { prefs.getBoolean("playing", false) }.getOrDefault(false)
-    val art = if (title != null) loadArt(str("artwork")) else null
+    val art = if (title != null) loadArt(str("artwork"), style.artPx) else null
 
     val wxTemp = str("wx_temp")
     val wxIcon = str("wx_icon")
@@ -84,65 +103,75 @@ class BoaWidgetProvider : AppWidgetProvider() {
     val openPlaying = deepLink(context, "network.boa://now-playing", 0)
     val openWeather = deepLink(context, "network.boa://weather", 1)
 
-    val views = RemoteViews(context.packageName, R.layout.boa_widget)
-    views.setInt(R.id.boa_widget_glass, "setColorFilter", tint or OPAQUE)
-    views.setInt(R.id.boa_widget_glass, "setImageAlpha", (opacity * 255).toInt())
-    views.setTextColor(R.id.boa_widget_time, primary)
-    views.setTextColor(R.id.boa_widget_date, secondary)
-    views.setTextColor(R.id.boa_widget_wx_temp, primary)
-    views.setTextColor(R.id.boa_widget_wx_place, primary)
-    views.setTextColor(R.id.boa_widget_wx_detail, secondary)
-    views.setTextColor(R.id.boa_widget_title, accent)
-    views.setTextColor(R.id.boa_widget_subtitle, secondary)
-    views.setInt(R.id.boa_widget_rule, "setBackgroundColor", rule)
+    val views = RemoteViews(context.packageName, style.layout)
+    // Sets a view only if this style's layout has it.
+    fun on(id: Int, set: () -> Unit) {
+      if (id in style.ids) set()
+    }
+    on(R.id.boa_widget_glass) { views.setInt(R.id.boa_widget_glass, "setColorFilter", tint or OPAQUE) }
+    on(R.id.boa_widget_glass) { views.setInt(R.id.boa_widget_glass, "setImageAlpha", (opacity * 255).toInt()) }
+    on(R.id.boa_widget_time) { views.setTextColor(R.id.boa_widget_time, primary) }
+    on(R.id.boa_widget_date) { views.setTextColor(R.id.boa_widget_date, secondary) }
+    on(R.id.boa_widget_wx_temp) { views.setTextColor(R.id.boa_widget_wx_temp, primary) }
+    on(R.id.boa_widget_wx_place) { views.setTextColor(R.id.boa_widget_wx_place, primary) }
+    on(R.id.boa_widget_wx_detail) { views.setTextColor(R.id.boa_widget_wx_detail, secondary) }
+    on(R.id.boa_widget_title) { views.setTextColor(R.id.boa_widget_title, accent) }
+    on(R.id.boa_widget_subtitle) { views.setTextColor(R.id.boa_widget_subtitle, secondary) }
+    on(R.id.boa_widget_rule) { views.setInt(R.id.boa_widget_rule, "setBackgroundColor", rule) }
 
     // Weather: the icon tinted to the text, or a prompt until there is any.
     if (wxTemp != null) {
-      views.setTextViewText(R.id.boa_widget_wx_temp, wxTemp)
-      views.setImageViewResource(R.id.boa_widget_wx_icon, iconFor(wxIcon))
-      views.setInt(R.id.boa_widget_wx_icon, "setColorFilter", if (wxIcon == "sun") accent else primary)
-      views.setViewVisibility(R.id.boa_widget_wx_icon, View.VISIBLE)
-      views.setTextViewText(R.id.boa_widget_wx_place, wxPlace ?: "")
+      on(R.id.boa_widget_wx_temp) { views.setTextViewText(R.id.boa_widget_wx_temp, wxTemp) }
+      on(R.id.boa_widget_wx_icon) { views.setImageViewResource(R.id.boa_widget_wx_icon, iconFor(wxIcon)) }
+      on(R.id.boa_widget_wx_icon) { views.setInt(R.id.boa_widget_wx_icon, "setColorFilter", if (wxIcon == "sun") accent else primary) }
+      on(R.id.boa_widget_wx_icon) { views.setViewVisibility(R.id.boa_widget_wx_icon, View.VISIBLE) }
+      on(R.id.boa_widget_wx_place) { views.setTextViewText(R.id.boa_widget_wx_place, wxPlace ?: "") }
     } else {
-      views.setTextViewText(R.id.boa_widget_wx_temp, context.getString(R.string.boa_widget_wx_blank))
-      views.setViewVisibility(R.id.boa_widget_wx_icon, View.GONE)
-      views.setTextViewText(R.id.boa_widget_wx_place, context.getString(R.string.boa_widget_wx_setup))
+      on(R.id.boa_widget_wx_temp) { views.setTextViewText(R.id.boa_widget_wx_temp, context.getString(R.string.boa_widget_wx_blank)) }
+      on(R.id.boa_widget_wx_icon) { views.setViewVisibility(R.id.boa_widget_wx_icon, View.GONE) }
+      on(R.id.boa_widget_wx_place) { views.setTextViewText(R.id.boa_widget_wx_place, context.getString(R.string.boa_widget_wx_setup)) }
     }
     if (wxTemp != null && !wxDetail.isNullOrBlank()) {
-      views.setTextViewText(R.id.boa_widget_wx_detail, wxDetail)
-      views.setViewVisibility(R.id.boa_widget_wx_detail, View.VISIBLE)
+      on(R.id.boa_widget_wx_detail) { views.setTextViewText(R.id.boa_widget_wx_detail, wxDetail) }
+      on(R.id.boa_widget_wx_detail) { views.setViewVisibility(R.id.boa_widget_wx_detail, View.VISIBLE) }
     } else {
-      views.setViewVisibility(R.id.boa_widget_wx_detail, View.GONE)
+      on(R.id.boa_widget_wx_detail) { views.setViewVisibility(R.id.boa_widget_wx_detail, View.GONE) }
     }
 
     // What's playing: the station's record, else the BOA logo.
     if (art != null) {
-      views.setImageViewBitmap(R.id.boa_widget_art, art)
-      views.setViewVisibility(R.id.boa_widget_art, View.VISIBLE)
-      views.setViewVisibility(R.id.boa_widget_logo, View.GONE)
+      on(R.id.boa_widget_art) { views.setImageViewBitmap(R.id.boa_widget_art, art) }
+      on(R.id.boa_widget_art) { views.setViewVisibility(R.id.boa_widget_art, View.VISIBLE) }
+      on(R.id.boa_widget_logo) { views.setViewVisibility(R.id.boa_widget_logo, View.GONE) }
     } else {
-      views.setViewVisibility(R.id.boa_widget_art, View.GONE)
-      views.setViewVisibility(R.id.boa_widget_logo, View.VISIBLE)
+      on(R.id.boa_widget_art) { views.setViewVisibility(R.id.boa_widget_art, View.GONE) }
+      on(R.id.boa_widget_logo) { views.setViewVisibility(R.id.boa_widget_logo, View.VISIBLE) }
     }
-    views.setTextViewText(R.id.boa_widget_title, title?.uppercase() ?: context.getString(R.string.boa_widget_cta))
+    val cta = if (style.layout == R.layout.boa_widget_record) R.string.boa_widget_cta_short else R.string.boa_widget_cta
+    on(R.id.boa_widget_title) { views.setTextViewText(R.id.boa_widget_title, title?.uppercase() ?: context.getString(cta)) }
     if (subtitle.isNullOrBlank()) {
-      views.setViewVisibility(R.id.boa_widget_subtitle, View.GONE)
+      on(R.id.boa_widget_subtitle) { views.setViewVisibility(R.id.boa_widget_subtitle, View.GONE) }
     } else {
-      views.setTextViewText(R.id.boa_widget_subtitle, subtitle)
-      views.setViewVisibility(R.id.boa_widget_subtitle, View.VISIBLE)
+      on(R.id.boa_widget_subtitle) { views.setTextViewText(R.id.boa_widget_subtitle, subtitle) }
+      on(R.id.boa_widget_subtitle) { views.setViewVisibility(R.id.boa_widget_subtitle, View.VISIBLE) }
     }
-    views.setViewVisibility(R.id.boa_widget_live, if (playing && title != null) View.VISIBLE else View.GONE)
+    on(R.id.boa_widget_live) { views.setViewVisibility(R.id.boa_widget_live, if (playing && title != null) View.VISIBLE else View.GONE) }
 
-    if (openPlaying != null) views.setOnClickPendingIntent(R.id.boa_widget_root, openPlaying)
-    if (openPlaying != null) views.setOnClickPendingIntent(R.id.boa_widget_media, openPlaying)
-    if (openWeather != null) views.setOnClickPendingIntent(R.id.boa_widget_weather, openWeather)
+    if (openPlaying != null) on(R.id.boa_widget_root) { views.setOnClickPendingIntent(R.id.boa_widget_root, openPlaying) }
+    if (openPlaying != null) on(R.id.boa_widget_media) { views.setOnClickPendingIntent(R.id.boa_widget_media, openPlaying) }
+    if (openWeather != null) on(R.id.boa_widget_weather) { views.setOnClickPendingIntent(R.id.boa_widget_weather, openWeather) }
     return views
   }
 
+  // A view intent for the app's own scheme, kept to this app. The main
+  // activity (singleTask, with the network.boa intent filter) gets it as a
+  // new intent when already running, which React Native hands to Linking.
   private fun deepLink(context: Context, uri: String, requestCode: Int): PendingIntent? {
-    val launch = context.packageManager.getLaunchIntentForPackage(context.packageName) ?: return null
-    launch.data = Uri.parse(uri)
-    launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+    val launch = Intent(Intent.ACTION_VIEW, Uri.parse(uri)).apply {
+      setPackage(context.packageName)
+      addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+    }
+    if (launch.resolveActivity(context.packageManager) == null) return null
     return PendingIntent.getActivity(
       context,
       requestCode,
@@ -153,7 +182,7 @@ class BoaWidgetProvider : AppWidgetProvider() {
 
   // The record PNG, scaled down: widget bitmaps travel over IPC, so they
   // are kept small.
-  private fun loadArt(path: String?): Bitmap? {
+  private fun loadArt(path: String?, px: Int): Bitmap? {
     if (path.isNullOrBlank()) return null
     return try {
       val file = File(Uri.parse(path).path ?: path)
@@ -161,7 +190,7 @@ class BoaWidgetProvider : AppWidgetProvider() {
       val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
       BitmapFactory.decodeFile(file.absolutePath, bounds)
       var sample = 1
-      while (bounds.outWidth / (sample * 2) >= ART_PX) sample *= 2
+      while (bounds.outWidth / (sample * 2) >= px) sample *= 2
       BitmapFactory.decodeFile(file.absolutePath, BitmapFactory.Options().apply { inSampleSize = sample })
     } catch (e: Exception) {
       null
@@ -190,11 +219,34 @@ class BoaWidgetProvider : AppWidgetProvider() {
   private fun luminance(color: Int): Double =
     (0.2126 * Color.red(color) + 0.7152 * Color.green(color) + 0.0722 * Color.blue(color)) / 255.0
 
+  /** A widget style: its layout, the views that layout has, its art size. */
+  private class Style(val layout: Int, val ids: Set<Int>, val artPx: Int)
+
   companion object {
     private const val TAG = "BoaWidget"
+
+    private val MEDIA = setOf(
+      R.id.boa_widget_root, R.id.boa_widget_glass, R.id.boa_widget_media, R.id.boa_widget_art,
+      R.id.boa_widget_logo, R.id.boa_widget_title, R.id.boa_widget_subtitle, R.id.boa_widget_live,
+    )
+    private val STYLES = mapOf(
+      "glass" to Style(
+        R.layout.boa_widget,
+        MEDIA + setOf(
+          R.id.boa_widget_time, R.id.boa_widget_date, R.id.boa_widget_rule, R.id.boa_widget_weather,
+          R.id.boa_widget_wx_icon, R.id.boa_widget_wx_temp, R.id.boa_widget_wx_place, R.id.boa_widget_wx_detail,
+        ),
+        160,
+      ),
+      "compact" to Style(
+        R.layout.boa_widget_compact,
+        MEDIA + setOf(R.id.boa_widget_time, R.id.boa_widget_rule, R.id.boa_widget_weather, R.id.boa_widget_wx_icon, R.id.boa_widget_wx_temp),
+        96,
+      ),
+      "record" to Style(R.layout.boa_widget_record, MEDIA, 360),
+    )
     private val DEFAULT_TINT = Color.parseColor("#141416")
     private const val DEFAULT_OPACITY = 0.55f
     private const val OPAQUE = 0xFF000000.toInt()
-    private const val ART_PX = 160
   }
 }
