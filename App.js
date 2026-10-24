@@ -37,7 +37,6 @@ import { UserProvider, useUser } from './src/context/UserContext';
 import { PremiumProvider } from './src/context/PremiumContext';
 import { SleepTimerProvider } from './src/context/SleepTimerContext';
 import { DisplayProvider } from './src/context/DisplayContext';
-import { DisplayButton } from './src/components/display/DisplayMenu';
 import OnboardingScreen from './src/screens/OnboardingScreen';
 import Intro from './src/components/Intro';
 import MiniPlayer from './src/components/MiniPlayer';
@@ -215,7 +214,6 @@ function MainTabs({ narrow }) {
         <Tab.Screen name="Talent" component={Talent} />
         <Tab.Screen name="Profile" component={Profile} />
       </Tab.Navigator>
-      <DisplayButton />
     </NavigationContainer>
   );
 }

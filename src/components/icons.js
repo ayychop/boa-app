@@ -1,4 +1,4 @@
-import Svg, { Circle, Path, Rect } from 'react-native-svg';
+import Svg, { Circle, Path } from 'react-native-svg';
 
 // Lucide icons (generated with icon-mcp, stroke 1.75) for the places
 // Ionicons has nothing that fits: display modes and the sleep timer.
@@ -20,24 +20,6 @@ function Icon({ size = 22, color, strokeWidth = 1.75, children }) {
 }
 
 const MOON = 'M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401';
-
-/** Split view: a frame divided down the middle (lucide "columns-2"). */
-export const SplitIcon = (props) => (
-  <Icon {...props}>
-    <Rect width={18} height={18} x={3} y={3} rx={2} />
-    <Path d="M12 3v18" />
-  </Icon>
-);
-
-/** Full screen: arrows out to opposite corners (lucide "maximize-2"). */
-export const ExpandIcon = (props) => (
-  <Icon {...props}>
-    <Path d="M15 3h6v6" />
-    <Path d="m21 3-7 7" />
-    <Path d="m3 21 7-7" />
-    <Path d="M9 21H3v-6" />
-  </Icon>
-);
 
 /** Zen mode (lucide "sparkles"). */
 export const ZenIcon = (props) => (

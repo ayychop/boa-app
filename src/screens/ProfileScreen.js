@@ -15,7 +15,6 @@ import { Button, EmptyState, Fog, GoldBadge, LogoWatermark, Slate, Tappable, Vie
 import useBottomSpace from '../hooks/useBottomSpace';
 import useLayout from '../hooks/useLayout';
 import { useDisplay } from '../context/DisplayContext';
-import { DISPLAY_BUTTON_SPACE } from '../components/display/DisplayMenu';
 import { colors, fonts, radius, space, type } from '../theme';
 
 // No accounts yet, so the profile has a placeholder name.
@@ -37,10 +36,10 @@ export default function ProfileScreen({ navigation }) {
   const player = usePlayer();
   const { openPremium } = usePremium();
 
-  // Grouped lists, as on a phone; Split View turns each list into a grid of
-  // tiles (two columns, three once there's room).
-  const { width } = useLayout();
-  const { split: wide, unfolded, enterZen } = useDisplay();
+  // Grouped lists, as on a phone; wide screens turn each list into a grid
+  // of tiles (two columns, three once there's room).
+  const { width, wide } = useLayout();
+  const { enterZen } = useDisplay();
   const inner = Math.min(width, 1100) - space.xl * 2;
   const columns = inner >= 960 ? 3 : 2;
   const tileWidth = Math.floor((inner - GRID_GAP * (columns - 1)) / columns);
@@ -57,7 +56,7 @@ export default function ProfileScreen({ navigation }) {
 
   return (
     <View style={styles.screen}>
-      <ScrollView contentContainerStyle={[styles.content, wide && styles.contentWide, { paddingTop: insets.top + space.xxl + (unfolded ? DISPLAY_BUTTON_SPACE - space.lg : 0), paddingBottom: bottom }]}>
+      <ScrollView contentContainerStyle={[styles.content, wide && styles.contentWide, { paddingTop: insets.top + space.xxl, paddingBottom: bottom }]}>
         <View style={styles.card}>
           <Fog opacity={0.28} />
           {/* Big wordmark behind the avatar: the profile sits on the brand. */}

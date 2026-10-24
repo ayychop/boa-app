@@ -10,8 +10,6 @@ import BottomSheet from '../components/BottomSheet';
 import { Button, Fog, Slate, Tappable } from '../components/ui';
 import useBottomSpace from '../hooks/useBottomSpace';
 import useLayout from '../hooks/useLayout';
-import { useDisplay } from '../context/DisplayContext';
-import { DISPLAY_BUTTON_SPACE } from '../components/display/DisplayMenu';
 import { colors, fonts, radius, space, type } from '../theme';
 
 const FILTERS = [
@@ -56,28 +54,6 @@ function ProfileActions({ person, onEnquire, style }) {
   );
 }
 
-// Split View's right pane: whoever is picked in the grid, large.
-function ProfilePane({ person, width, bottom, onEnquire }) {
-  const insets = useSafeAreaInsets();
-  const photoWidth = Math.min(width - space.xl * 2, 380);
-  return (
-    <ScrollView
-      contentContainerStyle={{ paddingTop: insets.top + space.xl + DISPLAY_BUTTON_SPACE, paddingHorizontal: space.xl, paddingBottom: bottom }}
-      showsVerticalScrollIndicator={false}
-    >
-      <Animated.View key={person.id} entering={FadeIn.duration(320)} style={styles.profile}>
-        <Headshot person={person} width={photoWidth} ratio={person.ratio} />
-        <Slate color={person.tint} style={{ marginTop: space.xl }}>
-          {person.role}
-        </Slate>
-        <Text style={[type.display, { marginTop: space.sm }]}>{person.name}</Text>
-        <Slate style={{ marginTop: space.sm }}>BOA Network roster</Slate>
-        <ProfileActions person={person} onEnquire={onEnquire} style={styles.paneActions} />
-      </Animated.View>
-    </ScrollView>
-  );
-}
-
 export default function TalentScreen({ route, navigation }) {
   const insets = useSafeAreaInsets();
   const { width } = useLayout();
@@ -86,12 +62,9 @@ export default function TalentScreen({ route, navigation }) {
   const [selected, setSelected] = useState(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const forms = useForms();
-  // Split View shows the pick in the side pane instead of a sheet.
-  const { split } = useDisplay();
-
   const open = (person) => {
     setSelected(person);
-    if (!split) setSheetOpen(true);
+    setSheetOpen(true);
   };
   const enquire = (person) => {
     setSheetOpen(false);
@@ -107,13 +80,12 @@ export default function TalentScreen({ route, navigation }) {
     navigation.setParams({ talentId: undefined });
   }, [focusId, navigation]);
 
-  const pane = split ? width / 2 : width;
+  const pane = width;
   const contentWidth = Math.min(pane, 1200);
   const columns = contentWidth < 640 ? 2 : contentWidth < 1000 ? 3 : 4;
   const colWidth = Math.floor((contentWidth - space.xl * 2 - GAP * (columns - 1)) / columns);
   const visible = talent.filter(FILTERS.find((f) => f.id === filter).test);
   const grid = toColumns(visible, columns);
-  const profile = selected ?? visible[0] ?? talent[0];
 
   const browse = (
     <ScrollView contentContainerStyle={{ paddingBottom: bottom }} showsVerticalScrollIndicator={false}>
@@ -162,7 +134,6 @@ export default function TalentScreen({ route, navigation }) {
                 person={person}
                 width={colWidth}
                 onPress={open}
-                selected={split && person.id === profile.id}
                 delay={(i * columns + c) * 55}
               />
             ))}
@@ -181,17 +152,6 @@ export default function TalentScreen({ route, navigation }) {
       </Animated.View>
     </ScrollView>
   );
-
-  if (split) {
-    return (
-      <Animated.View key="split" entering={FadeIn.duration(360)} style={[styles.screen, styles.split]}>
-        <View style={{ width: pane }}>{browse}</View>
-        <Animated.View entering={FadeInDown.springify().damping(20).stiffness(150)} style={[styles.pane, { width: pane }]}>
-          <ProfilePane person={profile} width={pane} bottom={bottom} onEnquire={() => enquire(profile)} />
-        </Animated.View>
-      </Animated.View>
-    );
-  }
 
   return (
     <Animated.View key="full" entering={FadeIn.duration(360)} style={styles.screen}>
@@ -220,10 +180,6 @@ export default function TalentScreen({ route, navigation }) {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
-  split: { flexDirection: 'row' },
-  pane: { borderLeftWidth: StyleSheet.hairlineWidth, borderLeftColor: colors.border },
-  profile: { alignItems: 'flex-start' },
-  paneActions: { alignSelf: 'stretch', marginTop: space.xl },
   hero: { paddingHorizontal: space.xl, paddingBottom: space.xl, overflow: 'hidden' },
   serifBig: { fontSize: 50, letterSpacing: -1 },
   lede: { marginTop: space.md, maxWidth: 520 },

@@ -1,5 +1,5 @@
 import { Component, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { setStatusBarHidden } from 'expo-status-bar';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import { Ionicons } from '@expo/vector-icons';
@@ -480,24 +480,40 @@ function Screensaver({ mode, onExit }) {
   );
 }
 
+// Bare Zen: the time on black, tap to wake. What shows if the full
+// screensaver ever fails to draw, so the button never seems to do nothing.
+function PlainZen({ onExit }) {
+  const now = useMinute();
+  return (
+    <Pressable style={[styles.screen, styles.plain]} onPress={onExit} accessibilityRole="button" accessibilityLabel="Exit Zen Mode">
+      <Text style={[styles.clock, { fontSize: 96 }]}>{clockParts(now).time}</Text>
+      <Text style={[styles.hint, { marginTop: space.lg }]}>Tap anywhere to wake</Text>
+    </Pressable>
+  );
+}
+
 /**
- * If anything in the screensaver ever fails to draw, wake the app instead
- * of taking it down.
+ * If anything in the screensaver ever fails to draw, fall back to the bare
+ * clock instead of taking the app down.
  */
 class ZenBoundary extends Component {
   state = { failed: false };
   static getDerivedStateFromError() {
     return { failed: true };
   }
-  componentDidCatch() {
-    this.props.onExit();
+  componentDidCatch(error) {
+    console.warn('Zen Mode fell back to the plain clock:', error?.message ?? error);
   }
   render() {
-    return this.state.failed ? null : this.props.children;
+    return this.state.failed ? <PlainZen onExit={this.props.onExit} /> : this.props.children;
   }
 }
 
 /**
+ * Zen Mode opens in its own full-screen window (a transparent Modal), so
+ * nothing in the app, Android's native tab screens included, can ever draw
+ * over it. Back closes it.
+ *
  * Screensaver: a big, still clock dead centre of the safe area over a slow,
  * cinematic atmosphere (a mesh of the station's colour, drifting smoke and
  * grain), so the moving light rather than the clock keeps the screen from
@@ -505,14 +521,25 @@ class ZenBoundary extends Component {
  */
 export default function ZenMode({ mode = 'active', onExit }) {
   return (
-    <ZenBoundary onExit={onExit}>
-      <Screensaver mode={mode} onExit={onExit} />
-    </ZenBoundary>
+    <Modal
+      visible
+      transparent
+      animationType="none"
+      statusBarTranslucent
+      navigationBarTranslucent
+      supportedOrientations={['portrait', 'landscape', 'landscape-left', 'landscape-right', 'portrait-upside-down']}
+      onRequestClose={onExit}
+    >
+      <ZenBoundary onExit={onExit}>
+        <Screensaver mode={mode} onExit={onExit} />
+      </ZenBoundary>
+    </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { ...StyleSheet.absoluteFillObject, backgroundColor: colors.bg, zIndex: 900, overflow: 'hidden' },
+  screen: { ...StyleSheet.absoluteFillObject, backgroundColor: colors.bg, overflow: 'hidden' },
+  plain: { alignItems: 'center', justifyContent: 'center' },
   safe: { position: 'absolute' },
   center: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', paddingHorizontal: space.xl },
   above: { position: 'absolute', left: space.xl, right: space.xl, alignItems: 'center' },

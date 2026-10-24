@@ -26,9 +26,7 @@ import Vinyl from '../components/Vinyl';
 import { useMiniPlayerSpace } from '../components/MiniPlayer';
 import useLayout from '../hooks/useLayout';
 import { useDisplay } from '../context/DisplayContext';
-import { DISPLAY_BUTTON_WIDTH } from '../components/display/DisplayMenu';
 import { ZenIcon } from '../components/icons';
-import StationLogo from '../components/StationLogo';
 import Reactions from '../components/Reactions';
 import { GoldBadge, PulseDot } from '../components/ui';
 import { genreForVibes, useUser } from '../context/UserContext';
@@ -37,11 +35,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors, fonts, radius, space } from '../theme';
 
 const TEXT_BLOCK = 150;
-const QUEUE_LENGTH = 6;
 
-// One scrolling row in the full-width layout; in Split View's side pane they
-// wrap so every genre is in view.
-function GenrePills({ selected, onSelect, wrap }) {
+// One scrolling row of genres.
+function GenrePills({ selected, onSelect, style }) {
   const pills = GENRES.map((g) => {
     const active = g.tag === selected;
     return (
@@ -56,12 +52,11 @@ function GenrePills({ selected, onSelect, wrap }) {
       </Pressable>
     );
   });
-  if (wrap) return <View style={[styles.pills, styles.pillsWrap]}>{pills}</View>;
   return (
     <ScrollView
       horizontal
       showsHorizontalScrollIndicator={false}
-      style={styles.pillsScroll}
+      style={[styles.pillsScroll, style]}
       contentContainerStyle={styles.pills}
     >
       {pills}
@@ -131,42 +126,6 @@ function StationText({ station, track, status, meta, compact, saved, onSave, hif
         </Text>
       </View>
     </Animated.View>
-  );
-}
-
-// Split View's side pane: the records after this one, tap to jump ahead.
-function UpNext({ stations, index, playingId, onPick }) {
-  const next = stations.slice(index + 1, index + 1 + QUEUE_LENGTH);
-  return (
-    <View style={styles.queue}>
-      <Text style={styles.queueTitle}>Up next</Text>
-      {next.length === 0 ? (
-        <Text style={styles.queueEmpty}>That's the last record in this genre.</Text>
-      ) : (
-        next.map((station, i) => (
-          <Animated.View key={station.id} entering={FadeInDown.delay(i * 40).springify().damping(20)}>
-            <Pressable
-              onPress={() => onPick(index + 1 + i)}
-              accessibilityRole="button"
-              accessibilityLabel={`Go to ${station.name}`}
-              style={({ pressed }) => [styles.queueRow, pressed && { backgroundColor: 'rgba(243,239,232,0.06)' }]}
-            >
-              <Text style={styles.queueNum}>{String(index + 2 + i).padStart(2, '0')}</Text>
-              <StationLogo station={station} size={40} rounded={20} fit="cover" />
-              <View style={{ flex: 1, minWidth: 0 }}>
-                <Text style={styles.queueName} numberOfLines={1}>
-                  {station.name}
-                </Text>
-                <Text style={styles.queueMeta} numberOfLines={1}>
-                  {[station.country, station.bitrate ? `${station.bitrate} kbps` : null].filter(Boolean).join(' · ') || 'Live radio'}
-                </Text>
-              </View>
-              {station.id === playingId && <PulseDot color={colors.live} size={7} />}
-            </Pressable>
-          </Animated.View>
-        ))
-      )}
-    </View>
   );
 }
 
@@ -329,17 +288,27 @@ export default function RadioScreen({ route, navigation }) {
   const bottomPad = tabBarHeight + miniPlayerSpace;
   const stage = layout && { width: layout.width, height: layout.height - bottomPad };
 
-  // Split View halves the screen at the centre (a dual screen's hinge): the
-  // record and its track info on the left, genres and what's next on the
-  // right.
+  // A phone on its side is too short to stack the record over its track
+  // info, so they sit side by side: the record on the left, the info on
+  // the right. Rotating re-measures the stage and re-sizes everything.
   const display = useDisplay();
-  const { split, unfolded } = display;
   const { short } = useLayout();
-  const recordWidth = stage ? (split ? stage.width / 2 : stage.width) : 0;
+  const landscape = short && !!stage && stage.width > stage.height;
+  const recordWidth = stage ? (landscape ? stage.width / 2 : stage.width) : 0;
 
   // The record fills ~70% of its column, but never so tall that the name
-  // and track line get pushed under the mini player.
-  const discSize = stage ? Math.max(0, Math.round(Math.min(recordWidth * 0.7, (stage.height - TEXT_BLOCK) * 0.86, 440))) : 0;
+  // and track line get pushed under the mini player, or (on its side) out
+  // of the stage.
+  const discSize = stage
+    ? Math.max(
+        0,
+        Math.round(
+          landscape
+            ? Math.min(recordWidth * 0.7, stage.height - 48, 440)
+            : Math.min(recordWidth * 0.7, (stage.height - TEXT_BLOCK) * 0.86, 440),
+        ),
+      )
+    : 0;
   const compact = recordWidth < 420;
 
   const statusFor = (station) => (player.current?.id === station.id ? player.status : null);
@@ -394,8 +363,8 @@ export default function RadioScreen({ route, navigation }) {
           width={recordWidth}
           height={discSize + 40}
           discSize={discSize}
-          // In Split View, neighbours would slide under the side pane.
-          peek={!split}
+          // On its side, neighbours would slide under the track info.
+          peek={!landscape}
           renderItem={(station, i) => (
             <Vinyl
               station={station}
@@ -451,7 +420,7 @@ export default function RadioScreen({ route, navigation }) {
     );
   }
 
-  const pills = <GenrePills selected={genre} onSelect={setGenre} wrap={split && !short} />;
+  const pills = <GenrePills selected={genre} onSelect={setGenre} style={short && styles.pillsInline} />;
 
   return (
     <View style={styles.screen}>
@@ -460,11 +429,13 @@ export default function RadioScreen({ route, navigation }) {
       <View
         style={[
           styles.header,
-          { paddingTop: insets.top + space.lg },
-          unfolded && { paddingRight: space.xl + DISPLAY_BUTTON_WIDTH },
+          { paddingTop: insets.top + (short ? space.sm : space.lg) },
+          short && styles.headerShort,
         ]}
       >
         <Text style={styles.title}>Radio</Text>
+        {/* Short screens keep the genres in the header row. */}
+        {short && pills}
         <View style={styles.headerRight}>
           {data.status === 'ready' && stations.length > 0 && (
             <Text style={styles.counter}>
@@ -472,21 +443,18 @@ export default function RadioScreen({ route, navigation }) {
               <Text style={{ color: colors.textFaint }}> / {String(stations.length).padStart(2, '0')}</Text>
             </Text>
           )}
-          {/* Unfolded screens start Zen Mode from the display pill instead. */}
-          {!unfolded && (
-            <Pressable
-              onPress={() => display.enterZen('active')}
-              hitSlop={10}
-              accessibilityRole="button"
-              accessibilityLabel="Start Zen Mode"
-              style={({ pressed }) => [styles.zenButton, pressed && { transform: [{ scale: 0.92 }] }]}
-            >
-              <ZenIcon size={16} color={colors.text} />
-            </Pressable>
-          )}
+          <Pressable
+            onPress={() => display.enterZen('active')}
+            hitSlop={10}
+            accessibilityRole="button"
+            accessibilityLabel="Start Zen Mode"
+            style={({ pressed }) => [styles.zenButton, pressed && { transform: [{ scale: 0.92 }] }]}
+          >
+            <ZenIcon size={16} color={colors.text} />
+          </Pressable>
         </View>
       </View>
-      {!split && pills}
+      {!short && pills}
 
       <View
         style={[styles.stage, { paddingBottom: bottomPad }]}
@@ -495,18 +463,10 @@ export default function RadioScreen({ route, navigation }) {
           setLayout((l) => (l && l.width === width && l.height === height ? l : { width, height }));
         }}
       >
-        {split ? (
-          <Animated.View key="split" entering={FadeIn.duration(360)} style={styles.split}>
-            <View style={styles.column}>
-              {record}
-              {info}
-            </View>
-            <Animated.View entering={FadeInDown.springify().damping(20).stiffness(150)} style={[styles.column, styles.sideColumn]}>
-              {pills}
-              {data.status === 'ready' && (
-                <UpNext stations={stations} index={index} playingId={player.current?.id} onPick={setIndex} />
-              )}
-            </Animated.View>
+        {landscape ? (
+          <Animated.View key="landscape" entering={FadeIn.duration(360)} style={styles.landscape}>
+            <View style={styles.column}>{record}</View>
+            <View style={styles.column}>{info}</View>
           </Animated.View>
         ) : (
           <Animated.View key="full" entering={FadeIn.duration(360)} style={styles.full}>
@@ -515,16 +475,15 @@ export default function RadioScreen({ route, navigation }) {
           </Animated.View>
         )}
         {isFocused && player.current?.kind === 'radio' && player.status === 'playing' && (
-          // In Split View they stay on the record's half, clear of the queue.
-          <Reactions style={[split ? { left: space.lg } : { right: space.lg }, { bottom: bottomPad - space.xs }]} />
+          <Reactions style={[{ right: space.lg }, { bottom: bottomPad - space.xs }]} />
         )}
         {data.status === 'ready' && !player.current && stations.length > 0 && (
           <Text
             style={[
               styles.hint,
               { bottom: tabBarHeight + miniPlayerSpace / 2 - 6 },
-              // Under the record, not across the hinge.
-              split && { left: 0, width: recordWidth, textAlign: 'center' },
+              // Under the record, not across the track info.
+              landscape && { left: 0, width: recordWidth, textAlign: 'center' },
             ]}
           >
             Swipe to browse · Tap the record to play</Text>
@@ -543,6 +502,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.xl,
     paddingBottom: space.md,
   },
+  headerShort: { paddingBottom: space.xs },
   title: { fontFamily: fonts.semibold, color: colors.text, fontSize: 28, letterSpacing: -1 },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   zenButton: {
@@ -563,19 +523,11 @@ const styles = StyleSheet.create({
   pillText: { fontFamily: fonts.semibold, color: colors.textFaint, fontSize: 14, letterSpacing: -0.1 },
   pillTextActive: { color: colors.text },
   stage: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  pillsWrap: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', paddingHorizontal: space.xl, rowGap: 6 },
-  // Two equal halves, so the gap between them is the screen's centre line.
-  split: { flex: 1, flexDirection: 'row', alignSelf: 'stretch' },
+  pillsInline: { flexGrow: 1, flexShrink: 1, flexBasis: 0, marginHorizontal: space.md },
+  // Two equal halves: the record and its track info side by side.
+  landscape: { flex: 1, flexDirection: 'row', alignSelf: 'stretch' },
   column: { flex: 1, minWidth: 0, alignItems: 'center', justifyContent: 'center' },
   full: { alignItems: 'center' },
-  sideColumn: { justifyContent: 'flex-start', gap: space.xl, paddingTop: space.lg },
-  queue: { alignSelf: 'stretch', paddingHorizontal: space.xl, gap: 2 },
-  queueTitle: { fontFamily: fonts.mono, fontSize: 10.5, letterSpacing: 2.3, textTransform: 'uppercase', color: colors.textMuted, marginBottom: space.sm },
-  queueEmpty: { fontFamily: fonts.medium, fontSize: 13.5, color: colors.textFaint },
-  queueRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: 8, paddingHorizontal: space.sm, borderRadius: radius.md },
-  queueNum: { fontFamily: fonts.mono, fontSize: 11, color: colors.textFaint, width: 20 },
-  queueName: { fontFamily: fonts.semibold, fontSize: 15, color: colors.text, letterSpacing: -0.2 },
-  queueMeta: { fontFamily: fonts.medium, fontSize: 12, color: colors.textFaint, marginTop: 2 },
   textSlot: { height: TEXT_BLOCK, alignSelf: 'stretch' },
   textBlock: {
     position: 'absolute',

@@ -1,15 +1,10 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { AppState, Platform, useWindowDimensions, View } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { WIDE } from '../hooks/useLayout';
+import { AppState, Platform, View } from 'react-native';
 import { usePlayer } from './PlayerContext';
 import { useUser } from './UserContext';
 import { overlayOpen } from '../utils/overlays';
-import DisplayMenu from '../components/display/DisplayMenu';
 import ZenMode from '../components/display/ZenMode';
 
-const KEY = 'boa:display:v1';
-const LAYOUTS = ['full', 'split'];
 // Untouched this long, the app drifts into passive Zen Mode: quickly while
 // music plays (before most phones would turn the screen off), more slowly
 // when nothing does.
@@ -19,34 +14,15 @@ const IDLE_QUIET = 60000;
 const DisplayContext = createContext(null);
 
 /**
- * How the app fills a big screen. Unfolded devices (foldables, dual screens,
- * tablets: 640pt and up) choose Full Screen (the phone layout, wider) or
- * Split View (two panes); the choice is saved. Zen Mode is the screensaver
- * on top of either, on any screen size: 'active' when started by hand (with
- * its controls), 'passive' when the app has sat idle (just the picture,
- * until the next tap).
+ * Zen Mode, the screensaver over the whole app: 'active' when started by
+ * hand (with its controls), 'passive' when it starts by itself (just the
+ * picture, until the next tap). It starts by itself when the app sits idle,
+ * and when the phone is locked or the app is left, so the screensaver is
+ * what you come back to.
  */
 export function DisplayProvider({ children }) {
-  const { width } = useWindowDimensions();
-  const unfolded = width >= WIDE;
-  const [layout, setLayoutState] = useState('full');
   const [zen, setZen] = useState(null);
-  const [menuOpen, setMenuOpen] = useState(false);
   const lastActivity = useRef(Date.now());
-
-  useEffect(() => {
-    AsyncStorage.getItem(KEY)
-      .then((raw) => {
-        const saved = raw && JSON.parse(raw).layout;
-        if (LAYOUTS.includes(saved)) setLayoutState(saved);
-      })
-      .catch(() => {});
-  }, []);
-
-  const setLayout = useCallback((next) => {
-    setLayoutState(next);
-    AsyncStorage.setItem(KEY, JSON.stringify({ layout: next })).catch(() => {});
-  }, []);
 
   const touch = useCallback(() => {
     lastActivity.current = Date.now();
@@ -68,24 +44,30 @@ export function DisplayProvider({ children }) {
 
   const enterZen = useCallback((mode = 'active') => setZen((z) => z ?? (mode === 'passive' ? 'passive' : 'active')), []);
 
-  // Idle timers only run while the app is on screen; coming back counts as
-  // a touch, so it never opens straight into the screensaver.
-  const [foreground, setForeground] = useState(AppState.currentState !== 'background');
+  const { isPlaying } = usePlayer();
+  const { onboarded } = useUser();
+  const onboardedRef = useRef(onboarded);
+  onboardedRef.current = onboarded;
+
+  // Locking the phone (or leaving the app) takes the app to 'inactive' or
+  // 'background': mount passive Zen then, so it is on screen when you come
+  // back. The vibe check is left alone. Idle timers only run in the
+  // foreground, and coming back counts as a touch.
+  const [foreground, setForeground] = useState(AppState.currentState === 'active' || AppState.currentState == null);
   useEffect(() => {
     const sub = AppState.addEventListener('change', (next) => {
       const fg = next === 'active';
       if (fg) touch();
+      else if ((next === 'inactive' || next === 'background') && onboardedRef.current) enterZen('passive');
       setForeground(fg);
     });
     return () => sub.remove();
-  }, [touch]);
+  }, [touch, enterZen]);
 
-  // Passive Zen: the app proper (not the vibe check), nothing in front of
-  // it and nobody touching the screen.
-  const { isPlaying } = usePlayer();
-  const { onboarded } = useUser();
+  // Passive Zen after idling: the app proper, nothing in front of it and
+  // nobody touching the screen.
   const idleMs = isPlaying ? IDLE_PLAYING : IDLE_QUIET;
-  const watching = foreground && onboarded && !zen && !menuOpen;
+  const watching = foreground && onboarded && !zen;
   useEffect(() => {
     if (!watching) return;
     lastActivity.current = Math.max(lastActivity.current, Date.now());
@@ -100,18 +82,13 @@ export function DisplayProvider({ children }) {
 
   const value = useMemo(
     () => ({
-      unfolded,
-      layout,
-      split: unfolded && layout === 'split',
-      setLayout,
       zen: !!zen,
       zenMode: zen,
       enterZen,
       exitZen,
-      openMenu: () => setMenuOpen(true),
       lastActivity,
     }),
-    [unfolded, layout, setLayout, zen, enterZen, exitZen],
+    [zen, enterZen, exitZen],
   );
 
   return (
@@ -134,7 +111,6 @@ export function DisplayProvider({ children }) {
         {children}
       </View>
       {zen && <ZenMode key={zen} mode={zen} onExit={exitZen} />}
-      <DisplayMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
     </DisplayContext.Provider>
   );
 }

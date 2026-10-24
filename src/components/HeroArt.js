@@ -39,9 +39,9 @@ export function heroArt(production, width, height, animatedStyle) {
   }
   const posterArt = portrait || !production.backdrop;
   if (posterArt && width / height < 9 / 16) {
-    // Narrower than the poster (a Split View pane, a folded phone's cover
-    // screen): `cover` would cut the title at the sides. Fit the poster to
-    // the width instead and fill the rest with a blurred copy of itself.
+    // Narrower than the poster (a folded phone's cover screen): `cover`
+    // would cut the title at the sides. Fit the poster to the width instead
+    // and fill the rest with a blurred copy of itself.
     const artHeight = (width * 16) / 9;
     const top = (height - artHeight) / 2;
     return {

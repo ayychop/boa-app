@@ -15,7 +15,7 @@ import Animated, {
 import { LinearGradient } from 'expo-linear-gradient';
 import { featuredProduction, productions, talent } from '../data/boaContent';
 import { podcasts } from '../data/podcasts';
-import { fetchTier1Stations } from '../api/radio';
+import { fetchTier1Stations, GENRES } from '../api/radio';
 import { usePlayer } from '../context/PlayerContext';
 import { useMedia } from '../context/MediaContext';
 import { useForms } from '../context/FormsContext';
@@ -27,15 +27,19 @@ import PodcastCover from '../components/PodcastCover';
 import StationLogo from '../components/StationLogo';
 import { Button, Fog, LogoWatermark, PulseDot, SectionHeader, Slate, Tappable, Viewfinder } from '../components/ui';
 import useBottomSpace from '../hooks/useBottomSpace';
-import useLayout from '../hooks/useLayout';
-import { useDisplay } from '../context/DisplayContext';
-import { DISPLAY_BUTTON_SPACE, DISPLAY_BUTTON_WIDTH } from '../components/display/DisplayMenu';
+import useLayout, { WIDE } from '../hooks/useLayout';
 import MiniPlayer, { useMiniPlayerSpace } from '../components/MiniPlayer';
 import { colors, fonts, space, type } from '../theme';
 
+// The Radio tab's own genre filters, so the two never disagree. The first
+// four keep the slate on one line.
+const GENRE_KICKER = GENRES.slice(0, 4)
+  .map((g) => g.label)
+  .join(' · ');
+
 const METAL = ['#F2F2F4', '#8A8A90', '#FAFAFB', '#5E5E64', '#D9D9DD'];
 
-function Hero({ production, width, height, clearRight, bottomInset = 0, topInset = 0 }) {
+function Hero({ production, width, height, bottomInset = 0, topInset = 0 }) {
   const insets = useSafeAreaInsets();
   const media = useMedia();
   const reduceMotion = useReducedMotion();
@@ -73,7 +77,7 @@ function Hero({ production, width, height, clearRight, bottomInset = 0, topInset
       <Viewfinder inset={16} />
 
       <View
-        style={[styles.heroTop, { top: insets.top + space.xl + topInset }, clearRight && { right: space.xl + 8 + DISPLAY_BUTTON_WIDTH }]}
+        style={[styles.heroTop, { top: insets.top + space.xl + topInset }]}
       >
         <View>
           <View style={styles.logoRow}>
@@ -154,9 +158,7 @@ function TrendingStation({ station, onPress, live }) {
 export default function HomeScreen({ navigation }) {
   const { width, height } = useLayout();
   const insets = useSafeAreaInsets();
-  // Split View: the hero holds the left pane, the rows scroll on the right.
-  const { split, unfolded } = useDisplay();
-  const paneWidth = split ? width / 2 : width;
+  const wide = width >= WIDE;
   const bottom = useBottomSpace(space.xxl);
   const miniPlayerSpace = useMiniPlayerSpace();
   const isFocused = useIsFocused();
@@ -183,14 +185,14 @@ export default function HomeScreen({ navigation }) {
   };
 
   const heroHeight = Math.min(Math.max(height * 0.78, 520), 820);
-  const posterWidth = Math.min(Math.round(paneWidth * 0.72), 340);
+  const posterWidth = Math.min(Math.round(width * 0.72), 340);
 
   const sections = (
     <>
       <View style={styles.section}>
         <SectionHeader
           index="01"
-          kicker="R&B · Hip Hop · Ghana · Nigeria"
+          kicker={GENRE_KICKER}
           title="Trending on BOA Radio"
           action="Open radio"
           onAction={() => navigation.navigate('Radio')}
@@ -331,40 +333,18 @@ export default function HomeScreen({ navigation }) {
       style={[
         styles.topPlayer,
         { top: insets.top + space.sm, height: miniPlayerSpace },
-        // Unfolded (either layout): centred on the whole screen, inset the
-        // same on both sides so it stays clear of the display pill. Folded,
-        // it runs edge to edge.
-        unfolded && { left: DISPLAY_BUTTON_WIDTH + space.lg, right: DISPLAY_BUTTON_WIDTH + space.lg },
+        // Wide screens: a centred pill rather than a full-width bar.
+        wide && { left: space.xl, right: space.xl },
       ]}
     >
-      <MiniPlayer placement="top" maxWidth={unfolded ? 460 : undefined} onOpenRadio={() => navigation.navigate('Radio')} />
+      <MiniPlayer placement="top" maxWidth={wide ? 460 : undefined} onOpenRadio={() => navigation.navigate('Radio')} />
     </View>
   );
-
-  if (split) {
-    return (
-      <Animated.View key="split" entering={FadeIn.duration(360)} style={[styles.screen, styles.split]}>
-        <View style={{ width: paneWidth }}>
-          <Hero production={featuredProduction} width={paneWidth} height={height} bottomInset={bottom - space.xxl} topInset={topInset} />
-        </View>
-        <Animated.ScrollView
-          entering={FadeInDown.springify().damping(20).stiffness(150)}
-          style={{ width: paneWidth }}
-          // Starts below the display pill in the top-right corner.
-          contentContainerStyle={{ paddingTop: insets.top + space.xl + DISPLAY_BUTTON_SPACE, paddingBottom: bottom }}
-          showsVerticalScrollIndicator={false}
-        >
-          {sections}
-        </Animated.ScrollView>
-        {topPlayer}
-      </Animated.View>
-    );
-  }
 
   return (
     <Animated.View key="full" entering={FadeIn.duration(360)} style={styles.screen}>
       <ScrollView contentContainerStyle={{ paddingBottom: bottom }} showsVerticalScrollIndicator={false}>
-        <Hero production={featuredProduction} width={width} height={heroHeight} clearRight={unfolded} topInset={topInset} />
+        <Hero production={featuredProduction} width={width} height={heroHeight} topInset={topInset} />
         {sections}
       </ScrollView>
       {topPlayer}
@@ -374,7 +354,6 @@ export default function HomeScreen({ navigation }) {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
-  split: { flexDirection: 'row' },
   topPlayer: { position: 'absolute', left: 0, right: 0, zIndex: 20 },
   heroTop: {
     position: 'absolute',
