@@ -5,6 +5,8 @@ import * as path from 'path';
 import * as engine from '../src/audio/engine';
 import * as ambient from '../src/audio/ambient';
 import * as screenEvents from '../modules/boa-screen';
+import * as video from 'expo-video';
+import * as loop from '../src/utils/loop';
 import { advance, bootIntoTabs, instrument, openTab, PORTRAIT, setWindow } from './helpers';
 
 jest.useFakeTimers();
@@ -65,6 +67,72 @@ describe('one sound at a time', () => {
     expect(radioState().status).toBe('paused');
     expect(ambient.getState()).toMatchObject({ id: 'rain', status: 'playing' });
   });
+});
+
+test('leaving the Zen tab unmounts the whole room (no loop left running); coming back starts it fresh', async () => {
+  let running = 0;
+  const starts = [];
+  jest.spyOn(loop, 'startLoop').mockImplementation((value) => {
+    running += 1;
+    starts.push(value.value);
+    return () => {
+      running -= 1;
+    };
+  });
+  const user = userEvent.setup();
+  await bootIntoTabs(user);
+  await openTab(user, 'Zen');
+  await advance(300);
+  expect(screen.getByTestId('zen-screen')).toBeOnTheScreen();
+  expect(running).toBeGreaterThanOrEqual(5);
+
+  await openTab(user, 'Radio');
+  await advance(300);
+  // Nothing of Zen is left mounted, so nothing of it animates.
+  expect(screen.queryByTestId('zen-screen')).toBeNull();
+  expect(screen.queryByTestId('zen-panel')).toBeNull();
+  expect(running).toBe(0);
+
+  starts.length = 0;
+  await openTab(user, 'Zen');
+  await advance(300);
+  expect(screen.getByTestId('zen-screen')).toBeOnTheScreen();
+  expect(running).toBeGreaterThanOrEqual(5);
+  // Every loop begins again from the start.
+  expect(starts.length).toBeGreaterThanOrEqual(5);
+  expect(starts.every((v) => v === 0)).toBe(true);
+});
+
+test('while the radio plays, the whole Zen background freezes, and moves again once it stops', async () => {
+  // Every background loop (mesh, photo, smoke, grain) goes through startLoop.
+  let running = 0;
+  jest.spyOn(loop, 'startLoop').mockImplementation(() => {
+    running += 1;
+    return () => {
+      running -= 1;
+    };
+  });
+  const user = userEvent.setup();
+  await bootIntoTabs(user);
+  await openTab(user, 'Zen');
+  await advance(300);
+  expect(running).toBeGreaterThanOrEqual(5);
+  const scene = () => video.__players[video.__players.length - 1];
+  expect(scene().playing).toBe(true);
+
+  // The radio comes on (from Zen's own controls, after picking a station).
+  await openTab(user, 'Home');
+  await user.press(screen.getAllByRole('button', { name: /^Play / })[0]);
+  await advance(300);
+  await openTab(user, 'Zen');
+  await advance(300);
+  expect(running).toBe(0);
+  expect(scene().playing).toBe(false);
+
+  await user.press(screen.getByRole('button', { name: 'Pause radio' }));
+  await advance(300);
+  expect(running).toBeGreaterThanOrEqual(5);
+  expect(scene().playing).toBe(true);
 });
 
 test("the screensaver's soundscape button opens the full Zen page, not the tab you locked on", async () => {

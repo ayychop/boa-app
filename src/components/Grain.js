@@ -1,14 +1,12 @@
 import { useEffect } from 'react';
 import { Image, Platform, StyleSheet, View } from 'react-native';
 import Animated, {
-  cancelAnimation,
   Easing,
   useAnimatedStyle,
   useReducedMotion,
   useSharedValue,
-  withRepeat,
-  withTiming,
 } from 'react-native-reanimated';
+import { startLoop } from '../utils/loop';
 import { Asset } from 'expo-asset';
 
 const grainTile = require('../../assets/grain.png');
@@ -36,14 +34,14 @@ function Tiles({ width, height }) {
  * the frame, hops between fixed offsets on the UI thread. Still under
  * Reduce Motion.
  */
-export default function Grain({ width, height, opacity = 0.05 }) {
+export default function Grain({ width, height, opacity = 0.05, running = true }) {
   const reduceMotion = useReducedMotion();
   const t = useSharedValue(0);
+  // `running` false holds the grain still on its current frame.
   useEffect(() => {
-    if (reduceMotion) return;
-    t.value = withRepeat(withTiming(1, { duration: CYCLE, easing: Easing.linear }), -1, false);
-    return () => cancelAnimation(t);
-  }, [reduceMotion, t]);
+    if (reduceMotion || !running) return;
+    return startLoop(t, CYCLE, Easing.linear);
+  }, [reduceMotion, running, t]);
   const style = useAnimatedStyle(() => {
     const i = Math.min(FRAMES - 1, Math.max(0, Math.floor(t.value * FRAMES)));
     return { transform: [{ translateX: OFFSET_X[i] }, { translateY: OFFSET_Y[i] }] };

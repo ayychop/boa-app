@@ -262,7 +262,9 @@ function Tabs({ narrow }) {
       <Tab.Screen name="Radio" component={Radio} />
       <Tab.Screen name="Chat" component={Chat} />
       <Tab.Screen name="Talent" component={Talent} />
-      <Tab.Screen name="Zen" component={Zen} />
+      {/* Not frozen on blur: Zen unmounts its room when you leave, which a
+          frozen screen would never get to do. */}
+      <Tab.Screen name="Zen" component={Zen} options={{ freezeOnBlur: false }} />
       <Tab.Screen name="Profile" component={Profile} />
     </Tab.Navigator>
   );

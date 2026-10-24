@@ -199,9 +199,10 @@ test('each scene loops its own video, muted, mixed with the app audio, from the 
   expect(rain).not.toBe(night);
   expect(rain.source).toEqual({ uri: `file:///cache/scenes/rain.${videoExt}` });
   expect(rain.play).toHaveBeenCalled();
-  // Off the Zen tab, the video stops; the soundscape doesn't.
+  // Off the Zen tab, the video is gone with the rest of the room; the
+  // soundscape plays on.
   await openTab(user, 'Home');
-  expect(rain.pause).toHaveBeenCalled();
+  expect(screen.queryByTestId('zen-video-rain')).toBeNull();
   expect(lastPlayer().playing).toBe(true);
 });
 

@@ -1,14 +1,12 @@
 import { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, {
-  cancelAnimation,
   Easing,
   useAnimatedStyle,
   useReducedMotion,
   useSharedValue,
-  withRepeat,
-  withTiming,
 } from 'react-native-reanimated';
+import { startLoop } from '../utils/loop';
 import Smoke from './Smoke';
 
 // Each layer is drawn at a quarter of its size and scaled up. Smoke has no
@@ -22,14 +20,14 @@ const OVERHANG = 1.5;
  * One layer of smoke wandering on a slow loop (a sine path, so it returns to
  * where it started with no jump).
  */
-function FogLayer({ width, height, opacity, duration, variant, reverse }) {
+function FogLayer({ width, height, opacity, duration, variant, reverse, running }) {
   const reduceMotion = useReducedMotion();
   const t = useSharedValue(0);
+  // Stopping freezes the smoke where it is; starting again carries on.
   useEffect(() => {
-    if (reduceMotion) return;
-    t.value = withRepeat(withTiming(1, { duration, easing: Easing.linear }), -1, false);
-    return () => cancelAnimation(t);
-  }, [reduceMotion, duration, t]);
+    if (reduceMotion || !running) return;
+    return startLoop(t, duration, Easing.linear);
+  }, [reduceMotion, running, duration, t]);
   const w = width * OVERHANG;
   const h = height * OVERHANG;
   const style = useAnimatedStyle(() => {
@@ -56,13 +54,14 @@ function FogLayer({ width, height, opacity, duration, variant, reverse }) {
 
 /**
  * BOA's smoke: two vector layers drifting across each other at different
- * speeds and directions. Still under Reduce Motion.
+ * speeds and directions. Still under Reduce Motion, and while `running` is
+ * false (frozen in place).
  */
-export default function DriftingFog({ width, height, opacity = 1 }) {
+export default function DriftingFog({ width, height, opacity = 1, running = true }) {
   return (
     <View pointerEvents="none" style={[StyleSheet.absoluteFill, { opacity, overflow: 'hidden' }]}>
-      <FogLayer width={width} height={height} opacity={0.14} duration={70000} variant={0} />
-      <FogLayer width={width} height={height} opacity={0.1} duration={46000} variant={1} reverse />
+      <FogLayer width={width} height={height} opacity={0.14} duration={70000} variant={0} running={running} />
+      <FogLayer width={width} height={height} opacity={0.1} duration={46000} variant={1} reverse running={running} />
     </View>
   );
 }

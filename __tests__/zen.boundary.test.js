@@ -23,13 +23,23 @@ test('if the Zen screen fails to draw, it says so and offers a retry; the rest o
   await advance(300);
   expect(screen.getByTestId('zen-fallback')).toBeOnTheScreen();
   expect(screen.getByText('Grain failed to draw')).toBeOnTheScreen();
-  // The tab bar still works.
+  // Fixed, Try again brings the room back, right there on the tab.
+  mockArmed = false;
+  await user.press(screen.getByRole('button', { name: 'Try again' }));
+  await advance(300);
+  expect(screen.getByTestId('zen-screen')).toBeOnTheScreen();
+  // Broken again: the tab bar still works.
+  mockArmed = true;
+  await openTab(user, 'Radio');
+  await openTab(user, 'Zen');
+  await advance(300);
+  expect(screen.getByTestId('zen-fallback')).toBeOnTheScreen();
   await openTab(user, 'Radio');
   expect(screen.getByText(curatedStations('afrobeats')[0].name)).toBeOnTheScreen();
-  // Fixed, Try again brings the room back.
+  // Leaving rebuilds the room from scratch, so once fixed, coming back
+  // draws it with no retry needed.
   mockArmed = false;
   await openTab(user, 'Zen');
-  await user.press(screen.getByRole('button', { name: 'Try again' }));
   await advance(300);
   expect(screen.getByTestId('zen-screen')).toBeOnTheScreen();
   // React reports the caught error; nothing else may.

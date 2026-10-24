@@ -36,6 +36,7 @@ import * as ambientAudio from '../audio/ambient';
 import { cachedSource } from '../utils/mediaCache';
 import { haptics } from '../utils/haptics';
 import { shiftHex, withAlpha } from '../utils/color';
+import { startLoop } from '../utils/loop';
 import DriftingFog from '../components/DriftingFog';
 import Grain from '../components/Grain';
 import StationLogo from '../components/StationLogo';
@@ -161,8 +162,7 @@ function MeshGradient({ width, height, running }) {
   const clock = useSharedValue(0);
   useEffect(() => {
     if (reduceMotion || !running) return;
-    clock.value = withRepeat(withTiming(1, { duration: MESH_LOOP, easing: Easing.linear }), -1, false);
-    return () => cancelAnimation(clock);
+    return startLoop(clock, MESH_LOOP, Easing.linear);
   }, [reduceMotion, running, clock]);
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
@@ -191,8 +191,7 @@ function ScenePhoto({ scene, width, height, running }) {
   const drift = useSharedValue(0);
   useEffect(() => {
     if (reduceMotion || !running) return;
-    drift.value = withRepeat(withTiming(1, { duration: KEN_BURNS_MS, easing: Easing.inOut(Easing.quad) }), -1, true);
-    return () => cancelAnimation(drift);
+    return startLoop(drift, KEN_BURNS_MS, Easing.inOut(Easing.quad), true);
   }, [reduceMotion, running, drift]);
   const style = useAnimatedStyle(() => ({
     opacity: shown.value,
@@ -294,8 +293,8 @@ function Atmosphere({ sceneId, width, height, running }) {
         <ScenePhoto scene={scene} width={width} height={height} running={running} />
         <SceneVideo scene={scene} running={running} />
       </Animated.View>
-      <DriftingFog width={width} height={height} opacity={0.45} />
-      <Grain width={width} height={height} opacity={0.05} />
+      <DriftingFog width={width} height={height} opacity={0.45} running={running} />
+      <Grain width={width} height={height} opacity={0.05} running={running} />
       <LinearGradient
         colors={['rgba(5,5,6,0.62)', 'rgba(5,5,6,0.36)', 'rgba(5,5,6,0.46)', 'rgba(5,5,6,0.9)']}
         locations={[0, 0.32, 0.6, 1]}
@@ -633,12 +632,6 @@ function ZenRoom() {
   const bottomSpace = useBottomSpace(space.md);
   const hint = useSharedValue(0);
 
-  // Leaving the tab ends the screensaver, so coming back shows controls.
-  const wasFocused = useRef(focused);
-  useEffect(() => {
-    if (wasFocused.current && !focused && ambient) wake();
-    wasFocused.current = focused;
-  }, [focused, ambient, wake]);
 
   // The radio card shows while the radio plays, and stays once shown, so
   // a radio paused from the screensaver can be played again from it.
@@ -700,6 +693,10 @@ function ZenRoom() {
   }, [focused]);
 
   const sceneId = soundscapeById(sound.id)?.scene ?? 'night';
+  // The room only moves while you're here and the radio is off: when the
+  // radio takes over, every layer (mesh, photo, video, smoke, grain)
+  // freezes where it is, and carries on from there once the radio stops.
+  const roomMoving = focused && !isPlaying;
   const short = height < 500;
   const top = Math.max(insets.top, space.lg);
   // Controls sit above the tab bar (and mini player); the screensaver has
@@ -723,7 +720,7 @@ function ZenRoom() {
 
   return (
     <View style={styles.screen} testID={ambient ? 'zen-screensaver' : 'zen-screen'}>
-      <Atmosphere sceneId={sceneId} width={width} height={height} running={focused} />
+      <Atmosphere sceneId={sceneId} width={width} height={height} running={roomMoving} />
       {ambient && (
         <Pressable
           style={StyleSheet.absoluteFill}
@@ -836,7 +833,24 @@ class ZenBoundary extends Component {
   }
 }
 
+/**
+ * The room only exists while the Zen tab is on screen. Leaving the tab
+ * unmounts all of it (every loop, the video player, the clock), so nothing
+ * of Zen keeps animating behind another tab; coming back builds it fresh.
+ * (The tab isn't frozen on blur, so this unmount actually happens.)
+ */
 export default function ZenScreen() {
+  const focused = useIsFocused();
+  const { ambient, wake } = useZen();
+
+  // Leaving the tab ends the screensaver, so coming back shows controls.
+  const wasFocused = useRef(focused);
+  useEffect(() => {
+    if (wasFocused.current && !focused && ambient) wake();
+    wasFocused.current = focused;
+  }, [focused, ambient, wake]);
+
+  if (!focused) return <View style={styles.screen} testID="zen-unmounted" />;
   return (
     <ZenBoundary>
       <ZenRoom />
