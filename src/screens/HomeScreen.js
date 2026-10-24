@@ -345,7 +345,7 @@ export default function HomeScreen({ navigation }) {
 
   return (
     <Animated.View key="full" entering={FadeIn.duration(360)} style={styles.screen}>
-      <ScrollView contentContainerStyle={{ paddingBottom: bottom }} showsVerticalScrollIndicator={false}>
+      <ScrollView testID="home-scroll" contentContainerStyle={{ paddingBottom: bottom }} showsVerticalScrollIndicator={false}>
         <Hero production={featuredProduction} width={width} height={heroHeight} topInset={topInset} />
         {sections}
       </ScrollView>

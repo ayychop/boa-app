@@ -88,7 +88,7 @@ export default function TalentScreen({ route, navigation }) {
   const grid = toColumns(visible, columns);
 
   const browse = (
-    <ScrollView contentContainerStyle={{ paddingBottom: bottom }} showsVerticalScrollIndicator={false}>
+    <ScrollView testID="talent-scroll" contentContainerStyle={{ paddingBottom: bottom }} showsVerticalScrollIndicator={false}>
       <View
         style={[
           styles.hero,

@@ -8,9 +8,21 @@
 // otherwise, so every media request sends this one.
 export const MEDIA_HEADERS = { 'User-Agent': 'BOANetworks/1.0 (Android; +https://boanetworks.com)' };
 
+// Each scene is a looping video (muted, played from the cache) over a still
+// photograph that shows until the video's first frame, and stays if the
+// video can't play. Android and the web get Commons' VP9 WebM; iOS, which
+// can't play WebM, its QuickTime transcode.
 export const SCENES = {
   rain: {
     id: 'rain',
+    video: {
+      uri: 'https://upload.wikimedia.org/wikipedia/commons/9/95/Raindrops_against_the_window_in_the_night_city%2C_Las_Palmas.webm',
+      ios: 'https://upload.wikimedia.org/wikipedia/commons/transcoded/9/95/Raindrops_against_the_window_in_the_night_city%2C_Las_Palmas.webm/Raindrops_against_the_window_in_the_night_city%2C_Las_Palmas.webm.360p.mpeg4.mov',
+      title: 'Raindrops against the window in the night city, Las Palmas',
+      author: 'slavikfi (Vjatseslav Robtsenkov)',
+      license: 'CC0 1.0',
+      source: 'https://commons.wikimedia.org/wiki/File:Raindrops_against_the_window_in_the_night_city,_Las_Palmas.webm',
+    },
     uri: 'https://upload.wikimedia.org/wikipedia/commons/thumb/9/9c/Rain_on_window_%28Unsplash%29.jpg/1280px-Rain_on_window_%28Unsplash%29.jpg',
     title: 'Rain on window',
     author: 'Francesco Gallarotti',
@@ -19,6 +31,14 @@ export const SCENES = {
   },
   night: {
     id: 'night',
+    video: {
+      uri: 'https://upload.wikimedia.org/wikipedia/commons/transcoded/c/c5/Alaskan_Aurora_Time_Lapse_%28SVS15077%29.webm/Alaskan_Aurora_Time_Lapse_%28SVS15077%29.webm.480p.vp9.webm',
+      ios: 'https://upload.wikimedia.org/wikipedia/commons/transcoded/c/c5/Alaskan_Aurora_Time_Lapse_%28SVS15077%29.webm/Alaskan_Aurora_Time_Lapse_%28SVS15077%29.webm.360p.mpeg4.mov',
+      title: 'Alaskan Aurora Time Lapse',
+      author: "NASA's Scientific Visualization Studio / Mike Toillion",
+      license: 'Public domain',
+      source: 'https://commons.wikimedia.org/wiki/File:Alaskan_Aurora_Time_Lapse_(SVS15077).webm',
+    },
     uri: 'https://upload.wikimedia.org/wikipedia/commons/thumb/6/64/Starry_sky_foggy_night_%28Unsplash%29.jpg/1280px-Starry_sky_foggy_night_%28Unsplash%29.jpg',
     title: 'Starry sky foggy night',
     author: 'Martin Sattler',

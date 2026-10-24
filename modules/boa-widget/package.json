@@ -1,0 +1,7 @@
+{
+  "name": "boa-widget",
+  "version": "1.0.0",
+  "private": true,
+  "main": "index.js",
+  "description": "Saves the BOA Radio home screen widget's style and now-playing line, and redraws the widget."
+}

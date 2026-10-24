@@ -1,18 +1,41 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- BOA Radio home screen widget: the record and a live clock. TextClock
-     keeps time on its own, so the widget never needs to wake the app. -->
+<!-- BOA Radio home screen widget: a pane of frosted glass (tinted and made
+     as clear as you like in the app) with the BOA record, a live clock and
+     what's playing. TextClock keeps time on its own, so the widget never
+     needs to wake the app. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
   android:id="@+id/boa_widget_root"
   android:layout_width="match_parent"
-  android:layout_height="match_parent"
-  android:background="@drawable/boa_widget_bg"
-  android:padding="16dp">
+  android:layout_height="match_parent">
+
+  <ImageView
+    android:id="@+id/boa_widget_glass"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:importantForAccessibility="no"
+    android:scaleType="fitXY"
+    android:src="@drawable/boa_widget_glass" />
+
+  <ImageView
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:importantForAccessibility="no"
+    android:scaleType="fitXY"
+    android:src="@drawable/boa_widget_sheen" />
+
+  <ImageView
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:importantForAccessibility="no"
+    android:scaleType="fitXY"
+    android:src="@drawable/boa_widget_edge" />
 
   <LinearLayout
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:gravity="center_vertical"
-    android:orientation="horizontal">
+    android:orientation="horizontal"
+    android:padding="16dp">
 
     <ImageView
       android:layout_width="84dp"
@@ -28,6 +51,7 @@
       android:orientation="vertical">
 
       <TextClock
+        android:id="@+id/boa_widget_time"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:fontFamily="sans-serif-light"
@@ -38,25 +62,39 @@
         android:textSize="44sp" />
 
       <TextClock
+        android:id="@+id/boa_widget_date"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="2dp"
         android:format12Hour="EEEE d MMMM"
         android:format24Hour="EEEE d MMMM"
         android:maxLines="1"
-        android:textColor="#B3D9D4C8"
+        android:textColor="#B3F3EFE8"
         android:textSize="12sp" />
 
       <TextView
+        android:id="@+id/boa_widget_title"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="10dp"
+        android:ellipsize="end"
         android:fontFamily="monospace"
-        android:letterSpacing="0.15"
+        android:letterSpacing="0.12"
         android:maxLines="1"
         android:text="@string/boa_widget_cta"
         android:textColor="#E2A84B"
         android:textSize="10sp" />
+
+      <TextView
+        android:id="@+id/boa_widget_subtitle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textColor="#B3F3EFE8"
+        android:textSize="12sp"
+        android:visibility="gone" />
     </LinearLayout>
   </LinearLayout>
 </FrameLayout>

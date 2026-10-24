@@ -115,6 +115,62 @@ jest.mock('expo-file-system', () => {
   return { Directory, File, Paths: { cache: { uri: 'file:///cache' } }, __files: files };
 });
 
+// expo-video: a fake player per hook call, recording source, looping and
+// play state; the view is a plain View.
+jest.mock('expo-video', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+  const players = [];
+  const make = (source) => {
+    const p = {
+      source,
+      loop: false,
+      muted: false,
+      audioMixingMode: 'auto',
+      playing: false,
+      replace: jest.fn((next) => {
+        p.source = next;
+      }),
+      play: jest.fn(() => {
+        p.playing = true;
+      }),
+      pause: jest.fn(() => {
+        p.playing = false;
+      }),
+    };
+    players.push(p);
+    return p;
+  };
+  return {
+    useVideoPlayer: (source, setup) => {
+      const ref = React.useRef(null);
+      if (!ref.current) {
+        ref.current = make(source);
+        setup?.(ref.current);
+      }
+      return ref.current;
+    },
+    VideoView: ({ player, testID, ...rest }) => React.createElement(View, { testID: testID ?? 'video-view', ...rest }),
+    __players: players,
+  };
+});
+
+// The home screen widget bridge (an Android native module in the app).
+jest.mock('./modules/boa-widget', () => ({
+  isAvailable: true,
+  setStyle: jest.fn(() => Promise.resolve()),
+  setNowPlaying: jest.fn(() => Promise.resolve()),
+  count: jest.fn(() => Promise.resolve(1)),
+}));
+
+// The slider is a native view; a plain View that passes its value handler
+// through, so tests can drag it with fireEvent(slider, 'valueChange', v).
+jest.mock('@react-native-community/slider', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+  return (props) => React.createElement(View, { ...props, accessibilityRole: 'adjustable' });
+});
+
 jest.mock('react-native-view-shot', () => {
   let n = 0;
   return { captureRef: jest.fn(() => Promise.resolve(`file:///cache/record-${++n}.png`)) };

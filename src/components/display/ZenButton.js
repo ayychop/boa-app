@@ -1,17 +1,17 @@
 import { Pressable, StyleSheet, Text } from 'react-native';
 import { ZenIcon } from '../icons';
-import { useDisplay } from '../../context/DisplayContext';
+import { useZen } from '../../context/ZenContext';
 import { haptics } from '../../utils/haptics';
 import { colors, fonts, radius } from '../../theme';
 
-/** Labelled glass pill that starts Zen Mode with its controls. */
+/** Labelled glass pill that opens the Zen tab with its controls. */
 export default function ZenButton({ style }) {
-  const { enterZen } = useDisplay();
+  const { openZen } = useZen();
   return (
     <Pressable
       onPress={() => {
         haptics.selection();
-        enterZen('active');
+        openZen(false);
       }}
       hitSlop={10}
       accessibilityRole="button"

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -14,7 +15,8 @@ import BoaLogo from '../components/BoaLogo';
 import { Button, EmptyState, Fog, GoldBadge, LogoWatermark, Slate, Tappable, Viewfinder } from '../components/ui';
 import useBottomSpace from '../hooks/useBottomSpace';
 import useLayout from '../hooks/useLayout';
-import { useDisplay } from '../context/DisplayContext';
+import { useZen } from '../context/ZenContext';
+import WidgetSettings from '../components/widget/WidgetSettings';
 import { colors, fonts, radius, space, type } from '../theme';
 
 // No accounts yet, so the profile has a placeholder name.
@@ -39,7 +41,8 @@ export default function ProfileScreen({ navigation }) {
   // Grouped lists, as on a phone; wide screens turn each list into a grid
   // of tiles (two columns, three once there's room).
   const { width, wide } = useLayout();
-  const { enterZen } = useDisplay();
+  const { openZen } = useZen();
+  const [widgetOpen, setWidgetOpen] = useState(false);
   const inner = Math.min(width, 1100) - space.xl * 2;
   const columns = inner >= 960 ? 3 : 2;
   const tileWidth = Math.floor((inner - GRID_GAP * (columns - 1)) / columns);
@@ -47,7 +50,8 @@ export default function ProfileScreen({ navigation }) {
   const row = wide ? [styles.link, styles.tile, { width: tileWidth }] : styles.link;
 
   const actions = [
-    { icon: 'sparkles-outline', label: 'Zen Mode', detail: 'A screensaver for what you are playing', onPress: () => enterZen('active') },
+    { icon: 'sparkles-outline', label: 'Zen Mode', detail: 'Sleep sounds, timer and screensaver', onPress: () => openZen(false) },
+    { icon: 'apps-outline', label: 'Home screen widget', detail: 'Colour and transparency', onPress: () => setWidgetOpen(true) },
     { icon: 'person-add-outline', label: 'Get seen', detail: 'Submit as talent', onPress: forms.openGetSeen },
     { icon: 'chatbubble-ellipses-outline', label: 'Contact BOA', detail: 'Bookings, press, hello', onPress: () => forms.openContact() },
     // Still on the website until the access page has in-app content.
@@ -56,7 +60,7 @@ export default function ProfileScreen({ navigation }) {
 
   return (
     <View style={styles.screen}>
-      <ScrollView contentContainerStyle={[styles.content, wide && styles.contentWide, { paddingTop: insets.top + space.xxl, paddingBottom: bottom }]}>
+      <ScrollView testID="profile-scroll" contentContainerStyle={[styles.content, wide && styles.contentWide, { paddingTop: insets.top + space.xxl, paddingBottom: bottom }]}>
         <View style={styles.card}>
           <Fog opacity={0.28} />
           {/* Big wordmark behind the avatar: the profile sits on the brand. */}
@@ -213,6 +217,7 @@ export default function ProfileScreen({ navigation }) {
         <Button label="Get seen" icon="arrow-forward" onPress={forms.openGetSeen} style={{ marginTop: space.xl, alignSelf: 'flex-start' }} />
         <Slate style={{ marginTop: space.xxl, opacity: 0.6 }}>© 2026 BOA Network · Made in the United Kingdom</Slate>
       </ScrollView>
+      <WidgetSettings open={widgetOpen} onClose={() => setWidgetOpen(false)} />
     </View>
   );
 }

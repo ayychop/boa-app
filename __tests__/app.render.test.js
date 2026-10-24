@@ -11,10 +11,11 @@ const FIRST_STATION = curatedStations('afrobeats')[0].name;
 // What each tab must always show; a missing one fails the render.
 const TABS = [
   ['Home', ['Trending on BOA Radio', '01 · Afrobeats · Hip Hop · R&B · Amapiano']],
-  ['Radio', ['Radio', 'Afrobeats', FIRST_STATION]],
+  ['Radio', ['Radio', 'Afrobeats', FIRST_STATION, 'Song info']],
+  ['Zen', ['Sleep & Meditation', 'Soundscapes']],
   ['BOA Originals', ['Episodes']],
   ['Talent', ['roster.']],
-  ['Profile', ['Zen Mode', 'My Library']],
+  ['Profile', ['Zen Mode', 'My Library', 'Home screen widget']],
 ];
 
 let probe;
@@ -67,66 +68,89 @@ test.each([
   expect(screen.getByText(FIRST_STATION)).toBeOnTheScreen();
 });
 
-test.each(['Home', 'Radio'])('the Zen button on %s opens Zen Mode with its controls, and Close closes it', async (tab) => {
+// Anything that would sit over the app in its own native window.
+const modals = () => screen.root.queryAll((n) => n.type === 'RCTModalHostView');
+const tabButton = (name) => screen.queryByRole('button', { name: new RegExp(`^${name}, tab`) });
+
+test.each(['Home', 'Radio'])('the Zen button on %s switches to the Zen tab, with its controls', async (tab) => {
   const user = userEvent.setup();
   await bootIntoTabs(user);
   await openTab(user, tab);
   const buttons = screen.getAllByRole('button', { name: 'Start Zen Mode' });
   await user.press(buttons[buttons.length - 1]);
-  await advance(1200);
-  expect(screen.getByRole('button', { name: 'Close Zen Mode' })).toBeOnTheScreen();
+  await advance(600);
+  expect(screen.getByTestId('zen-screen')).toBeOnTheScreen();
   expect(screen.getByText('Sleep & Meditation')).toBeOnTheScreen();
-  await user.press(screen.getByRole('button', { name: 'Close Zen Mode' }));
-  await advance(400);
-  expect(screen.queryByRole('button', { name: 'Close Zen Mode' })).not.toBeOnTheScreen();
-  // The app under it still answers.
+  expect(tabButton('Zen')).toBeSelected();
+  expect(modals()).toHaveLength(0);
+  // An ordinary tab: the rest of the app is one tap away.
   await openTab(user, 'Profile');
   expect(screen.getByText('My Library')).toBeOnTheScreen();
 });
 
-test("Profile's Zen Mode row opens Zen Mode, in landscape too", async () => {
+test("Profile's Zen Mode row and the Zen tab itself both open Zen, in landscape too", async () => {
   const user = userEvent.setup();
   await bootIntoTabs(user);
   await setWindow(LANDSCAPE);
   await openTab(user, 'Profile');
   await user.press(screen.getByText('Zen Mode'));
-  await advance(1200);
-  expect(screen.getByRole('button', { name: 'Close Zen Mode' })).toBeOnTheScreen();
-  await user.press(screen.getByRole('button', { name: 'Close Zen Mode' }));
-  await advance(400);
-  expect(screen.queryByRole('button', { name: 'Close Zen Mode' })).not.toBeOnTheScreen();
+  await advance(600);
+  expect(screen.getByTestId('zen-screen')).toBeOnTheScreen();
+  await openTab(user, 'Home');
+  await openTab(user, 'Zen');
+  expect(screen.getByTestId('zen-screen')).toBeOnTheScreen();
 });
 
-test('locking the phone: nothing mounts while locked, passive Zen on return, 25 cycles, app stays responsive', async () => {
+test('locking the phone: straight to the Zen screensaver, never a modal, 25 cycles, app stays responsive', async () => {
   const user = userEvent.setup();
   await bootIntoTabs(user);
+  await openTab(user, 'Radio');
   for (let i = 0; i < 25; i++) {
     await probe.setState(i % 2 ? 'inactive' : 'background');
-    await advance(1000);
-    expect(screen.queryByRole('button', { name: 'Exit Zen Mode' })).not.toBeOnTheScreen();
+    await advance(500);
+    // Navigated while locked: the screensaver is already there, no tab bar.
+    expect(screen.getByTestId('zen-screensaver')).toBeOnTheScreen();
+    expect(tabButton('Home')).toBeNull();
+    expect(modals()).toHaveLength(0);
     await probe.setState('active');
     await advance(400);
-    // Passive: the picture only, no controls.
-    expect(screen.getByRole('button', { name: 'Exit Zen Mode' })).toBeOnTheScreen();
-    expect(screen.queryByRole('button', { name: 'Close Zen Mode' })).not.toBeOnTheScreen();
-    await user.press(screen.getByRole('button', { name: 'Exit Zen Mode' }));
-    await advance(400);
-    expect(screen.queryByRole('button', { name: 'Exit Zen Mode' })).not.toBeOnTheScreen();
+    expect(screen.getByTestId('zen-screensaver')).toBeOnTheScreen();
+    // A tap brings the controls and the tab bar back.
+    await user.press(screen.getByRole('button', { name: 'Wake Zen controls' }));
+    await advance(300);
+    expect(screen.getByTestId('zen-screen')).toBeOnTheScreen();
+    expect(tabButton('Home')).toBeOnTheScreen();
+    // And the app answers: off to another tab and back to Radio.
+    await openTab(user, i % 2 ? 'Talent' : 'Radio');
   }
   await openTab(user, 'Radio');
   expect(screen.getByText(FIRST_STATION)).toBeOnTheScreen();
+  expect(probe.errors).toEqual([]);
 });
 
-test('locking while active Zen is open keeps it open and adds nothing', async () => {
+test('locking while Zen is open with its controls turns it into the screensaver', async () => {
   const user = userEvent.setup();
   await bootIntoTabs(user);
-  await user.press(screen.getAllByRole('button', { name: 'Start Zen Mode' })[0]);
-  await advance(1200);
+  await openTab(user, 'Zen');
+  expect(screen.getByTestId('zen-screen')).toBeOnTheScreen();
   await probe.setState('background');
-  await advance(1000);
+  await advance(500);
   await probe.setState('active');
-  await advance(400);
-  expect(screen.getAllByRole('button', { name: 'Close Zen Mode' })).toHaveLength(1);
+  await advance(300);
+  expect(screen.getAllByTestId('zen-screensaver')).toHaveLength(1);
+  expect(screen.queryByTestId('zen-screen')).toBeNull();
+});
+
+test('leaving the Zen tab ends the screensaver, so coming back shows the controls', async () => {
+  const user = userEvent.setup();
+  await bootIntoTabs(user);
+  await probe.setState('background');
+  await advance(500);
+  await probe.setState('active');
+  await user.press(screen.getByRole('button', { name: 'Wake Zen controls' }));
+  await openTab(user, 'Home');
+  await openTab(user, 'Zen');
+  expect(screen.getByTestId('zen-screen')).toBeOnTheScreen();
 });
 
 test('the vibe check never drops into Zen on lock', async () => {
@@ -135,16 +159,58 @@ test('the vibe check never drops into Zen on lock', async () => {
   await advance(1000);
   await probe.setState('active');
   await advance(400);
-  expect(screen.queryByRole('button', { name: 'Exit Zen Mode' })).not.toBeOnTheScreen();
+  expect(screen.queryByTestId('zen-screensaver')).toBeNull();
   expect(screen.getByText('Get started')).toBeOnTheScreen();
 });
 
-test('left idle for a minute, the app drifts into passive Zen; a tap wakes it', async () => {
+test('left idle for a minute, the app drifts to the Zen screensaver; a tap brings the controls back', async () => {
   const user = userEvent.setup();
   await bootIntoTabs(user);
   await advance(62000);
-  expect(screen.getByRole('button', { name: 'Exit Zen Mode' })).toBeOnTheScreen();
-  await user.press(screen.getByRole('button', { name: 'Exit Zen Mode' }));
-  await advance(400);
-  expect(screen.queryByRole('button', { name: 'Exit Zen Mode' })).not.toBeOnTheScreen();
+  expect(screen.getByTestId('zen-screensaver')).toBeOnTheScreen();
+  await user.press(screen.getByRole('button', { name: 'Wake Zen controls' }));
+  await advance(300);
+  expect(screen.getByTestId('zen-screen')).toBeOnTheScreen();
+});
+
+describe('nothing sits under the tab bar, with real phone insets', () => {
+  // A phone with a status bar and 3-button navigation: 32pt top, 48pt bottom.
+  const INSETS = { top: 32, bottom: 48, left: 0, right: 0 };
+  // The bar's own height (49) plus the bottom inset it pads itself by.
+  const TAB_BAR = 49 + INSETS.bottom;
+  const flat = (style) => Object.assign({}, ...[style].flat(Infinity).filter(Boolean));
+
+  beforeEach(() => {
+    require('react-native-safe-area-context').useSafeAreaInsets.mockImplementation(() => INSETS);
+  });
+
+  test.each([
+    ['Home', 'home-scroll'],
+    ['BOA Originals', 'originals-scroll'],
+    ['Talent', 'talent-scroll'],
+    ['Profile', 'profile-scroll'],
+  ])('%s scrolls its last content clear of the tab bar', async (tab, id) => {
+    const user = userEvent.setup();
+    await bootIntoTabs(user);
+    await openTab(user, tab);
+    const scroll = screen.getByTestId(id);
+    expect(flat(scroll.props.contentContainerStyle).paddingBottom).toBeGreaterThanOrEqual(TAB_BAR);
+  });
+
+  test("Zen's controls sit above the tab bar", async () => {
+    const user = userEvent.setup();
+    await bootIntoTabs(user);
+    await openTab(user, 'Zen');
+    expect(flat(screen.getByTestId('zen-panel').props.style).bottom).toBeGreaterThanOrEqual(TAB_BAR);
+  });
+
+  test('each tab label stays on one line and shrinks to fit (six tabs)', async () => {
+    const user = userEvent.setup();
+    await bootIntoTabs(user);
+    for (const name of ['Home', 'Radio', 'Zen', 'BOA Originals', 'Talent', 'Profile']) {
+      expect(tabButton(name)).toBeOnTheScreen();
+      const label = screen.getAllByText(name).find((t) => t.props.adjustsFontSizeToFit);
+      expect(label.props.numberOfLines).toBe(1);
+    }
+  });
 });

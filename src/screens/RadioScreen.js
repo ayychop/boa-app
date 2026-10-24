@@ -19,6 +19,9 @@ import { checkAhead, healList, markAlive, markDead, useDeadStations } from '../a
 import { MAX_RETRIES } from '../audio/engine';
 import { FALLBACK_GLOW, glowFor } from '../api/stationColor';
 import { withAlpha } from '../utils/color';
+import { splitTrack } from '../utils/track';
+import { openShazam, openYouTubeMusic } from '../utils/musicLinks';
+import { haptics } from '../utils/haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { usePlayer } from '../context/PlayerContext';
 import useNowPlaying from '../hooks/useNowPlaying';
@@ -35,7 +38,8 @@ import { usePremium } from '../context/PremiumContext';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, fonts, radius, space } from '../theme';
 
-const TEXT_BLOCK = 150;
+// Station name, track, meta and the Song info row under the record.
+const TEXT_BLOCK = 214;
 
 // One scrolling row of genres.
 function GenrePills({ selected, onSelect, style }) {
@@ -126,7 +130,54 @@ function StationText({ station, track, status, meta, compact, saved, onSave, hif
           {meta}
         </Text>
       </View>
+      <SongInfo track={track} />
     </Animated.View>
+  );
+}
+
+function SongButton({ icon, label, onPress, primary, a11y }) {
+  return (
+    <Pressable
+      onPress={() => {
+        haptics.selection();
+        onPress();
+      }}
+      hitSlop={6}
+      accessibilityRole="button"
+      accessibilityLabel={a11y ?? label}
+      style={({ pressed }) => [styles.songButton, primary && styles.songButtonPrimary, pressed && { transform: [{ scale: 0.95 }] }]}
+    >
+      <Ionicons name={icon} size={15} color={primary ? colors.bg : colors.text} />
+      <Text style={[styles.songButtonText, primary && { color: colors.bg }]}>{label}</Text>
+    </Pressable>
+  );
+}
+
+// Song info: what's playing, and where to take it. With a title from the
+// stream, Shazam and a YouTube Music search for it; without one, Shazam
+// can still name it from the sound.
+function SongInfo({ track }) {
+  const parts = splitTrack(track);
+  return (
+    <View style={styles.songInfo} testID="song-info">
+      <Text style={styles.songLabel}>Song info</Text>
+      {track ? (
+        <View style={styles.songButtons}>
+          <SongButton icon="musical-note" label="Shazam" a11y={`Shazam ${parts?.title ?? track}`} onPress={openShazam} />
+          <SongButton
+            icon="logo-youtube"
+            label="YouTube Music"
+            a11y={`Find ${parts ? `${parts.title} by ${parts.artist}` : track} on YouTube Music`}
+            onPress={() => openYouTubeMusic(track)}
+            primary
+          />
+        </View>
+      ) : (
+        <View style={styles.songButtons}>
+          <SongButton icon="musical-note" label="Tap to Shazam" onPress={openShazam} primary />
+        </View>
+      )}
+    </View>
   );
 }
 
@@ -535,6 +586,22 @@ const styles = StyleSheet.create({
   column: { flex: 1, minWidth: 0, alignItems: 'center', justifyContent: 'center' },
   full: { alignItems: 'center' },
   textSlot: { height: TEXT_BLOCK, alignSelf: 'stretch' },
+  songInfo: { alignItems: 'center', gap: 6, marginTop: space.xs },
+  songLabel: { fontFamily: fonts.mono, color: colors.textFaint, fontSize: 9.5, letterSpacing: 2, textTransform: 'uppercase' },
+  songButtons: { flexDirection: 'row', gap: space.sm },
+  songButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    height: 32,
+    paddingHorizontal: 12,
+    borderRadius: radius.pill,
+    backgroundColor: 'rgba(243,239,232,0.08)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.borderStrong,
+  },
+  songButtonPrimary: { backgroundColor: colors.text, borderColor: colors.text },
+  songButtonText: { fontFamily: fonts.semibold, fontSize: 12.5, color: colors.text },
   textBlock: {
     position: 'absolute',
     top: space.md,

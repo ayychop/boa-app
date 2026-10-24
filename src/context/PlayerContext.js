@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import * as engine from '../audio/engine';
 import { haptics } from '../utils/haptics';
 import useNowPlaying from '../hooks/useNowPlaying';
+import * as widget from '../../modules/boa-widget';
 
 const PlayerContext = createContext(null);
 // Position ticks several times a second; keep it in its own context so only
@@ -84,6 +85,12 @@ export function PlayerProvider({ children }) {
   useEffect(() => {
     if (current?.kind === 'radio') engine.setNowPlaying(current.id, track);
   }, [current, track]);
+
+  // The home screen widget shows the station and the song (or "Paused").
+  useEffect(() => {
+    if (!current) widget.setNowPlaying(null, null);
+    else widget.setNowPlaying(current.name, isPlaying ? track || 'Live on BOA Radio' : 'Paused');
+  }, [current, track, isPlaying]);
 
   // Tapping a record or cover: pause it if it's the one playing, else play
   // it (with the list it sits in as the queue).

@@ -55,3 +55,14 @@ export function shiftHex(hex, dh = 0, ds = 0, dl = 0) {
   const clamp = (v) => Math.max(0, Math.min(1, v));
   return toHex({ h: (((h + dh) % 360) + 360) % 360, s: clamp(s + ds), l: clamp(l + dl) });
 }
+
+/** Hex for a hue (0 to 360) at the given saturation and lightness (0 to 1). */
+export function hslHex(h, s = 0.65, l = 0.45) {
+  return toHex({ h: ((h % 360) + 360) % 360, s, l });
+}
+
+/** A colour's hue in degrees, or 0 for greys. */
+export function hueOf(hex) {
+  const c = parseHex(hex);
+  return c ? toHsl(c).h : 0;
+}

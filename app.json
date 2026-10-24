@@ -86,7 +86,8 @@
           ]
         }
       ],
-      "./plugins/withBoaWidget"
+      "./plugins/withBoaWidget",
+      "expo-video"
     ],
     "owner": "boanets-team",
     "extra": {

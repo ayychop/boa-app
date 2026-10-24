@@ -1,19 +1,10 @@
 import { Component, useEffect, useRef, useState } from 'react';
-import {
-  ActivityIndicator,
-  Image,
-  Linking,
-  Modal,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  useWindowDimensions,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Image, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { setStatusBarHidden } from 'expo-status-bar';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
+import { useVideoPlayer, VideoView } from 'expo-video';
 import { Ionicons } from '@expo/vector-icons';
+import { useIsFocused } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
@@ -31,23 +22,27 @@ import Animated, {
   withSequence,
   withTiming,
 } from 'react-native-reanimated';
-import { usePlayer } from '../../context/PlayerContext';
-import { formatRemaining, useSleepRemaining, useSleepTimer } from '../../context/SleepTimerContext';
-import useNowPlaying from '../../hooks/useNowPlaying';
-import { podcastById } from '../../data/podcasts';
-import { MEDIA_HEADERS, SCENES, SLEEP_TIMERS, SOUNDSCAPES, soundscapeById } from '../../data/sleep';
-import * as ambient from '../../audio/ambient';
-import { haptics } from '../../utils/haptics';
-import { shiftHex } from '../../utils/color';
-import DriftingFog from '../DriftingFog';
-import Grain from '../Grain';
-import { PulseDot, Slate } from '../ui';
-import { colors, fonts, radius, space } from '../../theme';
+import { usePlayer } from '../context/PlayerContext';
+import { formatRemaining, useSleepRemaining, useSleepTimer } from '../context/SleepTimerContext';
+import { useZen } from '../context/ZenContext';
+import useNowPlaying from '../hooks/useNowPlaying';
+import useBottomSpace from '../hooks/useBottomSpace';
+import useLayout from '../hooks/useLayout';
+import { podcastById } from '../data/podcasts';
+import { MEDIA_HEADERS, SCENES, SLEEP_TIMERS, SOUNDSCAPES, soundscapeById } from '../data/sleep';
+import * as ambientAudio from '../audio/ambient';
+import { cachedSource } from '../utils/mediaCache';
+import { haptics } from '../utils/haptics';
+import { shiftHex } from '../utils/color';
+import DriftingFog from '../components/DriftingFog';
+import Grain from '../components/Grain';
+import { PulseDot, Slate } from '../components/ui';
+import { colors, fonts, radius, space } from '../theme';
 
-// The fade into Zen Mode: slow and soft, like a room's lights dimming.
+// Fades: slow and soft, like a room's lights dimming.
 const DIM = Easing.bezier(0.33, 0, 0.2, 1);
-// Under the photograph (and in its place if it can't load) the room glows
-// in BOA's own amber.
+// Under the video and photograph (and in their place if neither loads) the
+// room glows in BOA's own amber.
 const HOUSE_TONE = '#B9792A';
 // Blobs are drawn this size and scaled up: a soft gradient loses nothing,
 // and each one's bitmap stays tiny however big the screen.
@@ -107,9 +102,9 @@ function dateLine(date) {
 }
 
 /** The soundscape engine's state: { id, status, volume }. */
-function useAmbient() {
-  const [state, setState] = useState(ambient.getState);
-  useEffect(() => ambient.subscribe(setState), []);
+function useAmbientAudio() {
+  const [state, setState] = useState(ambientAudio.getState);
+  useEffect(() => ambientAudio.subscribe(setState), []);
   return state;
 }
 
@@ -154,18 +149,15 @@ function MeshBlob({ clock, blob, color, width, height, id }) {
   );
 }
 
-/**
- * A fluid mesh gradient: four pools of amber drifting over each other on
- * one slow UI-thread clock. Still under Reduce Motion.
- */
-function MeshGradient({ width, height }) {
+/** Four pools of amber drifting over each other on one UI-thread clock. */
+function MeshGradient({ width, height, running }) {
   const reduceMotion = useReducedMotion();
   const clock = useSharedValue(0);
   useEffect(() => {
-    if (reduceMotion) return;
+    if (reduceMotion || !running) return;
     clock.value = withRepeat(withTiming(1, { duration: MESH_LOOP, easing: Easing.linear }), -1, false);
     return () => cancelAnimation(clock);
-  }, [reduceMotion, clock]);
+  }, [reduceMotion, running, clock]);
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
       {BLOBS.map((blob, i) => (
@@ -184,19 +176,18 @@ function MeshGradient({ width, height }) {
 }
 
 /**
- * The scene's photograph, filling the screen and drifting on a slow Ken
- * Burns loop. It fades in once it has actually loaded; until then (or if
- * it can't load) the amber mesh underneath is the room.
+ * The scene's still photograph on a slow Ken Burns drift. It fades in once
+ * it has loaded; until then (or if it can't) the amber mesh is the room.
  */
-function ScenePhoto({ scene, width, height }) {
+function ScenePhoto({ scene, width, height, running }) {
   const reduceMotion = useReducedMotion();
   const shown = useSharedValue(0);
   const drift = useSharedValue(0);
   useEffect(() => {
-    if (reduceMotion) return;
+    if (reduceMotion || !running) return;
     drift.value = withRepeat(withTiming(1, { duration: KEN_BURNS_MS, easing: Easing.inOut(Easing.quad) }), -1, true);
     return () => cancelAnimation(drift);
-  }, [reduceMotion, drift]);
+  }, [reduceMotion, running, drift]);
   const style = useAnimatedStyle(() => ({
     opacity: shown.value,
     transform: [
@@ -211,7 +202,6 @@ function ScenePhoto({ scene, width, height }) {
         source={{ uri: scene.uri, headers: MEDIA_HEADERS }}
         style={StyleSheet.absoluteFill}
         resizeMode="cover"
-        accessibilityIgnoresInvertColors
         testID={`zen-scene-${scene.id}`}
         onLoad={() => {
           shown.value = withTiming(1, { duration: 1600, easing: DIM });
@@ -223,19 +213,82 @@ function ScenePhoto({ scene, width, height }) {
 }
 
 /**
- * The room: amber mesh, the scene's photograph over it (crossfading when
- * the scene changes), drifting smoke, film grain, and a deep shade so text
- * reads and the screen stays dim enough to sleep by.
+ * The scene's looping video, muted and mixed with the app's audio (so it
+ * never takes audio focus from a soundscape or the radio), played from the
+ * cache. It fades in over the photograph on its first frame; it only plays
+ * while the Zen tab is on screen.
  */
-function Atmosphere({ sceneId, width, height }) {
+function SceneVideo({ scene, running }) {
+  const shown = useSharedValue(0);
+  const player = useVideoPlayer(null, (p) => {
+    p.loop = true;
+    p.muted = true;
+    p.audioMixingMode = 'mixWithOthers';
+  });
+  const [source, setSource] = useState(null);
+
+  useEffect(() => {
+    let alive = true;
+    const uri = Platform.OS === 'ios' ? scene.video.ios : scene.video.uri;
+    const ext = Platform.OS === 'ios' ? 'mov' : 'webm';
+    cachedSource('scenes', `${scene.id}.${ext}`, uri).then((s) => alive && setSource(s));
+    return () => {
+      alive = false;
+    };
+  }, [scene]);
+
+  useEffect(() => {
+    if (!source) return;
+    try {
+      player.replace(source);
+    } catch (err) {
+      console.warn(`[zen] video ${scene.id} failed`, err?.message ?? err);
+    }
+  }, [player, source, scene.id]);
+
+  useEffect(() => {
+    if (!source) return;
+    try {
+      if (running) player.play();
+      else player.pause();
+    } catch {}
+  }, [player, source, running]);
+
+  const style = useAnimatedStyle(() => ({ opacity: shown.value }));
+  return (
+    <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, style]} testID={`zen-video-${scene.id}`}>
+      <VideoView
+        player={player}
+        style={StyleSheet.absoluteFill}
+        contentFit="cover"
+        nativeControls={false}
+        allowsPictureInPicture={false}
+        // A TextureView, so the fade and the overlays above it composite
+        // like any other view (a SurfaceView ignores parent opacity).
+        surfaceType="textureView"
+        onFirstFrameRender={() => {
+          shown.value = withTiming(1, { duration: 1800, easing: DIM });
+        }}
+      />
+    </Animated.View>
+  );
+}
+
+/**
+ * The room: amber mesh, the scene's photograph, its looping video over
+ * that, drifting smoke, film grain, and a deep shade so text reads and the
+ * screen stays dim enough to sleep by.
+ */
+function Atmosphere({ sceneId, width, height, running }) {
   const scene = SCENES[sceneId] ?? SCENES.night;
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-      <MeshGradient width={width} height={height} />
+      <MeshGradient width={width} height={height} running={running} />
       <Animated.View key={scene.id} entering={FadeIn.duration(1400)} exiting={FadeOut.duration(1400)} style={StyleSheet.absoluteFill}>
-        <ScenePhoto scene={scene} width={width} height={height} />
+        <ScenePhoto scene={scene} width={width} height={height} running={running} />
+        <SceneVideo scene={scene} running={running} />
       </Animated.View>
-      <DriftingFog width={width} height={height} opacity={0.5} />
+      <DriftingFog width={width} height={height} opacity={0.45} />
       <Grain width={width} height={height} opacity={0.05} />
       <LinearGradient
         colors={['rgba(5,5,6,0.74)', 'rgba(5,5,6,0.5)', 'rgba(5,5,6,0.58)', 'rgba(5,5,6,0.92)']}
@@ -268,8 +321,7 @@ function MinuteSweep({ now, width }) {
   );
 }
 
-// The digits as separate glyphs, so only the ones that change roll in: a
-// new minute rises into place while the rest of the time holds still.
+// The digits as separate glyphs, so only the ones that change roll in.
 function Digits({ time, size, lineHeight }) {
   return (
     <View style={styles.digits}>
@@ -304,8 +356,7 @@ function Equalizer({ color = colors.gold }) {
 }
 
 // The clock, centred in the space it's given, with the date above it and
-// the minute sweep below; the whole group drifts a few points on a slow
-// loop so nothing burns in.
+// the minute sweep below; the group drifts slowly so nothing burns in.
 function Clock({ width, height, compact }) {
   const reduceMotion = useReducedMotion();
   const now = useMinute();
@@ -325,17 +376,10 @@ function Clock({ width, height, compact }) {
   return (
     <Animated.View pointerEvents="none" style={[styles.clockGroup, driftStyle]}>
       <Slate>{dateLine(now)}</Slate>
-      <View
-        style={{ marginTop: space.sm }}
-        accessibilityRole="timer"
-        accessibilityLabel={`${time}${period ? ` ${period}` : ''}`}
-        accessible
-      >
+      <View style={{ marginTop: space.sm }} accessibilityRole="timer" accessibilityLabel={`${time}${period ? ` ${period}` : ''}`} accessible>
         <Digits time={time} size={clockSize} lineHeight={lineHeight} />
         {period ? (
-          <Text style={[styles.period, { fontSize: Math.round(clockSize * 0.24), bottom: Math.round(lineHeight * 0.16) }]}>
-            {period}
-          </Text>
+          <Text style={[styles.period, { fontSize: Math.round(clockSize * 0.24), bottom: Math.round(lineHeight * 0.16) }]}>{period}</Text>
         ) : null}
       </View>
       <MinuteSweep now={now} width={Math.round(Math.min(clockSize * 1.8, width * 0.6))} />
@@ -349,7 +393,9 @@ function NowLine({ sound }) {
   const remaining = useSleepRemaining();
   const nowPlaying = useNowPlaying(current, current?.kind === 'radio');
   const podcast = current?.kind === 'podcast' ? podcastById(current.podcastId) : null;
-  const radioLine = current ? [podcast ? podcast.title : current.name, podcast ? current.name : trackTitle || nowPlaying].filter(Boolean).join(' · ') : null;
+  const radioLine = current
+    ? [podcast ? podcast.title : current.name, podcast ? current.name : trackTitle || nowPlaying].filter(Boolean).join(' · ')
+    : null;
   const scape = sound.id && sound.status !== 'idle' ? soundscapeById(sound.id) : null;
   const soundLine = scape ? `${scape.label} · ${scape.detail}` : null;
   const lines = [soundLine, radioLine].filter(Boolean);
@@ -370,20 +416,17 @@ function NowLine({ sound }) {
 }
 
 // Frosted round control.
-function GlassButton({ icon, label, onPress, size = 48, primary, disabled, children }) {
+function GlassButton({ icon, label, onPress, size = 48, primary, children }) {
   return (
     <Pressable
       onPress={onPress}
-      disabled={disabled}
       hitSlop={8}
       accessibilityRole="button"
       accessibilityLabel={label}
-      accessibilityState={{ disabled: !!disabled }}
       style={({ pressed }) => [
         styles.glass,
         { width: size, height: size, borderRadius: size / 2 },
         primary && styles.glassPrimary,
-        disabled && { opacity: 0.35 },
         pressed && { transform: [{ scale: 0.92 }] },
       ]}
     >
@@ -401,7 +444,7 @@ function SoundCard({ sound, state }) {
     <Pressable
       onPress={() => {
         haptics.selection();
-        ambient.toggle(sound.id);
+        ambientAudio.toggle(sound.id);
       }}
       accessibilityRole="button"
       accessibilityLabel={`${on ? 'Pause' : 'Play'} ${sound.label}`}
@@ -458,7 +501,9 @@ function TimerRow() {
               accessibilityState={{ selected: on }}
               style={({ pressed }) => [styles.chip, on && styles.chipOn, pressed && { opacity: 0.7 }]}
             >
-              <Text style={[styles.chipText, on && styles.chipTextOn]}>{m == null ? 'Off' : m < 60 ? `${m} min` : `${m / 60 === 1 ? '1 hr' : `${m / 60} hr`}`}</Text>
+              <Text style={[styles.chipText, on && styles.chipTextOn]}>
+                {m == null ? 'Off' : m < 60 ? `${m} min` : m === 60 ? '1 hr' : `${m / 60} hr`}
+              </Text>
             </Pressable>
           );
         })}
@@ -486,11 +531,14 @@ function Transport() {
   );
 }
 
-// Who made the sounds and pictures, and under which licence.
+// Who made the sounds, videos and pictures, and under which licence.
 function Credits({ onClose }) {
   const items = [
     ...SOUNDSCAPES.map((s) => ({ key: s.id, kind: 'Sound', ...s })),
-    ...Object.values(SCENES).map((s) => ({ key: `scene-${s.id}`, kind: 'Photo', ...s })),
+    ...Object.values(SCENES).flatMap((s) => [
+      { key: `video-${s.id}`, kind: 'Video', ...s.video },
+      { key: `photo-${s.id}`, kind: 'Photo', ...s },
+    ]),
   ];
   return (
     <Animated.View entering={FadeIn.duration(250)} exiting={FadeOut.duration(200)} style={styles.credits}>
@@ -498,7 +546,7 @@ function Credits({ onClose }) {
         <Slate dot>Credits</Slate>
         <GlassButton icon="close" label="Close credits" onPress={onClose} size={36} />
       </View>
-      <ScrollView style={{ maxHeight: 320 }} contentContainerStyle={{ gap: space.md, paddingTop: space.md }}>
+      <ScrollView style={{ maxHeight: 340 }} contentContainerStyle={{ gap: space.md, paddingTop: space.md }}>
         {items.map((c) => (
           <Pressable key={c.key} onPress={() => Linking.openURL(c.source)} accessibilityRole="link">
             <Text style={styles.creditTitle}>
@@ -515,49 +563,56 @@ function Credits({ onClose }) {
 }
 
 /**
- * The Sleep & Meditation Hub. Active (opened by hand): the room, the clock,
- * soundscapes, the fade-out timer, radio controls and credits; tapping the
- * backdrop tucks the controls away and brings them back. Passive (the idle
- * or lock screensaver): just the room, the clock and what's playing; any
- * tap wakes the app.
+ * The Zen tab: a Sleep & Meditation Hub. With its controls: the room (a
+ * looping video scene over a photograph), the clock, soundscapes, the
+ * fade-out timer, radio controls and credits. As the screensaver (after the
+ * phone locks or the app sits idle): just the room, the clock and what's
+ * playing, with the tab bar and status bar hidden; a tap brings the
+ * controls back. It is an ordinary tab screen, so nothing ever sits over
+ * the app.
  */
-function Hub({ mode, onExit }) {
-  const { width, height } = useWindowDimensions();
+function ZenRoom() {
+  const { width, height } = useLayout();
   const insets = useSafeAreaInsets();
   const reduceMotion = useReducedMotion();
-  const active = mode === 'active';
-  const [chromeOn, setChromeOn] = useState(active);
-  const [creditsOpen, setCreditsOpen] = useState(false);
-  const sound = useAmbient();
+  const focused = useIsFocused();
+  const { ambient, wake } = useZen();
+  const sound = useAmbientAudio();
   const { isPlaying } = usePlayer();
-  const shown = useSharedValue(0);
+  const bottomSpace = useBottomSpace(space.md);
+  const [creditsOpen, setCreditsOpen] = useState(false);
   const hint = useSharedValue(0);
-  const chrome = useSharedValue(active ? 1 : 0);
-  const leaving = useRef(false);
+
+  // Leaving the tab ends the screensaver, so coming back shows controls.
+  const wasFocused = useRef(focused);
+  useEffect(() => {
+    if (wasFocused.current && !focused && ambient) wake();
+    wasFocused.current = focused;
+  }, [focused, ambient, wake]);
 
   useEffect(() => {
-    shown.value = withTiming(1, { duration: reduceMotion ? 300 : active ? 700 : 1600, easing: DIM });
-    if (!active) hint.value = withDelay(1400, withSequence(withTiming(1, { duration: 1200 }), withDelay(5000, withTiming(0.35, { duration: 1500 }))));
+    hint.value = ambient
+      ? withDelay(1400, withSequence(withTiming(1, { duration: 1200 }), withDelay(5000, withTiming(0.35, { duration: 1500 }))))
+      : withTiming(0, { duration: 200 });
+    return () => cancelAnimation(hint);
+  }, [ambient, hint]);
+
+  // The screensaver hides the status bar.
+  useEffect(() => {
+    if (!focused || !ambient) return;
     try {
       setStatusBarHidden(true, 'fade');
     } catch {}
     return () => {
-      cancelAnimation(shown);
-      cancelAnimation(hint);
       try {
         setStatusBarHidden(false, 'fade');
       } catch {}
     };
-  }, [active, reduceMotion, shown, hint]);
+  }, [focused, ambient]);
 
-  useEffect(() => {
-    chrome.value = withTiming(chromeOn ? 1 : 0, { duration: chromeOn ? 450 : 350, easing: DIM });
-    return () => cancelAnimation(chrome);
-  }, [chromeOn, chrome]);
-
-  // While anything plays, the screen stays on like a bedside display; with
-  // nothing playing the phone sleeps as it normally would.
-  const audible = isPlaying || sound.status === 'playing';
+  // While anything plays on this tab, the screen stays on like a bedside
+  // display; with nothing playing the phone sleeps as it normally would.
+  const audible = focused && (isPlaying || sound.status === 'playing');
   useEffect(() => {
     if (!audible) return;
     activateKeepAwakeAsync(KEEP_AWAKE_TAG).catch(() => {});
@@ -568,71 +623,63 @@ function Hub({ mode, onExit }) {
     };
   }, [audible]);
 
-  // Fade out, then wake. A timer, not an animation callback, does the
-  // waking, so a tap always gets you out.
-  const wake = () => {
-    if (leaving.current) return;
-    leaving.current = true;
-    shown.value = withTiming(0, { duration: 260 });
-    setTimeout(onExit, 260);
-  };
-  const onBackdrop = () => (active ? setChromeOn((on) => !on) : wake());
-
-  const screenStyle = useAnimatedStyle(() => ({ opacity: shown.value }));
   const hintStyle = useAnimatedStyle(() => ({ opacity: hint.value }));
-  const chromeStyle = useAnimatedStyle(() => ({ opacity: chrome.value }));
 
   const sceneId = soundscapeById(sound.id)?.scene ?? 'night';
   const short = height < 500;
   const top = Math.max(insets.top, space.lg);
-  const bottom = Math.max(insets.bottom, space.lg);
-  const edge = { left: insets.left + space.xl, right: insets.right + space.xl };
-  // Room for the clock: the panel takes the lower part of the screen when
-  // the controls are out (the right half on a phone on its side).
-  const panelBeside = active && short;
+  // Controls sit above the tab bar (and mini player); the screensaver has
+  // neither, so it only keeps clear of the system bars.
+  const bottom = ambient ? Math.max(insets.bottom, space.lg) : bottomSpace;
+  const edge = { left: space.xl, right: space.xl };
+  const panelBeside = !ambient && short;
+  const panelHeight = short ? 0 : 296;
   const clockArea = {
-    top: top + (active ? 56 : 0),
-    bottom: active && !panelBeside ? bottom + (short ? 0 : 300) : bottom + 40,
-    left: insets.left,
-    right: panelBeside ? width / 2 : insets.right,
+    top: top + (ambient ? 0 : 56),
+    bottom: ambient ? bottom + 40 : panelBeside ? bottom : bottom + panelHeight + space.md,
+    left: 0,
+    right: panelBeside ? width / 2 : 0,
   };
   const clockW = width - clockArea.left - clockArea.right;
-  const clockH = height - clockArea.top - clockArea.bottom;
+  const clockH = Math.max(120, height - clockArea.top - clockArea.bottom);
 
   return (
-    <Animated.View style={[styles.screen, screenStyle]} testID={`zen-${mode}`}>
-      <Atmosphere sceneId={sceneId} width={width} height={height} />
-      <Pressable
-        style={StyleSheet.absoluteFill}
-        onPress={onBackdrop}
-        accessibilityRole="button"
-        accessibilityLabel={active ? (chromeOn ? 'Hide controls' : 'Show controls') : 'Exit Zen Mode'}
-      />
+    <View style={styles.screen} testID={ambient ? 'zen-screensaver' : 'zen-screen'}>
+      <Atmosphere sceneId={sceneId} width={width} height={height} running={focused} />
+      {ambient && (
+        <Pressable style={StyleSheet.absoluteFill} onPress={wake} accessibilityRole="button" accessibilityLabel="Wake Zen controls" />
+      )}
 
       <View pointerEvents="none" style={[styles.clockArea, clockArea]}>
         <Clock width={clockW} height={clockH} compact={short} />
         <NowLine sound={sound} />
       </View>
 
-      {active ? (
-        <Animated.View pointerEvents={chromeOn ? 'box-none' : 'none'} style={[StyleSheet.absoluteFill, chromeStyle]}>
+      {/* The controls only exist outside the screensaver, so screen readers
+          never land on invisible buttons. They fade in and out. */}
+      {!ambient && (
+        <Animated.View
+          entering={FadeIn.duration(reduceMotion ? 150 : 450)}
+          exiting={FadeOut.duration(reduceMotion ? 150 : 600)}
+          pointerEvents="box-none"
+          style={StyleSheet.absoluteFill}
+        >
           <View style={[styles.topBar, edge, { top }]} pointerEvents="box-none">
             <Slate dot color={colors.text}>
               Sleep & Meditation
             </Slate>
-            <GlassButton icon="close" label="Close Zen Mode" onPress={wake} size={44} />
           </View>
-
           <View
             pointerEvents="box-none"
+            testID="zen-panel"
             style={[
               styles.panel,
               panelBeside
-                ? { top: top + 56, bottom, right: insets.right + space.lg, width: width / 2 - space.xl }
-                : { left: insets.left + space.lg, right: insets.right + space.lg, bottom },
+                ? { top: top + 48, bottom, right: space.lg, width: width / 2 - space.xl }
+                : { left: space.lg, right: space.lg, bottom, maxHeight: panelHeight },
             ]}
           >
-            <ScrollView contentContainerStyle={styles.panelBody} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+            <ScrollView contentContainerStyle={styles.panelBody} showsVerticalScrollIndicator={false}>
               <Slate>Soundscapes</Slate>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.cards}>
                 {SOUNDSCAPES.map((s) => (
@@ -641,7 +688,7 @@ function Hub({ mode, onExit }) {
               </ScrollView>
               <TimerRow />
               <View style={styles.footer}>
-                <Pressable onPress={() => setCreditsOpen(true)} hitSlop={10} accessibilityRole="button" accessibilityLabel="Sound and photo credits">
+                <Pressable onPress={() => setCreditsOpen(true)} hitSlop={10} accessibilityRole="button" accessibilityLabel="Sound, video and photo credits">
                   <Text style={styles.creditsLink}>Credits</Text>
                 </Pressable>
                 <Transport />
@@ -654,80 +701,69 @@ function Hub({ mode, onExit }) {
             </View>
           )}
         </Animated.View>
-      ) : (
-        !short && (
-          <View pointerEvents="none" style={[styles.hintRow, edge, { bottom: bottom + space.md }]}>
-            <Animated.Text style={[styles.hint, hintStyle]}>Tap anywhere to wake</Animated.Text>
-          </View>
-        )
       )}
-    </Animated.View>
+
+      {ambient && !short && (
+        <View pointerEvents="none" style={[styles.hintRow, edge, { bottom: bottom + space.md }]}>
+          <Animated.Text style={[styles.hint, hintStyle]}>Tap anywhere for controls</Animated.Text>
+        </View>
+      )}
+    </View>
   );
 }
 
 /**
- * If anything in Zen Mode ever fails to draw, it closes, hands the app
- * back, and reports what went wrong (shown briefly as a banner) rather than
- * leaving a broken layer over the app or quietly doing nothing.
+ * If any part of the room fails to draw, the Zen tab shows a short message
+ * and a way to try again; the tab bar and the rest of the app carry on.
  */
 class ZenBoundary extends Component {
-  state = { failed: false };
-  static getDerivedStateFromError() {
-    return { failed: true };
+  state = { error: null };
+  static getDerivedStateFromError(error) {
+    return { error };
   }
   componentDidCatch(error) {
-    console.warn('Zen Mode closed after an error:', error?.message ?? error);
-    // After this commit, never during it.
-    setTimeout(() => {
-      this.props.onError?.(error);
-      this.props.onExit();
-    }, 0);
+    console.warn('[zen] the Zen screen failed to draw:', error?.message ?? error);
   }
   render() {
-    return this.state.failed ? null : this.props.children;
+    if (!this.state.error) return this.props.children;
+    return (
+      <View style={[styles.screen, styles.fallback]} testID="zen-fallback">
+        <Slate dot>Sleep & Meditation</Slate>
+        <Text style={styles.fallbackTitle}>Zen couldn't load just now.</Text>
+        <Text style={styles.fallbackBody} numberOfLines={3}>
+          {String(this.state.error?.message ?? this.state.error)}
+        </Text>
+        <Pressable
+          onPress={() => this.setState({ error: null })}
+          accessibilityRole="button"
+          style={({ pressed }) => [styles.retry, pressed && { opacity: 0.8 }]}
+        >
+          <Text style={styles.retryText}>Try again</Text>
+        </Pressable>
+      </View>
+    );
   }
 }
 
-/**
- * Zen Mode opens in its own full-screen window (a Modal), the same way the
- * app's sheets do, so nothing in the app, Android's native tab screens
- * included, can draw over it. It is only ever opened while the app is in
- * the foreground (see DisplayContext): a Modal opened in the background can
- * come back as an invisible window that swallows every touch. Inside it the
- * hub is an absolute layer at zIndex 9999. Back closes it.
- */
-export default function ZenMode({ mode = 'active', onExit, onError }) {
+export default function ZenScreen() {
   return (
-    <Modal
-      visible
-      transparent
-      animationType="none"
-      statusBarTranslucent
-      navigationBarTranslucent
-      supportedOrientations={['portrait', 'landscape', 'landscape-left', 'landscape-right', 'portrait-upside-down']}
-      onRequestClose={onExit}
-    >
-      <View style={styles.layer}>
-        <ZenBoundary onExit={onExit} onError={onError}>
-          <Hub mode={mode} onExit={onExit} />
-        </ZenBoundary>
-      </View>
-    </Modal>
+    <ZenBoundary>
+      <ZenRoom />
+    </ZenBoundary>
   );
 }
 
 const styles = StyleSheet.create({
-  layer: { ...StyleSheet.absoluteFillObject, zIndex: 9999, elevation: 9999 },
-  screen: { ...StyleSheet.absoluteFillObject, backgroundColor: colors.bg, overflow: 'hidden' },
+  screen: { flex: 1, backgroundColor: colors.bg, overflow: 'hidden' },
+  fallback: { alignItems: 'center', justifyContent: 'center', padding: space.xl, gap: space.md },
+  fallbackTitle: { fontFamily: fonts.semibold, fontSize: 20, color: colors.text, textAlign: 'center' },
+  fallbackBody: { fontFamily: fonts.medium, fontSize: 13, color: colors.textMuted, textAlign: 'center' },
+  retry: { marginTop: space.sm, paddingHorizontal: space.xl, paddingVertical: 10, borderRadius: radius.pill, backgroundColor: colors.text },
+  retryText: { fontFamily: fonts.semibold, color: colors.bg },
   clockArea: { position: 'absolute', alignItems: 'center', justifyContent: 'center' },
   clockGroup: { alignItems: 'center' },
   digits: { flexDirection: 'row', justifyContent: 'center' },
-  clock: {
-    fontFamily: fonts.extralight,
-    color: colors.text,
-    fontVariant: ['tabular-nums'],
-    textAlign: 'center',
-  },
+  clock: { fontFamily: fonts.extralight, color: colors.text, fontVariant: ['tabular-nums'], textAlign: 'center' },
   period: { position: 'absolute', left: '100%', marginLeft: space.sm, fontFamily: fonts.serif, color: colors.gold },
   sweep: { height: 2, marginTop: space.md, borderRadius: 1, backgroundColor: 'rgba(243,239,232,0.12)', justifyContent: 'center' },
   sweepFill: { position: 'absolute', left: 0, height: 2, borderRadius: 1, backgroundColor: 'rgba(226,168,75,0.75)' },
@@ -736,7 +772,7 @@ const styles = StyleSheet.create({
   nowRow: { flexDirection: 'row', alignItems: 'center', gap: 8, maxWidth: 560 },
   nowText: { fontFamily: fonts.semibold, fontSize: 15, color: colors.text, letterSpacing: -0.2, flexShrink: 1 },
   fadeText: { fontFamily: fonts.mono, fontSize: 11, letterSpacing: 1.6, textTransform: 'uppercase', color: colors.gold },
-  topBar: { position: 'absolute', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  topBar: { position: 'absolute', flexDirection: 'row', alignItems: 'center', height: 44 },
   panel: {
     position: 'absolute',
     borderRadius: radius.xl,
@@ -801,11 +837,5 @@ const styles = StyleSheet.create({
   creditTitle: { fontFamily: fonts.semibold, fontSize: 14, color: colors.text },
   creditDetail: { fontFamily: fonts.medium, fontSize: 12, color: colors.textMuted, marginTop: 2 },
   hintRow: { position: 'absolute', alignItems: 'center' },
-  hint: {
-    fontFamily: fonts.mono,
-    fontSize: 10.5,
-    letterSpacing: 2,
-    textTransform: 'uppercase',
-    color: colors.textFaint,
-  },
+  hint: { fontFamily: fonts.mono, fontSize: 10.5, letterSpacing: 2, textTransform: 'uppercase', color: colors.textFaint },
 });

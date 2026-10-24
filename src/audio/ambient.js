@@ -1,7 +1,6 @@
-import { Platform } from 'react-native';
 import { createAudioPlayer } from 'expo-audio';
-import { Directory, File, Paths } from 'expo-file-system';
-import { MEDIA_HEADERS, soundscapeById } from '../data/sleep';
+import { soundscapeById } from '../data/sleep';
+import { cachedSource } from '../utils/mediaCache';
 
 // Soundscape engine for the Sleep & Meditation Hub: one looping expo-audio
 // player, separate from the radio's, so rain can sit under a station or
@@ -9,8 +8,7 @@ import { MEDIA_HEADERS, soundscapeById } from '../data/sleep';
 // two players never pause each other.
 //
 // On a phone each recording is downloaded once into the cache and looped
-// from there: a night of white noise would otherwise stream ~30 MB an hour.
-// If the download fails it streams instead. The browser always streams.
+// from there (utils/mediaCache.js); if the download fails it streams.
 let player = null;
 let state = { id: null, status: 'idle', volume: 1 };
 let fadeTimer = null;
@@ -22,26 +20,8 @@ function emit(patch) {
   listeners.forEach((fn) => fn(state));
 }
 
-function cacheDir() {
-  const dir = new Directory(Paths.cache, 'soundscapes');
-  if (!dir.exists) dir.create({ intermediates: true, idempotent: true });
-  return dir;
-}
-
 /** A local copy of the soundscape, downloading it the first time. */
-export async function localSource(soundscape) {
-  if (Platform.OS === 'web') return { uri: soundscape.uri, headers: MEDIA_HEADERS };
-  try {
-    const file = new File(cacheDir(), `${soundscape.id}.mp3`);
-    if (!file.exists || !file.size) {
-      await File.downloadFileAsync(soundscape.uri, file, { headers: MEDIA_HEADERS, idempotent: true });
-    }
-    return { uri: file.uri };
-  } catch (err) {
-    console.warn(`[ambient] couldn't cache ${soundscape.id}, streaming instead`, err?.message ?? err);
-    return { uri: soundscape.uri, headers: MEDIA_HEADERS };
-  }
-}
+export const localSource = (soundscape) => cachedSource('soundscapes', `${soundscape.id}.mp3`, soundscape.uri);
 
 function stopFade() {
   clearInterval(fadeTimer);

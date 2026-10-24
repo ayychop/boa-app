@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { Platform, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { Platform, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { DarkTheme, NavigationContainer, useIsFocused } from '@react-navigation/native';
 import { BottomTabBar, createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -36,13 +36,15 @@ import { FormsProvider } from './src/context/FormsContext';
 import { UserProvider, useUser } from './src/context/UserContext';
 import { PremiumProvider } from './src/context/PremiumContext';
 import { SleepTimerProvider } from './src/context/SleepTimerContext';
-import { DisplayProvider } from './src/context/DisplayContext';
+import { ZenProvider, useZen } from './src/context/ZenContext';
+import { navigationRef } from './src/navigation/ref';
 import OnboardingScreen from './src/screens/OnboardingScreen';
 import Intro from './src/components/Intro';
 import MiniPlayer from './src/components/MiniPlayer';
 import RecordArtwork from './src/components/RecordArtwork';
 import HomeScreen from './src/screens/HomeScreen';
 import RadioScreen from './src/screens/RadioScreen';
+import ZenScreen from './src/screens/ZenScreen';
 import OriginalsScreen from './src/screens/OriginalsScreen';
 import TalentScreen from './src/screens/TalentScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
@@ -69,9 +71,12 @@ const navTheme = {
   },
 };
 
+const TAB_TITLES = { Originals: 'BOA Originals' };
+
 const ICONS = {
   Home: ['home', 'home-outline'],
   Radio: ['radio', 'radio-outline'],
+  Zen: ['sparkles', 'sparkles-outline'],
   Originals: ['film', 'film-outline'],
   Talent: ['people', 'people-outline'],
   Profile: ['person', 'person-outline'],
@@ -135,6 +140,7 @@ const withTransition = (Screen) =>
 
 const Home = withTransition(HomeScreen);
 const Radio = withTransition(RadioScreen);
+const Zen = withTransition(ZenScreen);
 const Originals = withTransition(OriginalsScreen);
 const Talent = withTransition(TalentScreen);
 const Profile = withTransition(ProfileScreen);
@@ -142,11 +148,16 @@ const Profile = withTransition(ProfileScreen);
 // Tab bar and mini player float over the screens so content scrolls beneath
 // the blur; screens pad themselves with useBottomSpace().
 function FloatingTabBar(props) {
-  // Home docks the mini player at its top instead, clear of its content.
-  const onHome = props.state.routes[props.state.index]?.name === 'Home';
+  const { ambient } = useZen();
+  const route = props.state.routes[props.state.index]?.name;
+  // The Zen screensaver is the whole screen: no tab bar, no mini player.
+  if (route === 'Zen' && ambient) return null;
+  // Home docks the mini player at its top instead, clear of its content;
+  // Zen has its own controls for what's playing.
+  const showMini = route !== 'Home' && route !== 'Zen';
   return (
     <View style={styles.tabBarWrap} pointerEvents="box-none">
-      {!onHome && <MiniPlayer onOpenRadio={() => props.navigation.navigate('Radio')} />}
+      {showMini && <MiniPlayer onOpenRadio={() => props.navigation.navigate('Radio')} />}
       <BottomTabBar {...props} />
     </View>
   );
@@ -175,7 +186,7 @@ function MainTabs({ narrow }) {
   const bottomInset =
     Platform.OS === 'android' ? Math.max(insets.bottom, ANDROID_MIN_BOTTOM_INSET) + ANDROID_BOTTOM_COMFORT : insets.bottom;
   return (
-    <NavigationContainer theme={navTheme}>
+    <NavigationContainer ref={navigationRef} theme={navTheme}>
       <StatusBar style="light" />
       <Tab.Navigator
         initialRouteName="Home"
@@ -200,9 +211,23 @@ function MainTabs({ narrow }) {
             ...(short && { height: 40 + bottomInset }),
           },
           tabBarBackground: () => <TabBarBackground />,
-          // Five tabs: step the labels down on narrow phones so
-          // "BOA Originals" fits without truncating.
-          tabBarLabelStyle: { fontFamily: fonts.semibold, fontSize: narrow ? 9.5 : 10, letterSpacing: -0.1 },
+          // Six tabs: each label stays on one line and shrinks to fit its
+          // slot (down to 75%) rather than wrapping into the icon or
+          // clipping, so "BOA Originals" fits on the narrowest phones.
+          // Spelled out for screen readers: a custom label means React
+          // Navigation no longer builds one.
+          tabBarAccessibilityLabel: `${TAB_TITLES[route.name] ?? route.name}, tab`,
+          tabBarLabel: ({ color, children }) => (
+            <Text
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.75}
+              allowFontScaling={false}
+              style={[styles.tabLabel, { color, fontSize: narrow ? 9.5 : 10 }]}
+            >
+              {children}
+            </Text>
+          ),
           tabBarIcon: ({ focused, color, size }) => (
             <TabIcon name={route.name} focused={focused} color={color} size={size} />
           ),
@@ -211,6 +236,7 @@ function MainTabs({ narrow }) {
       >
         <Tab.Screen name="Home" component={Home} />
         <Tab.Screen name="Radio" component={Radio} />
+        <Tab.Screen name="Zen" component={Zen} />
         <Tab.Screen name="Originals" component={Originals} options={{ title: 'BOA Originals' }} />
         <Tab.Screen name="Talent" component={Talent} />
         <Tab.Screen name="Profile" component={Profile} />
@@ -276,7 +302,7 @@ function Root({ narrow }) {
         <UserProvider>
           <PlayerProvider>
             <SleepTimerProvider>
-              <DisplayProvider>
+              <ZenProvider>
                 <MediaProvider>
                   <PremiumProvider>
                     <FormsProvider>
@@ -284,7 +310,7 @@ function Root({ narrow }) {
                     </FormsProvider>
                   </PremiumProvider>
                 </MediaProvider>
-              </DisplayProvider>
+              </ZenProvider>
             </SleepTimerProvider>
           </PlayerProvider>
         </UserProvider>
@@ -295,4 +321,5 @@ function Root({ narrow }) {
 
 const styles = StyleSheet.create({
   tabBarWrap: { position: 'absolute', left: 0, right: 0, bottom: 0 },
+  tabLabel: { fontFamily: fonts.semibold, letterSpacing: -0.1, textAlign: 'center', maxWidth: '100%', paddingHorizontal: 2 },
 });

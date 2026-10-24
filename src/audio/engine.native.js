@@ -1,5 +1,8 @@
 import { AppState, Platform } from 'react-native';
 import { createAudioPlayer, requestNotificationPermissionsAsync, setAudioModeAsync } from 'expo-audio';
+import { splitTrack } from '../utils/track';
+
+export { splitTrack };
 
 // Native audio engine: a single expo-audio player. Items are live radio
 // ({ kind: 'radio' }) or on-demand audio such as podcast episodes
@@ -239,10 +242,6 @@ let askedForNotifications = false;
 let nowPlaying = null; // { id, text }
 const artworkById = new Map(); // station id -> file:// uri of its record art
 
-export function splitTrack(text) {
-  const m = /^\s*(.+?)\s+[-\u2013]\s+(.+?)\s*$/.exec(text || '');
-  return m ? { artist: m[1], title: m[2] } : null;
-}
 
 export function lockScreenMetadata(item) {
   const live = isLive(item);

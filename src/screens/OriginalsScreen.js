@@ -108,7 +108,7 @@ export default function OriginalsScreen() {
 
   return (
     <Animated.View key="full" entering={FadeIn.duration(360)} style={styles.screen}>
-      <ScrollView contentContainerStyle={{ paddingBottom: bottom }} showsVerticalScrollIndicator={false}>
+      <ScrollView testID="originals-scroll" contentContainerStyle={{ paddingBottom: bottom }} showsVerticalScrollIndicator={false}>
         <Featured production={featured} width={width} />
 
         <View style={[styles.block, { width: contentWidth }]}>
