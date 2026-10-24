@@ -23,7 +23,7 @@ export default function CreditsSheet({ open, onClose }) {
         </Text>
         <ScrollView style={{ maxHeight: 380 }} contentContainerStyle={{ gap: space.md, paddingTop: space.lg }}>
           {items.map((c) => (
-            <Pressable key={c.key} onPress={() => Linking.openURL(c.source)} accessibilityRole="link">
+            <Pressable key={c.key} onPress={() => c.source && Linking.openURL(c.source)} accessibilityRole={c.source ? "link" : "text"}>
               <Text style={styles.title}>
                 {c.kind} · {c.title}
               </Text>

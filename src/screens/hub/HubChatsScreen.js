@@ -1,12 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import Animated, { FadeInDown, LinearTransition } from 'react-native-reanimated';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useHub } from '../../context/HubContext';
-import { supabase } from '../../lib/supabase';
-import { listConversations } from '../../api/hub';
+import useConversations from '../../hooks/useConversations';
 import { Avatar, IconButton, PageHeader } from '../../components/kit';
 import { Button } from '../../components/ui';
 import { colors, fonts, radius, space, type } from '../../theme';
@@ -20,19 +18,30 @@ export function chatTime(iso, now = new Date()) {
   return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
 }
 
-function ThreadRow({ conv, online, onPress, index, myId }) {
+/**
+ * One conversation, on frosted glass: a large avatar (gold ring while
+ * they're online), their name, the last message and when. Unread threads
+ * glow gold at the edge. Rows rise in one after another.
+ */
+export function ThreadRow({ conv, online, onPress, index, myId }) {
   const name = conv.other?.display_name || (conv.other?.username ? `@${conv.other.username}` : 'BOA HUB member');
   const preview = `${conv.last_sender_id === myId ? 'You: ' : ''}${conv.last_message_preview ?? ''}`;
   return (
-    <Animated.View entering={FadeInDown.delay(Math.min(index, 8) * 40).springify().damping(20)}>
+    <Animated.View entering={FadeInDown.delay(Math.min(index, 8) * 50).springify().damping(20)} layout={LinearTransition.springify().damping(22)}>
       <Pressable
         onPress={onPress}
         accessibilityRole="button"
-        accessibilityLabel={`${name}${conv.unread ? ', unread' : ''}: ${preview}`}
-        style={({ pressed }) => [styles.row, pressed && { backgroundColor: colors.surfaceRaised }]}
+        accessibilityLabel={`${name}${conv.unread ? ', unread' : ''}${online ? ', online' : ''}: ${preview}`}
+        style={({ pressed }) => [styles.row, conv.unread && styles.rowUnread, pressed && { transform: [{ scale: 0.985 }], opacity: 0.92 }]}
         testID={`hub-thread-${conv.id}`}
       >
-        <Avatar uri={conv.other?.avatar_url} name={name} size={52} online={online} />
+        <LinearGradient
+          colors={conv.unread ? ['rgba(226,168,75,0.16)', 'rgba(226,168,75,0.03)'] : ['rgba(255,255,255,0.07)', 'rgba(255,255,255,0.02)']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
+        <Avatar uri={conv.other?.avatar_url} name={name} size={64} online={online} />
         <View style={{ flex: 1, minWidth: 0 }}>
           <View style={styles.line}>
             <Text style={[styles.name, conv.unread && { fontFamily: fonts.bold }]} numberOfLines={1}>
@@ -41,7 +50,7 @@ function ThreadRow({ conv, online, onPress, index, myId }) {
             <Text style={[styles.time, conv.unread && { color: colors.gold }]}>{chatTime(conv.last_message_at)}</Text>
           </View>
           <View style={styles.line}>
-            <Text style={[styles.preview, conv.unread && { color: colors.text }]} numberOfLines={1}>
+            <Text style={[styles.preview, conv.unread && { color: colors.text }]} numberOfLines={2}>
               {preview}
             </Text>
             {conv.unread && <View style={styles.unread} />}
@@ -59,55 +68,7 @@ function ThreadRow({ conv, online, onPress, index, myId }) {
 export default function HubChatsScreen({ navigation, inTab = false, bottomPadding }) {
   const insets = useSafeAreaInsets();
   const { userId, isOnline, blocked } = useHub();
-  const [rows, setRows] = useState([]);
-  const [state, setState] = useState('loading'); // loading | ready | error | refreshing
-  const [error, setError] = useState(null);
-  const request = useRef(0);
-
-  const load = useCallback(
-    async (refreshing = false) => {
-      if (!userId) return;
-      const id = ++request.current;
-      if (refreshing) setState('refreshing');
-      try {
-        const next = await listConversations(userId);
-        if (id !== request.current) return;
-        setRows(next);
-        setState('ready');
-      } catch (err) {
-        if (id !== request.current) return;
-        setError(err.message);
-        setState('error');
-      }
-    },
-    [userId],
-  );
-
-  // Fresh each time the list comes back into view (read receipts change).
-  useFocusEffect(
-    useCallback(() => {
-      load();
-    }, [load]),
-  );
-
-  // Any change to one of your threads (a new message moves it to the top).
-  useEffect(() => {
-    if (!supabase || !userId) return;
-    let timer = null;
-    const reload = () => {
-      clearTimeout(timer);
-      timer = setTimeout(() => load(), 300);
-    };
-    const channel = supabase
-      .channel(`hub:chats:${userId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations', filter: `user_a=eq.${userId}` }, reload)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations', filter: `user_b=eq.${userId}` }, reload)
-      .subscribe();
-    return () => {
-      clearTimeout(timer);
-      supabase.removeChannel(channel);
-    };
-  }, [userId, load]);
+  const { rows, state, error, reload: load } = useConversations(userId);
 
   const visible = rows.filter((c) => !blocked.has(c.otherId));
 
@@ -165,13 +126,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: space.md,
     marginHorizontal: space.lg,
+    marginBottom: space.sm,
     padding: space.md,
-    borderRadius: radius.lg,
+    borderRadius: radius.xl,
+    overflow: 'hidden',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.14)',
+    backgroundColor: 'rgba(18,18,22,0.55)',
   },
+  rowUnread: { borderColor: 'rgba(226,168,75,0.55)', boxShadow: '0px 0px 18px rgba(226,168,75,0.18)' },
   line: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  name: { fontFamily: fonts.semibold, fontSize: 16, color: colors.text, flex: 1 },
+  name: { fontFamily: fonts.semibold, fontSize: 17, color: colors.text, flex: 1, letterSpacing: -0.2 },
   time: { fontFamily: fonts.mono, fontSize: 10.5, color: colors.textFaint },
   preview: { fontFamily: fonts.medium, fontSize: 13, color: colors.textMuted, flex: 1, marginTop: 3 },
-  unread: { width: 9, height: 9, borderRadius: 5, backgroundColor: colors.gold, marginTop: 3 },
+  unread: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.gold, marginTop: 3, boxShadow: '0px 0px 8px rgba(226,168,75,0.8)' },
   empty: { alignItems: 'center', padding: space.xxl, marginTop: space.xxl },
 });

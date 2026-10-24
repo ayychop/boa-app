@@ -36,6 +36,12 @@ class BoaWidgetModule : Module() {
       refresh()
     }
 
+    // Glass only: the weather on the left and the clock on the right.
+    AsyncFunction("setFlipped") { flipped: Boolean ->
+      prefs().edit().putBoolean(KEY_FLIPPED, flipped).apply()
+      refresh()
+    }
+
     // What's on, under the clock: the station, then the song if known; the
     // station's record artwork (a file:// PNG, or null for the BOA logo);
     // and whether it's on air (the green dot).
@@ -87,6 +93,7 @@ class BoaWidgetModule : Module() {
     const val KEY_COLOR = "color"
     const val KEY_OPACITY = "opacity"
     const val KEY_LAYOUT = "layout"
+    const val KEY_FLIPPED = "flipped"
     const val KEY_TITLE = "title"
     const val KEY_SUBTITLE = "subtitle"
     const val KEY_ARTWORK = "artwork"

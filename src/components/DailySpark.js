@@ -51,9 +51,14 @@ export default function DailySpark({ category, hint }) {
           </Text>
         </View>
       </View>
+      {/* An oversized opening quote mark, set back like a watermark. */}
+      <Text style={styles.mark} accessibilityElementsHidden importantForAccessibility="no">
+        {'\u201C'}
+      </Text>
       <Text style={styles.quote} testID="daily-spark-quote">
         {text}
       </Text>
+      <Text style={styles.date}>{today.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })} · New every morning</Text>
       {hint ? <Text style={styles.hint}>{hint}</Text> : null}
     </View>
   );
@@ -84,6 +89,8 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.18)',
   },
   pillText: { fontFamily: fonts.semibold, fontSize: 11.5, color: colors.text },
-  quote: { fontFamily: fonts.serif, fontSize: 24, lineHeight: 31, color: colors.text, marginTop: space.lg },
+  mark: { position: 'absolute', right: space.lg, bottom: -38, fontFamily: fonts.serif, fontSize: 180, lineHeight: 180, color: 'rgba(226,168,75,0.16)' },
+  quote: { fontFamily: fonts.serif, fontSize: 27, lineHeight: 34, color: colors.text, marginTop: space.lg, letterSpacing: -0.2 },
+  date: { fontFamily: fonts.mono, fontSize: 10, letterSpacing: 1.4, textTransform: 'uppercase', color: 'rgba(243,239,232,0.6)', marginTop: space.lg },
   hint: { fontFamily: fonts.medium, fontSize: 12, color: colors.textMuted, marginTop: space.md },
 });

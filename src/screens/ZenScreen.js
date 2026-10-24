@@ -31,7 +31,8 @@ import useNowPlaying from '../hooks/useNowPlaying';
 import useBottomSpace from '../hooks/useBottomSpace';
 import useLayout from '../hooks/useLayout';
 import { podcastById } from '../data/podcasts';
-import { MEDIA_HEADERS, SCENES, SLEEP_TIMERS, SOUNDSCAPES, soundscapeById } from '../data/sleep';
+import { categoryOf, MEDIA_HEADERS, SCENES, SLEEP_TIMERS, soundscapeById, ZEN_CATEGORIES } from '../data/sleep';
+import useActiveAudio from '../hooks/useActiveAudio';
 import * as ambientAudio from '../audio/ambient';
 import { cachedSource } from '../utils/mediaCache';
 import { haptics } from '../utils/haptics';
@@ -217,6 +218,13 @@ function ScenePhoto({ scene, width, height, running }) {
   );
 }
 
+// A short, stable name for an address (djb2, base 36).
+function shortHash(text) {
+  let h = 5381;
+  for (let i = 0; i < text.length; i++) h = ((h * 33) ^ text.charCodeAt(i)) >>> 0;
+  return h.toString(36);
+}
+
 /**
  * The scene's looping video, muted and mixed with the app's audio (so it
  * never takes audio focus from a soundscape or the radio), played from the
@@ -239,7 +247,9 @@ function SceneVideo({ scene, running }) {
     let alive = true;
     const uri = Platform.OS === 'ios' ? scene.video.ios : scene.video.uri;
     const ext = Platform.OS === 'ios' ? 'mov' : 'webm';
-    cachedSource('scenes', `${scene.id}.${ext}`, uri).then((s) => alive && setSource(s));
+    // Named after the address too, so a new (sharper) video for a scene is
+    // downloaded rather than the old cached one played.
+    cachedSource('scenes', `${scene.id}-${shortHash(uri)}.${ext}`, uri).then((s) => alive && setSource(s));
     return () => {
       alive = false;
     };
@@ -403,11 +413,14 @@ function NowLine({ sound, withRadio = true, onOpenSound }) {
   const remaining = useSleepRemaining();
   const nowPlaying = useNowPlaying(current, current?.kind === 'radio');
   const podcast = current?.kind === 'podcast' ? podcastById(current.podcastId) : null;
-  const radioLine = current && withRadio
+  // A paused station isn't "on": only a playing one gets a line.
+  const radioOn = status === 'playing' || status === 'loading';
+  const radioLine = current && withRadio && radioOn
     ? [podcast ? podcast.title : current.name, podcast ? current.name : trackTitle || nowPlaying].filter(Boolean).join(' · ')
     : null;
   const scape = sound.id && sound.status !== 'idle' ? soundscapeById(sound.id) : null;
-  const soundLine = scape ? `${scape.label} · ${scape.detail}` : null;
+  const kind = scape ? categoryOf(scape.id) : null;
+  const soundLine = scape ? `${kind.label} · ${scape.label}` : null;
   const asButton = !!onOpenSound && !!scape;
   const lines = [asButton ? null : soundLine, radioLine].filter(Boolean);
   if (!lines.length && !remaining && !asButton) return null;
@@ -421,11 +434,11 @@ function NowLine({ sound, withRadio = true, onOpenSound }) {
           }}
           hitSlop={8}
           accessibilityRole="button"
-          accessibilityLabel={`${scape.label}, ${scape.detail}. Open Zen`}
+          accessibilityLabel={`${kind.label}, ${scape.label}. Open Zen`}
           testID="zen-screensaver-sound"
           style={({ pressed }) => [styles.soundChip, pressed && { transform: [{ scale: 0.96 }], opacity: 0.85 }]}
         >
-          <Ionicons name={scape.icon} size={16} color={colors.text} />
+          <Ionicons name={kind.icon} size={16} color={colors.text} />
           <Text style={styles.nowText} numberOfLines={1}>
             {soundLine}
           </Text>
@@ -466,14 +479,19 @@ function GlassButton({ icon, label, onPress, size = 48, primary, children }) {
   );
 }
 
-// One soundscape, in its own colour (Rain deep blue, Deep sleep violet,
-// 432 Hz gold, Brown noise earth): tap to play it on a loop, tap again to
-// pause. The card glows up into its colour when it's on, on the UI thread.
-function SoundCard({ sound, state }) {
-  const on = state.id === sound.id && (state.status === 'playing' || state.status === 'loading');
-  const loading = state.id === sound.id && state.status === 'loading';
-  const failed = state.id === sound.id && state.status === 'error';
-  const tone = sound.tone ?? colors.gold;
+// One kind of sound, in its own colour (Rain deep blue, Deep sleep violet,
+// Frequencies gold, Nature firelight). Tap to play its sound (the one last
+// chosen there, else its first); tap again to pause. While one of its
+// sounds is on, the card names that sound. It glows up into its colour
+// when it's on, on the UI thread.
+function KindCard({ kind, state }) {
+  const current = state.id ? soundscapeById(state.id) : null;
+  const mine = current?.category === kind.id ? current : null;
+  const on = !!mine && (state.status === 'playing' || state.status === 'loading');
+  const loading = !!mine && state.status === 'loading';
+  const failed = !!mine && state.status === 'error';
+  const paused = !!mine && state.status === 'paused';
+  const tone = kind.tone;
   const lit = useSharedValue(on ? 1 : 0);
   const press = useSharedValue(1);
   useEffect(() => {
@@ -492,7 +510,7 @@ function SoundCard({ sound, state }) {
     <Pressable
       onPress={() => {
         haptics.selection();
-        ambientAudio.toggle(sound.id);
+        ambientAudio.toggleCategory(kind.id);
       }}
       onPressIn={() => {
         press.value = withTiming(0.95, { duration: 90 });
@@ -501,23 +519,60 @@ function SoundCard({ sound, state }) {
         press.value = withSpring(1, { duration: 380, dampingRatio: 0.55 });
       }}
       accessibilityRole="button"
-      accessibilityLabel={`${on ? 'Pause' : 'Play'} ${sound.label}`}
+      accessibilityLabel={`${on ? 'Pause' : 'Play'} ${kind.label}`}
+      accessibilityHint={mine ? `${mine.label}` : undefined}
       accessibilityState={{ selected: on }}
-      testID={`soundscape-${sound.id}`}
+      testID={`soundscape-${kind.id}`}
     >
       <Animated.View style={[styles.card, frame]}>
         <View style={styles.cardTop}>
-          <Ionicons name={sound.icon} size={20} color={on ? '#FFFFFF' : tone} />
+          <Ionicons name={kind.icon} size={20} color={on ? '#FFFFFF' : tone} />
           {loading ? <ActivityIndicator size="small" color="#FFFFFF" /> : on ? <Equalizer color="#FFFFFF" /> : null}
         </View>
-        <Text style={[styles.cardLabel, { color: ink }]} numberOfLines={1}>
-          {sound.label}
+        <Text style={[styles.cardLabel, { color: ink }]} numberOfLines={1} testID={`soundscape-${kind.id}-label`}>
+          {mine ? mine.label : kind.label}
         </Text>
         <Text style={[styles.cardDetail, on && { color: 'rgba(255,255,255,0.8)' }]} numberOfLines={1}>
-          {failed ? "Couldn't load. Tap to retry" : sound.detail}
+          {failed ? "Couldn't load. Tap to retry" : mine ? `${kind.label}${paused ? ' · Paused' : ''}` : `${kind.sounds.length} sounds`}
         </Text>
       </Animated.View>
     </Pressable>
+  );
+}
+
+// The six sounds of the kind that's on, to switch between with one tap.
+function SoundChoices({ state }) {
+  const kind = state.id ? categoryOf(state.id) : null;
+  if (!kind) return null;
+  return (
+    <Animated.View entering={FadeIn.duration(260)} testID={`zen-sounds-${kind.id}`}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+        {kind.sounds.map((sound) => {
+          const on = state.id === sound.id;
+          return (
+            <Pressable
+              key={sound.id}
+              onPress={() => {
+                haptics.selection();
+                if (!on || state.status !== 'playing') ambientAudio.play(sound.id);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel={`Choose ${sound.label}`}
+              accessibilityHint={sound.detail}
+              accessibilityState={{ selected: on }}
+              testID={`zen-sound-${sound.id}`}
+              style={({ pressed }) => [
+                styles.chip,
+                on && { backgroundColor: kind.tone, borderColor: kind.tone },
+                pressed && { opacity: 0.7 },
+              ]}
+            >
+              <Text style={[styles.chipText, on && { color: '#FFFFFF' }]}>{sound.label}</Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+    </Animated.View>
   );
 }
 
@@ -631,6 +686,7 @@ function ZenRoom() {
   const focused = useIsFocused();
   const { ambient, returnTab, wake } = useZen();
   const sound = useAmbientAudio();
+  const active = useActiveAudio();
   const { current, isPlaying } = usePlayer();
   const bottomSpace = useBottomSpace(space.md);
   const hint = useSharedValue(0);
@@ -711,7 +767,7 @@ function ZenRoom() {
   const backTo = returnTab ? TAB_TITLES[returnTab] ?? returnTab : null;
   // Tall enough for the soundscapes, the timer and the radio's controls
   // without scrolling.
-  const panelHeight = short ? 0 : 312;
+  const panelHeight = short ? 0 : sound.id ? 372 : 312;
   const clockArea = {
     top: top + (ambient ? 0 : 56),
     bottom: ambient ? bottom + 40 + (radioCard ? RADIO_CARD + space.md : 0) : panelBeside ? bottom : bottom + panelHeight + space.md,
@@ -772,13 +828,15 @@ function ZenRoom() {
                   in view. */}
               <View style={styles.panelHead}>
                 <Slate>Soundscapes</Slate>
-                <Transport />
+                {/* The radio's controls, only while the radio is what's on. */}
+                {active.kind === 'radio' && <Transport />}
               </View>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.cards}>
-                {SOUNDSCAPES.map((s) => (
-                  <SoundCard key={s.id} sound={s} state={sound} />
+                {ZEN_CATEGORIES.map((k) => (
+                  <KindCard key={k.id} kind={k} state={sound} />
                 ))}
               </ScrollView>
+              <SoundChoices state={sound} />
               <TimerRow />
             </ScrollView>
           </View>

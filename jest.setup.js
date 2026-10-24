@@ -181,6 +181,7 @@ jest.mock('./modules/boa-widget', () => ({
   isAvailable: true,
   setStyle: jest.fn(() => Promise.resolve()),
   setLayout: jest.fn(() => Promise.resolve()),
+  setFlipped: jest.fn(() => Promise.resolve()),
   setArtwork: jest.fn(() => Promise.resolve()),
   setWeather: jest.fn(() => Promise.resolve()),
   setNowPlaying: jest.fn(() => Promise.resolve()),

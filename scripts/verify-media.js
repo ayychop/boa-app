@@ -2,10 +2,11 @@
 // network, the way the app fetches them (same User-Agent), and that each
 // one is the type of file it should be. Run before a release:
 //   npm run verify:media
+const fs = require('fs');
 const { SCENES, SOUNDSCAPES, MEDIA_HEADERS } = require('./sleep-data');
 
 const items = [
-  ...SOUNDSCAPES.map((s) => ({ name: `sound  ${s.id}`, uri: s.uri, type: 'audio/mpeg' })),
+  ...SOUNDSCAPES.filter((s) => s.uri).map((s) => ({ name: `sound  ${s.id}`, uri: s.uri, type: 'audio/mpeg' })),
   ...Object.values(SCENES).map((s) => ({ name: `photo  ${s.id}`, uri: s.uri, type: 'image/jpeg' })),
   ...Object.values(SCENES).map((s) => ({ name: `video  ${s.id} (Android, web)`, uri: s.video.uri, type: 'video/webm' })),
   ...Object.values(SCENES).map((s) => ({ name: `video  ${s.id} (iOS)`, uri: s.video.ios, type: 'video/quicktime' })),
@@ -22,7 +23,13 @@ const MAGIC = {
 };
 
 async function check({ name, uri, type }) {
-  const res = await fetch(uri, { headers: { ...MEDIA_HEADERS, Range: 'bytes=0-4095' }, redirect: 'follow' });
+  let res;
+  // Rate-limited (429): back off and try again, up to four times.
+  for (let attempt = 0; attempt < 5; attempt++) {
+    res = await fetch(uri, { headers: { ...MEDIA_HEADERS, Range: 'bytes=0-4095' }, redirect: 'follow' });
+    if (res.status !== 429) break;
+    await new Promise((r) => setTimeout(r, 15000 * (attempt + 1)));
+  }
   const got = (res.headers.get('content-type') || '').split(';')[0];
   const body = Buffer.from(await res.arrayBuffer());
   const magic = MAGIC[type](body);
@@ -31,10 +38,22 @@ async function check({ name, uri, type }) {
   return ok;
 }
 
+// Bundled sounds: the file is there, and it's a WAV.
+function checkBundled(s) {
+  const file = s.asset.bundled;
+  const ok = fs.existsSync(file) && fs.readFileSync(file).subarray(0, 4).toString() === 'RIFF';
+  console.log(`${ok ? 'OK  ' : 'FAIL'} sound  ${s.id}  bundled ${file.split('/assets/')[1]}`);
+  return ok;
+}
+
 (async () => {
-  const results = [];
-  for (const item of items) results.push(await check(item).catch((e) => (console.log(`FAIL ${item.name}  ${e.message}`), false)));
+  const results = SOUNDSCAPES.filter((s) => s.asset).map(checkBundled);
+  for (const item of items) {
+    results.push(await check(item).catch((e) => (console.log(`FAIL ${item.name}  ${e.message}`), false)));
+    // Commons rate-limits quick bursts (HTTP 429).
+    await new Promise((r) => setTimeout(r, 700));
+  }
   const failed = results.filter((r) => !r).length;
-  console.log(failed ? `\n${failed} of ${items.length} failed` : `\nAll ${items.length} media files reachable and valid.`);
+  console.log(failed ? `\n${failed} of ${results.length} failed` : `\nAll ${results.length} media files reachable and valid.`);
   process.exit(failed ? 1 : 0);
 })();

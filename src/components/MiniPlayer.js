@@ -27,6 +27,11 @@ import StationLogo from './StationLogo';
 import { SleepButton } from './SleepTimerMenu';
 import { useSleepRemaining } from '../context/SleepTimerContext';
 import useLayout from '../hooks/useLayout';
+import useActiveAudio from '../hooks/useActiveAudio';
+import * as ambient from '../audio/ambient';
+import { categoryOf, soundscapeById } from '../data/sleep';
+import { haptics } from '../utils/haptics';
+import { useZen } from '../context/ZenContext';
 import { colors, fonts, radius, space } from '../theme';
 
 const HEIGHT = 60;
@@ -58,12 +63,112 @@ function ProgressLine({ tint }) {
   );
 }
 
+/** Whether the mini player has anything to show (radio, podcast or Zen). */
+export function useMiniPlayerShown() {
+  return useActiveAudio().kind != null;
+}
+
+// The pill's frosted glass and hairline, shared by both kinds of pill.
+function Glass() {
+  return (
+    <>
+      <BlurView intensity={100} tint="dark" experimentalBlurMethod="dimezisBlurView" style={StyleSheet.absoluteFill} />
+      <View style={styles.tint} />
+      <LinearGradient
+        pointerEvents="none"
+        colors={['rgba(255,255,255,0.16)', 'rgba(255,255,255,0.03)', 'rgba(255,255,255,0)']}
+        locations={[0, 0.45, 1]}
+        style={styles.sheen}
+      />
+    </>
+  );
+}
+
 /**
- * The floating now-playing pill. `placement="bottom"` (the default) rides on
- * top of the tab bar; `placement="top"` docks at the top of its container,
- * as on Home, sliding in from above.
+ * The pill for a Zen soundscape: its kind ("Rain"), the sound and whether
+ * it's paused, and its own play/pause. Tapping it opens Zen.
  */
-export default function MiniPlayer({ onOpenRadio, placement = 'bottom', maxWidth }) {
+function ZenPill({ zen, placement, maxWidth }) {
+  const m = useMetrics();
+  const { openZen } = useZen();
+  const sound = soundscapeById(zen.id);
+  const kind = categoryOf(zen.id);
+  if (!sound || !kind) return null;
+  const playing = zen.status === 'playing' || zen.status === 'loading';
+  const toggle = () => {
+    haptics.tap();
+    if (playing) ambient.pause();
+    else ambient.play(zen.id);
+  };
+  return (
+    <Animated.View
+      entering={(placement === 'top' ? FadeInUp : FadeInDown).springify().damping(17).stiffness(170)}
+      exiting={(placement === 'top' ? FadeOutUp : FadeOutDown).duration(180)}
+      style={placement === 'top' ? styles.wrapTop : [styles.wrap, { marginBottom: m.margin }]}
+      pointerEvents="box-none"
+      testID="mini-player-zen"
+    >
+      <View style={[styles.shell, maxWidth && { maxWidth }]}>
+        <View style={[styles.pill, { height: m.height }]}>
+          <Glass />
+          <Pressable
+            onPress={() => openZen()}
+            accessibilityRole="button"
+            accessibilityLabel={`Now playing: ${kind.label}, ${sound.label}. Open Zen`}
+            style={styles.info}
+          >
+            <View style={[styles.zenIcon, { width: m.art, height: m.art, borderRadius: m.art / 2, backgroundColor: kind.tone }]}>
+              <Ionicons name={kind.icon.replace('-outline', '')} size={Math.round(m.art * 0.48)} color="#FFFFFF" />
+            </View>
+            <View style={styles.body}>
+              <Text style={styles.title} numberOfLines={1}>
+                {kind.label}
+              </Text>
+              <Text style={styles.subtitle} numberOfLines={1}>
+                {`${sound.label} · ${playing ? 'Zen' : 'Paused'}`}
+              </Text>
+            </View>
+          </Pressable>
+          <SleepButton size={m.button - 6} />
+          <Pressable
+            onPress={toggle}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={playing ? `Pause ${kind.label}` : `Play ${kind.label}`}
+            testID="mini-player-zen-toggle"
+            style={({ pressed }) => [
+              styles.button,
+              { width: m.button, height: m.button, borderRadius: m.button / 2 },
+              pressed && { transform: [{ scale: 0.92 }] },
+            ]}
+          >
+            {zen.status === 'loading' ? (
+              <ActivityIndicator color={colors.bg} size="small" />
+            ) : (
+              <Ionicons name={playing ? 'pause' : 'play'} size={20} color={colors.bg} style={playing ? null : { marginLeft: 2 }} />
+            )}
+          </Pressable>
+        </View>
+      </View>
+    </Animated.View>
+  );
+}
+
+/**
+ * The floating now-playing pill, for whatever the app is on: the radio or a
+ * podcast, or a Zen soundscape (useActiveAudio), never a paused station
+ * while Zen plays. `placement="bottom"` (the default) rides on top of the
+ * tab bar; `placement="top"` docks at the top of its container, as on Home,
+ * sliding in from above.
+ */
+export default function MiniPlayer(props) {
+  const { kind, zen } = useActiveAudio();
+  if (kind === 'zen') return <ZenPill zen={zen} placement={props.placement ?? 'bottom'} maxWidth={props.maxWidth} />;
+  if (kind === 'radio') return <RadioPill {...props} />;
+  return null;
+}
+
+function RadioPill({ onOpenRadio, placement = 'bottom', maxWidth }) {
   const { current, status, trackTitle, isPlaying, toggle, retry } = usePlayer();
   const media = useMedia();
   const reduceMotion = useReducedMotion();
@@ -111,14 +216,7 @@ export default function MiniPlayer({ onOpenRadio, placement = 'bottom', maxWidth
         <Animated.View pointerEvents="none" style={[styles.halo, haloStyle]} />
         <View style={[styles.pill, { height: m.height }]}>
           {/* Frosted glass: heavy blur, a faint tint, a top sheen, a hairline. */}
-          <BlurView intensity={100} tint="dark" experimentalBlurMethod="dimezisBlurView" style={StyleSheet.absoluteFill} />
-          <View style={styles.tint} />
-          <LinearGradient
-            pointerEvents="none"
-            colors={['rgba(255,255,255,0.16)', 'rgba(255,255,255,0.03)', 'rgba(255,255,255,0)']}
-            locations={[0, 0.45, 1]}
-            style={styles.sheen}
-          />
+          <Glass />
           <Pressable
             onPress={open}
             accessibilityRole="button"
@@ -219,6 +317,7 @@ const styles = StyleSheet.create({
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   title: { fontFamily: fonts.bold, color: colors.text, fontSize: 15, letterSpacing: -0.3 },
   subtitle: { fontFamily: fonts.medium, color: colors.textMuted, fontSize: 12.5, marginTop: 1 },
+  zenIcon: { alignItems: 'center', justifyContent: 'center' },
   button: {
     alignItems: 'center',
     justifyContent: 'center',

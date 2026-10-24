@@ -19,7 +19,8 @@ import java.io.File
  * BOA home screen widget, in the style picked in the app (Profile > Home
  * screen widget):
  * - Glass (boa_widget): the clock and date, today's weather and what's
- *   playing, on a pane of frosted glass;
+ *   playing, on a pane of frosted glass; swapped (boa_widget_flipped), the
+ *   weather on the left and the clock on the right, Samsung style;
  * - Compact (boa_widget_compact): one slim row, the time, what's playing
  *   and the temperature;
  * - Record (boa_widget_record): the minimal radio wheel, the station's
@@ -69,11 +70,14 @@ class BoaWidgetProvider : AppWidgetProvider() {
     onUpdate(context, appWidgetManager, intArrayOf(appWidgetId))
   }
 
+  // The chosen style; Glass swapped (weather left, clock right) when the
+  // app's "Swap sides" is on.
   private fun styleOf(context: Context): Style {
-    val name = runCatching {
-      context.getSharedPreferences("boa_widget", Context.MODE_PRIVATE).getString("layout", null)
-    }.getOrNull()
-    return STYLES[name] ?: STYLES.getValue("glass")
+    val prefs = context.getSharedPreferences("boa_widget", Context.MODE_PRIVATE)
+    val name = runCatching { prefs.getString("layout", null) }.getOrNull()
+    val flipped = runCatching { prefs.getBoolean("flipped", false) }.getOrDefault(false)
+    val style = STYLES[name] ?: STYLES.getValue("glass")
+    return if (flipped && style === STYLES["glass"]) STYLES.getValue("glass_flipped") else style
   }
 
   private fun draw(context: Context): RemoteViews {
@@ -232,6 +236,14 @@ class BoaWidgetProvider : AppWidgetProvider() {
     private val STYLES = mapOf(
       "glass" to Style(
         R.layout.boa_widget,
+        MEDIA + setOf(
+          R.id.boa_widget_time, R.id.boa_widget_date, R.id.boa_widget_rule, R.id.boa_widget_weather,
+          R.id.boa_widget_wx_icon, R.id.boa_widget_wx_temp, R.id.boa_widget_wx_place, R.id.boa_widget_wx_detail,
+        ),
+        160,
+      ),
+      "glass_flipped" to Style(
+        R.layout.boa_widget_flipped,
         MEDIA + setOf(
           R.id.boa_widget_time, R.id.boa_widget_date, R.id.boa_widget_rule, R.id.boa_widget_weather,
           R.id.boa_widget_wx_icon, R.id.boa_widget_wx_temp, R.id.boa_widget_wx_place, R.id.boa_widget_wx_detail,

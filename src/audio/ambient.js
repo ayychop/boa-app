@@ -1,5 +1,5 @@
 import { createAudioPlayer } from 'expo-audio';
-import { MEDIA_HEADERS, SOUNDSCAPES, soundscapeById } from '../data/sleep';
+import { categoryById, MEDIA_HEADERS, SOUNDSCAPES, soundscapeById } from '../data/sleep';
 import { cachedSource, cachedUri, prefetch } from '../utils/mediaCache';
 import * as focus from './focus';
 
@@ -29,13 +29,16 @@ function emit(patch) {
 }
 
 /** A local copy of the soundscape, downloading it the first time. */
-export const localSource = (soundscape) => cachedSource('soundscapes', `${soundscape.id}.mp3`, soundscape.uri);
+export const localSource = (soundscape) =>
+  soundscape.asset ? Promise.resolve(soundscape.asset) : cachedSource('soundscapes', `${soundscape.id}.mp3`, soundscape.uri);
 
 /**
- * Something that plays now: the cached copy, else the stream (and the
- * download starts in the background, so the next play is from the phone).
+ * Something that plays now: a bundled sound as it is; else the cached copy,
+ * else the stream (and the download starts in the background, so the next
+ * play is from the phone).
  */
 function instantSource(soundscape) {
+  if (soundscape.asset) return soundscape.asset;
   const local = cachedUri('soundscapes', `${soundscape.id}.mp3`);
   if (local) return { uri: local };
   localSource(soundscape);
@@ -44,7 +47,7 @@ function instantSource(soundscape) {
 
 /** Downloads every soundscape in the background (the Zen tab calls this). */
 export function warmUp() {
-  return prefetch(SOUNDSCAPES.map((s) => ({ folder: 'soundscapes', name: `${s.id}.mp3`, uri: s.uri })));
+  return prefetch(SOUNDSCAPES.filter((s) => s.uri).map((s) => ({ folder: 'soundscapes', name: `${s.id}.mp3`, uri: s.uri })));
 }
 
 function stopFade() {
@@ -52,10 +55,30 @@ function stopFade() {
   fadeTimer = null;
 }
 
+// The sound last chosen in each kind, so tapping the kind again plays it.
+const chosen = {};
+
+/** The sound a kind plays when tapped: the last one chosen there, else its first. */
+export const chosenIn = (categoryId) => chosen[categoryId] ?? categoryById(categoryId)?.sounds[0]?.id ?? null;
+
+/**
+ * Tapping a kind (Rain, Deep sleep...): pauses it if it's the one playing,
+ * resumes it if paused, otherwise starts its sound.
+ */
+export function toggleCategory(categoryId) {
+  const current = soundscapeById(state.id);
+  if (current?.category === categoryId) {
+    if (state.status === 'playing' || state.status === 'loading') return pause();
+    return play(state.id);
+  }
+  return play(chosenIn(categoryId));
+}
+
 /** Starts a soundscape looping (or carries on if it's already the one playing). */
 export async function play(id) {
   const soundscape = soundscapeById(id);
   if (!soundscape) return;
+  chosen[soundscape.category] = id;
   stopFade();
   focus.claim('zen');
   if (state.id === id && player && state.status !== 'error') {
@@ -102,6 +125,7 @@ export function stop() {
   stopFade();
   player?.pause();
   emit({ id: null, status: 'idle' });
+  focus.release('zen');
 }
 
 export function setVolume(volume) {

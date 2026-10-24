@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as widget from '../../modules/boa-widget';
 
 const KEY = 'boa:widget:v1';
-export const DEFAULT_WIDGET_STYLE = { color: '#141416', opacity: 0.55, layout: 'glass' };
+export const DEFAULT_WIDGET_STYLE = { color: '#141416', opacity: 0.55, layout: 'glass', flipped: false };
 
 // The widget's styles, in the order the settings offer them.
 export const WIDGET_LAYOUTS = [
@@ -34,6 +34,7 @@ export default function useWidgetStyle() {
       AsyncStorage.setItem(KEY, JSON.stringify(next)).catch(() => {});
       widget.setStyle(next.color, next.opacity);
       if (next.layout !== prev.layout) widget.setLayout(next.layout);
+      if (next.flipped !== prev.flipped) widget.setFlipped(next.flipped);
       return next;
     });
   }, []);

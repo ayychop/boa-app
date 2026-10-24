@@ -267,6 +267,32 @@ export async function searchProfiles({ role = null, query = '', openOnly = false
   return { rows: rows.slice(0, PAGE_SIZE), more: rows.length > PAGE_SIZE };
 }
 
+// --------------------------------------------------------- community pulse
+
+/** The newest people on the Hub (visible profiles), newest first. */
+export async function listNewMembers({ limit = 12, excludeId } = {}) {
+  let q = need().from('profiles').select(PROFILE_FIELDS).eq('visible_on_hub', true).order('created_at', { ascending: false }).limit(limit);
+  if (excludeId) q = q.neq('id', excludeId);
+  return check(await q);
+}
+
+/**
+ * Creatives to follow: visible people who share one of your roles, open
+ * for work and most recently active first. With no roles, the most active.
+ */
+export async function listSuggested({ roles = [], limit = 12, excludeId } = {}) {
+  let q = need()
+    .from('profiles')
+    .select(PROFILE_FIELDS)
+    .eq('visible_on_hub', true)
+    .order('open_for_work', { ascending: false })
+    .order('last_seen_at', { ascending: false })
+    .limit(limit);
+  if (roles.length) q = q.overlaps('roles', roles);
+  if (excludeId) q = q.neq('id', excludeId);
+  return check(await q);
+}
+
 // ---------------------------------------------------------- block, report
 
 export async function blockUser(myId, otherId) {

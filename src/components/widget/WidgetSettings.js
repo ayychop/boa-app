@@ -3,6 +3,7 @@ import Slider from '@react-native-community/slider';
 import { LinearGradient } from 'expo-linear-gradient';
 import BottomSheet from '../BottomSheet';
 import { Slate } from '../ui';
+import { Toggle } from '../kit';
 import useWidgetStyle, { DEFAULT_WIDGET_STYLE, WIDGET_LAYOUTS } from '../../hooks/useWidgetStyle';
 import { hslHex, hueOf, parseHex, withAlpha } from '../../utils/color';
 import { haptics } from '../../utils/haptics';
@@ -43,7 +44,7 @@ function MiniRecord({ size }) {
 // A small model of the widget, in the chosen style, on a wallpaper-ish
 // backdrop, so the glass's tint and clarity read as they will on the home
 // screen.
-function Preview({ color, opacity, layout }) {
+function Preview({ color, opacity, layout, flipped }) {
   const dark = luminance(color) > 0.6 && opacity > 0.5;
   const primary = dark ? '#141416' : colors.text;
   const secondary = dark ? 'rgba(20,20,22,0.7)' : 'rgba(243,239,232,0.7)';
@@ -70,14 +71,16 @@ function Preview({ color, opacity, layout }) {
     );
   } else {
     widget = (
-      <Glass color={color} opacity={opacity} testID="widget-preview">
+      <Glass color={color} opacity={opacity} style={flipped && { flexDirection: 'row-reverse' }} testID="widget-preview">
         <MiniRecord size={64} />
-        <View style={{ flex: 1 }}>
+        <View style={{ flex: 1, alignItems: flipped ? 'flex-end' : 'flex-start' }}>
           <Text style={[styles.time, { color: primary }]}>10:47</Text>
           <Text style={[styles.date, { color: secondary }]}>Saturday 24 October</Text>
           <Text style={[styles.cta, { color: accent }]}>BOA RADIO · TAP TO TUNE IN</Text>
         </View>
-        <Text style={[styles.temp, { color: primary }]}>14°</Text>
+        <Text style={[styles.temp, { color: primary }]} testID="widget-preview-temp">
+          14°
+        </Text>
       </Glass>
     );
   }
@@ -104,7 +107,7 @@ export default function WidgetSettings({ open, onClose }) {
         <Text style={[type.h1, { marginTop: space.sm }]}>
           Your glass, <Text style={type.serif}>your colour.</Text>
         </Text>
-        <Preview color={style.color} opacity={style.opacity} layout={style.layout} />
+        <Preview color={style.color} opacity={style.opacity} layout={style.layout} flipped={style.flipped} />
 
         <Slate style={styles.section}>Style</Slate>
         <View style={styles.layouts}>
@@ -131,6 +134,17 @@ export default function WidgetSettings({ open, onClose }) {
             );
           })}
         </View>
+
+        {/* Samsung's weather widget puts the weather first. */}
+        {style.layout === 'glass' && (
+          <View style={styles.swapRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.layoutLabel}>Swap sides</Text>
+              <Text style={styles.layoutDetail}>Weather on the left, clock and date on the right</Text>
+            </View>
+            <Toggle value={!!style.flipped} onChange={(v) => update({ flipped: v })} label="Swap sides" testID="widget-flip" />
+          </View>
+        )}
 
         <Slate style={styles.section}>Colour</Slate>
         <View style={styles.swatches}>
@@ -239,6 +253,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(243,239,232,0.14)',
     backgroundColor: 'rgba(243,239,232,0.05)',
   },
+  swapRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, marginTop: space.lg },
   layoutOn: { backgroundColor: colors.gold, borderColor: colors.gold },
   layoutLabel: { fontFamily: fonts.semibold, fontSize: 14, color: colors.text },
   layoutDetail: { fontFamily: fonts.medium, fontSize: 11, color: colors.textMuted, marginTop: 2 },

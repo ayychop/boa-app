@@ -7,7 +7,7 @@ import * as video from 'expo-video';
 import { Platform } from 'react-native';
 import * as engine from '../src/audio/engine';
 import * as ambient from '../src/audio/ambient';
-import { MEDIA_HEADERS, SCENES, SOUNDSCAPES, soundscapeById } from '../src/data/sleep';
+import { MEDIA_HEADERS, SCENES, SOUNDSCAPES, soundscapeById, ZEN_CATEGORIES } from '../src/data/sleep';
 import { advance, bootIntoTabs, instrument, openTab, PORTRAIT, setWindow } from './helpers';
 
 jest.useFakeTimers();
@@ -51,11 +51,14 @@ async function openHub(user, from = 'Home') {
   expect(screen.getByTestId('zen-screen')).toBeOnTheScreen();
 }
 
-test('the Zen button opens the Sleep & Meditation Hub with every soundscape, the timer and the night scene', async () => {
+test('the Zen button opens the Sleep & Meditation Hub with every kind of sound, the timer and the night scene', async () => {
   const user = userEvent.setup();
   await openHub(user);
   expect(screen.getByText('Sleep & Meditation')).toBeOnTheScreen();
-  for (const s of SOUNDSCAPES) expect(screen.getByRole('button', { name: `Play ${s.label}` })).toBeOnTheScreen();
+  for (const k of ZEN_CATEGORIES) {
+    expect(k.sounds).toHaveLength(6);
+    expect(screen.getByRole('button', { name: `Play ${k.label}` })).toBeOnTheScreen();
+  }
   for (const m of [15, 30, 45, 60, 90]) expect(screen.getByRole('button', { name: `Fade out in ${m} minutes` })).toBeOnTheScreen();
   // The background photograph is requested from Wikimedia with the app's
   // own User-Agent (Wikimedia refuses OkHttp's default).
@@ -95,7 +98,8 @@ test.each(['Home', 'Radio', 'Zen'])('from %s: tapping Rain downloads the recordi
 test('switching soundscapes swaps the recording in the same looping player', async () => {
   const user = userEvent.setup();
   await openHub(user);
-  await user.press(screen.getByRole('button', { name: 'Play 432 Hz' }));
+  // A kind plays its first sound: Frequencies is 432 Hz, Deep sleep is white noise.
+  await user.press(screen.getByRole('button', { name: 'Play Frequencies' }));
   await advance(200);
   const player = lastPlayer();
   await user.press(screen.getByRole('button', { name: 'Play Deep sleep' }));
@@ -119,7 +123,9 @@ test('if the download fails it streams the recording instead, with the same head
   jest.spyOn(console, 'warn').mockImplementation(() => {});
   try {
     await openHub(user);
-    await user.press(screen.getByRole('button', { name: 'Play Brown noise' }));
+    await user.press(screen.getByRole('button', { name: 'Play Deep sleep' }));
+    await advance(200);
+    await user.press(screen.getByRole('button', { name: 'Choose Brown noise' }));
     await advance(200);
     expect(lastPlayer().source).toEqual({ uri: soundscapeById('brown-noise').uri, headers: MEDIA_HEADERS });
     expect(lastPlayer().loop).toBe(true);
@@ -186,8 +192,13 @@ test('each scene loops its own video, muted, mixed with the app audio, from the 
   await advance(200);
   const night = video.__players[video.__players.length - 1];
   const nightUri = Platform.OS === 'ios' ? SCENES.night.video.ios : SCENES.night.video.uri;
-  expect(File.downloadFileAsync.mock.calls.some(([u, d, o]) => u === nightUri && d.uri === `file:///cache/scenes/night.${videoExt}` && o.headers === MEDIA_HEADERS)).toBe(true);
-  expect(night.source).toEqual({ uri: `file:///cache/scenes/night.${videoExt}` });
+  // Cached under the scene and a hash of its address, so a sharper video
+  // replaces an old cached copy.
+  const cachedAs = (scene) => new RegExp(`^file:///cache/scenes/${scene}-[0-9a-z]+\\.${videoExt}$`);
+  const nightDownload = File.downloadFileAsync.mock.calls.find(([u]) => u === nightUri);
+  expect(nightDownload[1].uri).toMatch(cachedAs('night'));
+  expect(nightDownload[2].headers).toBe(MEDIA_HEADERS);
+  expect(night.source.uri).toMatch(cachedAs('night'));
   expect(night.loop).toBe(true);
   expect(night.muted).toBe(true);
   expect(night.audioMixingMode).toBe('mixWithOthers');
@@ -197,7 +208,7 @@ test('each scene loops its own video, muted, mixed with the app audio, from the 
   await advance(300);
   const rain = video.__players[video.__players.length - 1];
   expect(rain).not.toBe(night);
-  expect(rain.source).toEqual({ uri: `file:///cache/scenes/rain.${videoExt}` });
+  expect(rain.source.uri).toMatch(cachedAs('rain'));
   expect(rain.play).toHaveBeenCalled();
   // Off the Zen tab, the video is gone with the rest of the room; the
   // soundscape plays on.
@@ -219,14 +230,19 @@ test('credits (in Profile) list every recording and photograph with its licence'
   }
 });
 
-test('every soundscape and scene points at a real https file with a licence and a source page', () => {
+test('every recording and scene points at a real https file with a licence and a source page; generated sounds are bundled', () => {
   const scenes = Object.values(SCENES);
-  for (const item of [...SOUNDSCAPES, ...scenes, ...scenes.map((x) => x.video)]) {
+  for (const item of [...SOUNDSCAPES.filter((s) => !s.asset), ...scenes, ...scenes.map((x) => x.video)]) {
     expect(item.uri).toMatch(/^https:\/\/(upload\.wikimedia\.org|archive\.org)\//);
     expect(item.license).toMatch(/Public domain|CC0|CC BY/);
     expect(item.source).toMatch(/^https:\/\//);
     expect(item.author).toBeTruthy();
   }
+  // BOA's own tones and noise: in the app, no download, BOA's licence.
+  const generated = SOUNDSCAPES.filter((s) => s.asset);
+  expect(generated).toHaveLength(9);
+  for (const s of generated) expect(s).toMatchObject({ author: 'BOA Networks', license: 'CC0 1.0', source: null });
+  expect(new Set(SOUNDSCAPES.map((s) => s.id)).size).toBe(24);
   for (const s of scenes) expect(s.video.ios).toMatch(/^https:\/\/upload\.wikimedia\.org\/.+\.mov$/);
   expect(engine.fadeOut).toBeDefined();
 });

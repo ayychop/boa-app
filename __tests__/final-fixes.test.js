@@ -1,7 +1,7 @@
 import { screen, userEvent } from '@testing-library/react-native';
 import { AppState, StyleSheet } from 'react-native';
 import * as screenEvents from '../modules/boa-screen';
-import { SCENES, SOUNDSCAPES } from '../src/data/sleep';
+import { SCENES, ZEN_CATEGORIES } from '../src/data/sleep';
 import { advance, bootIntoTabs, instrument, openTab, PORTRAIT, setWindow } from './helpers';
 
 jest.useFakeTimers();
@@ -59,18 +59,18 @@ test("Home's buttons sit on a static layer, apart from the moving key art", asyn
   }
 });
 
-test('every soundscape has a room of its own, and choosing one changes the room with no tint over it', async () => {
-  const scenes = SOUNDSCAPES.map((s) => s.scene);
-  expect(new Set(scenes).size).toBe(SOUNDSCAPES.length);
+test('every kind of sound has a room of its own, and choosing one changes the room with no tint over it', async () => {
+  const scenes = ZEN_CATEGORIES.map((k) => k.scene);
+  expect(new Set(scenes).size).toBe(ZEN_CATEGORIES.length);
   scenes.forEach((id) => expect(SCENES[id]).toBeDefined());
 
   const user = userEvent.setup();
   await bootIntoTabs(user);
   await openTab(user, 'Zen');
-  for (const sound of SOUNDSCAPES) {
-    await user.press(screen.getByRole('button', { name: `Play ${sound.label}` }));
+  for (const kind of ZEN_CATEGORIES) {
+    await user.press(screen.getByRole('button', { name: `Play ${kind.label}` }));
     await advance(1600);
-    expect(screen.getByTestId(`zen-scene-${sound.scene}`)).toBeOnTheScreen();
+    expect(screen.getByTestId(`zen-scene-${kind.scene}`)).toBeOnTheScreen();
     expect(screen.queryByTestId('zen-tone-wash')).toBeNull();
   }
 });

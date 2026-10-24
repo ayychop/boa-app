@@ -27,7 +27,7 @@ import StationLogo from '../components/StationLogo';
 import { Button, Fog, LogoWatermark, PulseDot, SectionHeader, Slate, Tappable, Viewfinder } from '../components/ui';
 import useBottomSpace from '../hooks/useBottomSpace';
 import useLayout, { WIDE } from '../hooks/useLayout';
-import MiniPlayer, { useMiniPlayerSpace } from '../components/MiniPlayer';
+import MiniPlayer, { useMiniPlayerShown, useMiniPlayerSpace } from '../components/MiniPlayer';
 import ZenButton from '../components/display/ZenButton';
 import WeatherPill from '../components/weather/WeatherPill';
 import { openPage } from '../navigation/ref';
@@ -182,6 +182,7 @@ export default function HomeScreen({ navigation }) {
   const wide = width >= WIDE;
   const bottom = useBottomSpace(space.xxl);
   const miniPlayerSpace = useMiniPlayerSpace();
+  const miniShown = useMiniPlayerShown();
   const isFocused = useIsFocused();
   const player = usePlayer();
   const media = useMedia();
@@ -345,7 +346,7 @@ export default function HomeScreen({ navigation }) {
 
   // On Home the mini player docks at the top, under the status bar, and the
   // hero's header moves down to make room for it.
-  const topInset = player.current ? miniPlayerSpace : 0;
+  const topInset = miniShown ? miniPlayerSpace : 0;
   // Only while Home is the tab on screen; elsewhere the tab bar carries it,
   // and a second copy would poll what's playing twice.
   const topPlayer = isFocused && (

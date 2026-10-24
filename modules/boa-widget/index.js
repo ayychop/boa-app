@@ -22,6 +22,11 @@ export function setLayout(layout) {
   return native?.setLayout ? native.setLayout(layout).catch(() => {}) : Promise.resolve();
 }
 
+/** Glass only: weather on the left, clock on the right. */
+export function setFlipped(flipped) {
+  return native?.setFlipped ? native.setFlipped(!!flipped).catch(() => {}) : Promise.resolve();
+}
+
 function send() {
   if (!native) return Promise.resolve();
   const { title = null, subtitle = null, id = null, playing = false } = last ?? {};

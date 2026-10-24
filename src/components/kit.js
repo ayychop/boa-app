@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { interpolateColor, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { haptics } from '../utils/haptics';
 import { colors, fonts, radius, space } from '../theme';
@@ -178,6 +179,11 @@ export function Segmented({ options, value, onChange }) {
 }
 
 /** A round profile picture with initials behind it and an optional online dot. */
+/**
+ * A round profile picture (initials if there isn't one). People who are
+ * online, or `ring`, get BOA's gold ring: a gradient band with a dark gap
+ * between it and the photo, like a story ring.
+ */
 export function Avatar({ uri, name = '?', size = 48, online = false, ring = false }) {
   const [failed, setFailed] = useState(false);
   const initials = (name || '?')
@@ -189,19 +195,34 @@ export function Avatar({ uri, name = '?', size = 48, online = false, ring = fals
     .join('')
     .toUpperCase();
   const dot = Math.max(10, Math.round(size * 0.26));
+  const gold = ring || online;
+  const band = Math.max(2, Math.round(size * 0.045));
+  const gap = Math.max(2, Math.round(size * 0.035));
+  const inner = gold ? size - (band + gap) * 2 : size;
   return (
     <View style={{ width: size, height: size }}>
+      {gold ? (
+        <LinearGradient
+          colors={[colors.gold, '#F6D38A', colors.goldDeep]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={[StyleSheet.absoluteFill, { borderRadius: size / 2 }]}
+          testID="avatar-gold-ring"
+        >
+          <View style={{ position: 'absolute', top: band, left: band, right: band, bottom: band, borderRadius: size / 2, backgroundColor: colors.bg }} />
+        </LinearGradient>
+      ) : null}
       <View
         style={[
           styles.avatar,
-          { width: size, height: size, borderRadius: size / 2 },
-          ring && { borderWidth: 2, borderColor: colors.gold },
+          { width: inner, height: inner, borderRadius: inner / 2 },
+          gold && { position: 'absolute', top: band + gap, left: band + gap },
         ]}
       >
         {uri && !failed ? (
           <Image source={{ uri }} style={StyleSheet.absoluteFill} resizeMode="cover" onError={() => setFailed(true)} />
         ) : (
-          <Text style={[styles.initials, { fontSize: size * 0.36 }]}>{initials || '?'}</Text>
+          <Text style={[styles.initials, { fontSize: inner * 0.36 }]}>{initials || '?'}</Text>
         )}
       </View>
       {online ? (
