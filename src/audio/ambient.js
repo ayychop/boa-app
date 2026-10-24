@@ -1,10 +1,17 @@
+import { AppState } from 'react-native';
 import { createAudioPlayer } from 'expo-audio';
 import { categoryById, MEDIA_HEADERS, SOUNDSCAPES, soundscapeById } from '../data/sleep';
 import { cachedSource, cachedUri, prefetch } from '../utils/mediaCache';
 import * as focus from './focus';
+import { ensureAudioSession } from './session';
 
 // Soundscape engine for the Sleep & Meditation Hub: one looping expo-audio
-// player, separate from the radio's. The two never play at once (see
+// player, separate from the radio's. Like the radio it keeps playing with
+// the phone locked or the app in the background: it sets the shared audio
+// session (audio/session.js) before playing, and puts itself on the lock
+// screen (which also runs Android's media service, so the system keeps it
+// alive). It stops only when paused, stopped, faded out, or when the radio
+// takes over. The two never play at once (see
 // audio/focus.js): starting a soundscape pauses the radio straight away,
 // and playing the radio pauses the soundscape.
 //
@@ -15,6 +22,9 @@ let player = null;
 let state = { id: null, status: 'idle', volume: 1 };
 let fadeTimer = null;
 let gen = 0;
+// Bumped by every play, pause and stop: a play still waiting for the audio
+// session gives up if anything happened since it was asked for.
+let ticket = 0;
 const listeners = new Set();
 
 // The radio taking over pauses the soundscape (keeping it, and its room,
@@ -74,6 +84,25 @@ export function toggleCategory(categoryId) {
   return play(chosenIn(categoryId));
 }
 
+// On the lock screen and in the notification shade, like the radio: the
+// sound, its kind, and play/pause. Only from the foreground (Android won't
+// start the media service from the background); a nicety that never stops
+// playback.
+function showOnLockScreen(soundscape) {
+  if (!player?.setActiveForLockScreen) return;
+  try {
+    if (AppState.currentState !== 'active') return;
+    const kind = categoryById(soundscape.category);
+    player.setActiveForLockScreen(
+      true,
+      { title: soundscape.label, artist: `${kind?.label ?? 'Zen'} · BOA Zen`, albumTitle: 'BOA HUB' },
+      { showSeekForward: false, showSeekBackward: false, showNextTrack: false, showPreviousTrack: false },
+    );
+  } catch (err) {
+    console.warn('[ambient] lock screen controls unavailable', err?.message ?? err);
+  }
+}
+
 /** Starts a soundscape looping (or carries on if it's already the one playing). */
 export async function play(id) {
   const soundscape = soundscapeById(id);
@@ -81,9 +110,14 @@ export async function play(id) {
   chosen[soundscape.category] = id;
   stopFade();
   focus.claim('zen');
+  const mine = ++ticket;
+  // Background playback on before anything plays (see audio/session.js).
+  await ensureAudioSession();
+  if (mine !== ticket) return;
   if (state.id === id && player && state.status !== 'error') {
     player.volume = state.volume;
     player.play();
+    showOnLockScreen(soundscape);
     return emit({ status: 'playing' });
   }
   ++gen;
@@ -101,6 +135,7 @@ export async function play(id) {
     player.loop = true;
     player.volume = state.volume;
     player.play();
+    showOnLockScreen(soundscape);
     emit({ status: 'playing' });
   } catch (err) {
     console.warn(`[ambient] couldn't play ${id}`, err?.message ?? err);
@@ -109,6 +144,7 @@ export async function play(id) {
 }
 
 export function pause() {
+  ticket += 1;
   stopFade();
   player?.pause();
   if (state.id) emit({ status: 'paused' });
@@ -122,10 +158,14 @@ export function toggle(id) {
 /** Stops and forgets the soundscape. */
 export function stop() {
   gen += 1;
+  ticket += 1;
   stopFade();
   player?.pause();
   emit({ id: null, status: 'idle' });
   focus.release('zen');
+  try {
+    player?.setActiveForLockScreen?.(false);
+  } catch {}
 }
 
 export function setVolume(volume) {

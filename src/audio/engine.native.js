@@ -1,5 +1,6 @@
 import { AppState, Platform } from 'react-native';
-import { createAudioPlayer, requestNotificationPermissionsAsync, setAudioModeAsync } from 'expo-audio';
+import { createAudioPlayer, requestNotificationPermissionsAsync } from 'expo-audio';
+import { ensureAudioSession } from './session';
 import { splitTrack } from '../utils/track';
 import * as focus from './focus';
 
@@ -106,16 +107,11 @@ function onStatus(s) {
   emit({ status: 'paused' });
 }
 
-// Android drops play() without a word while the phone is on silent/vibrate
-// unless playsInSilentMode is already set, so the mode must land first.
+// The app's audio session (background playback, silent mode) must land
+// before the first play; audio/session.js sets it once for both engines.
 function getPlayer() {
   if (!ready) {
-    ready = setAudioModeAsync({
-      playsInSilentMode: true,
-      shouldPlayInBackground: true,
-      interruptionMode: 'doNotMix',
-    })
-      .catch((err) => console.warn('[audio] setAudioModeAsync failed', err))
+    ready = ensureAudioSession()
       .then(() => {
         player = createAudioPlayer(null, { updateInterval: 1000 });
         player.addListener('playbackStatusUpdate', onStatus);
