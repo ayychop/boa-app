@@ -448,6 +448,7 @@ export default function RadioScreen({ route, navigation }) {
 
       <View
         style={[styles.stage, { paddingBottom: bottomPad }]}
+        testID="radio-stage"
         onLayout={(e) => {
           const { width, height } = e.nativeEvent.layout;
           setLayout((l) => (l && l.width === width && l.height === height ? l : { width, height }));
