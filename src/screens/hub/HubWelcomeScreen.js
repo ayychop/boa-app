@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -142,6 +142,9 @@ function Onboarding({ onDone }) {
   const [roles, setRoles] = useState([]);
   const [dob, setDob] = useState({ d: '', m: '', y: '' });
   const [agreed, setAgreed] = useState(false);
+  // When "I am 18 or over" was ticked: sent as adult_confirmed_at.
+  const [agreedAt, setAgreedAt] = useState(null);
+  const [photoError, setPhotoError] = useState(null);
   const [free, setFree] = useState(null); // null checking | true | false
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
@@ -167,18 +170,40 @@ function Onboarding({ onDone }) {
   const age = dobValid ? hub.ageOn(birth) : null;
 
   const pick = async () => {
-    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: [1, 1], quality: 0.8 });
-    if (!res.canceled && res.assets?.[0]) setAvatar(res.assets[0]);
+    setPhotoError(null);
+    try {
+      const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: [1, 1], quality: 0.8 });
+      const asset = res?.canceled ? null : res?.assets?.[0];
+      if (!asset) return;
+      const problem = hub.avatarProblem(asset);
+      if (problem) setPhotoError(problem);
+      else setAvatar(asset);
+    } catch {
+      setPhotoError("Couldn't open your photos. You can add one later from Hub settings.");
+    }
   };
 
   const finish = async () => {
     setBusy(true);
     setError(null);
     try {
+      // The photo is optional: if it won't upload (no connection, too
+      // large), the profile is still created and you can add it later.
       let avatar_url = null;
-      if (avatar) avatar_url = await hub.uploadAvatar(userId, avatar);
-      await finishOnboarding({ username: handle, display_name: displayName.trim() || null, avatar_url, bio: bio.trim() || null, roles });
+      let photoFailed = null;
+      if (avatar) {
+        try {
+          avatar_url = await hub.uploadAvatar(userId, avatar);
+        } catch (err) {
+          photoFailed = err?.message || "Couldn't upload the photo.";
+        }
+      }
+      await finishOnboarding(
+        { username: handle, display_name: displayName.trim() || null, avatar_url, bio: bio.trim() || null, roles },
+        { adultConfirmedAt: agreedAt },
+      );
       haptics.success();
+      if (photoFailed) Alert.alert('Your photo wasn’t added', `${photoFailed} You can add one any time from Hub settings.`);
       onDone();
     } catch (err) {
       setError(/duplicate|unique/i.test(err.message) ? 'That username was just taken. Go back and pick another.' : err.message);
@@ -220,6 +245,7 @@ function Onboarding({ onDone }) {
             </View>
           </Pressable>
           <Text style={[type.bodyMuted, { textAlign: 'center' }]}>A clear headshot gets you found. You can skip this and add one later.</Text>
+          {photoError ? <Text style={[styles.message, { textAlign: 'center' }]}>{photoError}</Text> : null}
         </View>
       ),
     },
@@ -255,7 +281,7 @@ function Onboarding({ onDone }) {
     },
     {
       title: 'Last thing',
-      ok: age != null && age >= hub.MIN_AGE && agreed,
+      ok: age != null && age >= hub.MIN_AGE && agreed && !!agreedAt,
       body: (
         <>
           <Text style={styles.label}>Date of birth</Text>
@@ -294,6 +320,7 @@ function Onboarding({ onDone }) {
           <Pressable
             onPress={() => {
               haptics.selection();
+              setAgreedAt(agreed ? null : new Date().toISOString());
               setAgreed(!agreed);
             }}
             accessibilityRole="checkbox"

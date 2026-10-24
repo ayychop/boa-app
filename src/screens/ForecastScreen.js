@@ -53,7 +53,7 @@ function Stat({ icon, label, value }) {
 /**
  * The coming days: now (big, alive), the next 24 hours as a strip, and the
  * week as rows with their temperature ranges. Opened from Home's weather
- * pill and from the widget's weather (boa://weather).
+ * pill and from the widget's weather (network.boa://weather).
  */
 export default function ForecastScreen({ navigation }) {
   const insets = useSafeAreaInsets();

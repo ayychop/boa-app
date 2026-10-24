@@ -47,8 +47,13 @@ export default function HubSettingsScreen({ navigation }) {
   };
 
   const changePhoto = async () => {
-    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: [1, 1], quality: 0.8 });
-    if (res.canceled || !res.assets?.[0]) return;
+    let res;
+    try {
+      res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: [1, 1], quality: 0.8 });
+    } catch {
+      return Alert.alert("Couldn't open your photos", 'Check that BOA can access your photos, then try again.');
+    }
+    if (res?.canceled || !res?.assets?.[0]) return;
     setBusy('photo');
     try {
       const url = await hub.uploadAvatar(userId, res.assets[0]);

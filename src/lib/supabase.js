@@ -30,7 +30,7 @@ export const supabase = isConfigured
         storage: AsyncStorage,
         autoRefreshToken: true,
         persistSession: true,
-        // OAuth comes back through the app's boa:// link (see api/hub.js).
+        // OAuth comes back through the app's network.boa:// link (see api/hub.js).
         detectSessionInUrl: Platform.OS === 'web',
         flowType: 'pkce',
       },

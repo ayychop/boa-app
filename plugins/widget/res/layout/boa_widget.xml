@@ -150,7 +150,10 @@
       </LinearLayout>
     </LinearLayout>
 
-    <View
+    <!-- A FrameLayout, not a View: home screen widgets can only use the
+         classes RemoteViews allows, and a plain View there stops the
+         launcher adding the widget at all. -->
+    <FrameLayout
       android:id="@+id/boa_widget_rule"
       android:layout_width="match_parent"
       android:layout_height="1dp"

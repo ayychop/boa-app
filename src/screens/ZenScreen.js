@@ -394,8 +394,9 @@ function Clock({ width, height, compact }) {
 }
 
 // What's on: the soundscape and/or the radio, and when it fades out.
-// With the radio card showing, the radio is left to it.
-function NowLine({ sound, withRadio = true }) {
+// With the radio card showing, the radio is left to it. On the screensaver
+// (`onOpenSound`) the soundscape is a button into the full Zen page.
+function NowLine({ sound, withRadio = true, onOpenSound }) {
   const { current, status, trackTitle } = usePlayer();
   const remaining = useSleepRemaining();
   const nowPlaying = useNowPlaying(current, current?.kind === 'radio');
@@ -405,10 +406,31 @@ function NowLine({ sound, withRadio = true }) {
     : null;
   const scape = sound.id && sound.status !== 'idle' ? soundscapeById(sound.id) : null;
   const soundLine = scape ? `${scape.label} · ${scape.detail}` : null;
-  const lines = [soundLine, radioLine].filter(Boolean);
-  if (!lines.length && !remaining) return null;
+  const asButton = !!onOpenSound && !!scape;
+  const lines = [asButton ? null : soundLine, radioLine].filter(Boolean);
+  if (!lines.length && !remaining && !asButton) return null;
   return (
-    <View pointerEvents="none" style={styles.nowLine}>
+    <View pointerEvents="box-none" style={styles.nowLine}>
+      {asButton && (
+        <Pressable
+          onPress={() => {
+            haptics.selection();
+            onOpenSound();
+          }}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={`${scape.label}, ${scape.detail}. Open Zen`}
+          testID="zen-screensaver-sound"
+          style={({ pressed }) => [styles.soundChip, pressed && { transform: [{ scale: 0.96 }], opacity: 0.85 }]}
+        >
+          <Ionicons name={scape.icon} size={16} color={colors.text} />
+          <Text style={styles.nowText} numberOfLines={1}>
+            {soundLine}
+          </Text>
+          {sound.status === 'playing' ? <Equalizer color={colors.live} /> : null}
+          <Ionicons name="chevron-forward" size={14} color={colors.textMuted} />
+        </Pressable>
+      )}
       {lines.length > 0 && (
         <View style={styles.nowRow}>
           <PulseDot color={(withRadio && status === 'playing') || sound.status === 'playing' ? colors.live : colors.gold} size={7} />
@@ -705,16 +727,17 @@ function ZenRoom() {
       {ambient && (
         <Pressable
           style={StyleSheet.absoluteFill}
-          onPress={wake}
+          onPress={() => wake()}
           accessibilityRole="button"
           accessibilityLabel="Wake Zen controls"
           accessibilityHint={backTo ? `Goes back to ${backTo}` : undefined}
         />
       )}
 
-      <View pointerEvents="none" style={[styles.clockArea, clockArea]}>
+      {/* Over the wake tap: the soundscape's button takes you into Zen. */}
+      <View pointerEvents="box-none" style={[styles.clockArea, clockArea]}>
         <Clock width={clockW} height={clockH} compact={short} />
-        <NowLine sound={sound} withRadio={!radioCard} />
+        <NowLine sound={sound} withRadio={!radioCard} onOpenSound={ambient ? () => wake({ toControls: true }) : undefined} />
       </View>
 
       {/* The controls only exist outside the screensaver, so screen readers
@@ -837,6 +860,18 @@ const styles = StyleSheet.create({
   sweepFill: { position: 'absolute', left: 0, height: 2, borderRadius: 1, backgroundColor: 'rgba(226,168,75,0.75)' },
   bead: { position: 'absolute', left: 0, width: 6, height: 6, borderRadius: 3, backgroundColor: colors.gold },
   nowLine: { alignItems: 'center', marginTop: space.lg, paddingHorizontal: space.xl, gap: 6 },
+  soundChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    maxWidth: 560,
+    minHeight: 44,
+    paddingHorizontal: space.lg,
+    borderRadius: radius.pill,
+    backgroundColor: 'rgba(12,12,14,0.6)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.16)',
+  },
   nowRow: { flexDirection: 'row', alignItems: 'center', gap: 8, maxWidth: 560 },
   nowText: { fontFamily: fonts.semibold, fontSize: 15, color: colors.text, letterSpacing: -0.2, flexShrink: 1 },
   fadeText: { fontFamily: fonts.mono, fontSize: 11, letterSpacing: 1.6, textTransform: 'uppercase', color: colors.gold },

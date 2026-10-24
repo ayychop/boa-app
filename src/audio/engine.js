@@ -5,6 +5,8 @@
 // Items are either live radio ({ kind: 'radio', streamUrl }) or on-demand
 // audio such as podcast episodes ({ kind: 'podcast', streamUrl }).
 
+import * as focus from './focus';
+
 let audio = null;
 let current = null;
 let state = { status: 'idle', title: null, position: 0, duration: 0, rate: 1, retry: 0 };
@@ -104,6 +106,8 @@ function fail(attempt) {
 
 /** User-initiated play: resets the retry budget. */
 export function play(item) {
+  // The radio takes over from a Zen soundscape.
+  focus.claim('radio');
   clearTimeout(retryTimer);
   attempts = 0;
   connect(item, {});
@@ -222,3 +226,8 @@ export function subscribe(fn) {
 // Browsers can't read ICY track metadata from cross-origin streams, so
 // state.title stays null for live radio on web.
 export const supportsTrackTitles = false;
+
+// A Zen soundscape starting pauses the radio at once.
+focus.register('radio', () => {
+  if (state.status === 'playing' || state.status === 'loading') pause();
+});

@@ -10,7 +10,7 @@ jest.mock('expo-web-browser', () => ({ maybeCompleteAuthSession: jest.fn(), open
 jest.mock('expo-linking', () => {
   const listeners = new Set();
   return {
-    createURL: (path) => `boa://${path}`,
+    createURL: (path) => `network.boa://${path}`,
     addEventListener: jest.fn((type, fn) => {
       listeners.add(fn);
       return { remove: () => listeners.delete(fn) };
@@ -29,20 +29,20 @@ beforeEach(() => {
   mockAuth.exchangeCodeForSession.mockResolvedValue({ data: SESSION, error: null });
 });
 
-test('Continue with Google opens Google, returns to boa://auth-callback and signs in with the code', async () => {
-  WebBrowser.openAuthSessionAsync.mockResolvedValue({ type: 'success', url: 'boa://auth-callback?code=abc123' });
+test('Continue with Google opens Google, returns to network.boa://auth-callback and signs in with the code', async () => {
+  WebBrowser.openAuthSessionAsync.mockResolvedValue({ type: 'success', url: 'network.boa://auth-callback?code=abc123' });
   await expect(signInWithGoogle()).resolves.toEqual(SESSION);
   expect(mockAuth.signInWithOAuth).toHaveBeenCalledWith({
     provider: 'google',
-    options: { redirectTo: 'boa://auth-callback', skipBrowserRedirect: true },
+    options: { redirectTo: 'network.boa://auth-callback', skipBrowserRedirect: true },
   });
-  expect(WebBrowser.openAuthSessionAsync).toHaveBeenCalledWith(expect.stringContaining('provider=google'), 'boa://auth-callback');
+  expect(WebBrowser.openAuthSessionAsync).toHaveBeenCalledWith(expect.stringContaining('provider=google'), 'network.boa://auth-callback');
   expect(mockAuth.exchangeCodeForSession).toHaveBeenCalledWith('abc123');
 });
 
 test('if the browser hands the return to the app as a link, that still signs in', async () => {
   WebBrowser.openAuthSessionAsync.mockImplementation(async () => {
-    Linking.__open('boa://auth-callback?code=fromlink');
+    Linking.__open('network.boa://auth-callback?code=fromlink');
     return { type: 'dismiss' };
   });
   await expect(signInWithGoogle()).resolves.toEqual(SESSION);
@@ -57,7 +57,7 @@ test('closing the browser signs nobody in, and an OAuth error is shown', async (
   await expect(cancelled).resolves.toBeNull();
   jest.useRealTimers();
 
-  WebBrowser.openAuthSessionAsync.mockResolvedValue({ type: 'success', url: 'boa://auth-callback#error=access_denied&error_description=Access+denied' });
+  WebBrowser.openAuthSessionAsync.mockResolvedValue({ type: 'success', url: 'network.boa://auth-callback#error=access_denied&error_description=Access+denied' });
   await expect(signInWithGoogle()).rejects.toThrow('Access denied');
   expect(mockAuth.exchangeCodeForSession).not.toHaveBeenCalled();
 });

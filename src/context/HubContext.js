@@ -148,8 +148,8 @@ export function HubProvider({ children }) {
   );
 
   const finishOnboarding = useCallback(
-    async (fields) => {
-      const created = await hub.createProfile(userId, fields);
+    async (fields, consent) => {
+      const created = await hub.createProfile(userId, fields, consent);
       setProfile(created);
       setStage('ready');
       return created;

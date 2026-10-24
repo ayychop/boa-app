@@ -1,11 +1,12 @@
 import { createAudioPlayer } from 'expo-audio';
 import { MEDIA_HEADERS, SOUNDSCAPES, soundscapeById } from '../data/sleep';
 import { cachedSource, cachedUri, prefetch } from '../utils/mediaCache';
-import * as radio from './engine';
+import * as focus from './focus';
 
 // Soundscape engine for the Sleep & Meditation Hub: one looping expo-audio
-// player, separate from the radio's. Starting a soundscape pauses the radio
-// straight away: you came to Zen for the rain, not the rain and a station.
+// player, separate from the radio's. The two never play at once (see
+// audio/focus.js): starting a soundscape pauses the radio straight away,
+// and playing the radio pauses the soundscape.
 //
 // It starts at once: from the cache if the recording is already on the
 // phone, otherwise streaming while a copy downloads in the background for
@@ -16,15 +17,11 @@ let fadeTimer = null;
 let gen = 0;
 const listeners = new Set();
 
-// Whether the radio is on, so starting a soundscape only pauses it then.
-let radioStatus = 'idle';
-radio.subscribe((r) => {
-  radioStatus = r.status;
+// The radio taking over pauses the soundscape (keeping it, and its room,
+// so it can be played again from where Zen left it).
+focus.register('zen', () => {
+  if (state.status === 'playing' || state.status === 'loading') pause();
 });
-
-function pauseRadio() {
-  if (radioStatus === 'playing' || radioStatus === 'loading') radio.pause();
-}
 
 function emit(patch) {
   state = { ...state, ...patch };
@@ -60,7 +57,7 @@ export async function play(id) {
   const soundscape = soundscapeById(id);
   if (!soundscape) return;
   stopFade();
-  pauseRadio();
+  focus.claim('zen');
   if (state.id === id && player && state.status !== 'error') {
     player.volume = state.volume;
     player.play();

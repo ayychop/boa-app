@@ -9,6 +9,8 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.net.Uri
+import android.os.Bundle
+import android.util.Log
 import android.view.View
 import android.widget.RemoteViews
 import java.io.File
@@ -24,23 +26,53 @@ import java.io.File
  *   shows the BOA Network logo instead;
  * - the weather (icon, temperature, place, rain outlook).
  * The clock is a TextClock, kept current by the launcher. Tapping the
- * weather opens the forecast (boa://weather); anywhere else opens what's
- * playing (boa://now-playing: the Radio tab when a station is on).
+ * weather opens the forecast (network.boa://weather); anywhere else opens
+ * what's playing (network.boa://now-playing: the Radio tab when a station
+ * is on).
+ *
+ * Nothing it reads is required: before the app has ever run, or if the
+ * weather or location never loaded, every value falls back to a default
+ * and the widget still draws (the clock, "Tap for weather", "Tap to tune
+ * in"). A failure drawing one widget falls back to the plain layout rather
+ * than leaving the launcher with nothing to show.
  */
 class BoaWidgetProvider : AppWidgetProvider() {
   override fun onUpdate(context: Context, appWidgetManager: AppWidgetManager, appWidgetIds: IntArray) {
-    val prefs = context.getSharedPreferences("boa_widget", Context.MODE_PRIVATE)
-    val tint = parseColor(prefs.getString("color", null), DEFAULT_TINT)
-    val opacity = prefs.getFloat("opacity", DEFAULT_OPACITY).coerceIn(0f, 1f)
-    val title = prefs.getString("title", null)
-    val subtitle = prefs.getString("subtitle", null)
-    val playing = prefs.getBoolean("playing", false)
-    val art = if (title != null) loadArt(prefs.getString("artwork", null)) else null
+    for (id in appWidgetIds) {
+      val views = try {
+        draw(context)
+      } catch (e: Exception) {
+        Log.w(TAG, "Widget draw failed, showing the plain layout", e)
+        RemoteViews(context.packageName, R.layout.boa_widget)
+      }
+      try {
+        appWidgetManager.updateAppWidget(id, views)
+      } catch (e: Exception) {
+        Log.w(TAG, "Widget update failed", e)
+      }
+    }
+  }
 
-    val wxTemp = prefs.getString("wx_temp", null)
-    val wxIcon = prefs.getString("wx_icon", null)
-    val wxPlace = prefs.getString("wx_place", null)
-    val wxDetail = prefs.getString("wx_detail", null)
+  // Resizing the widget redraws it at its new size.
+  override fun onAppWidgetOptionsChanged(context: Context, appWidgetManager: AppWidgetManager, appWidgetId: Int, newOptions: Bundle) {
+    onUpdate(context, appWidgetManager, intArrayOf(appWidgetId))
+  }
+
+  private fun draw(context: Context): RemoteViews {
+    val prefs = context.getSharedPreferences("boa_widget", Context.MODE_PRIVATE)
+    // Read defensively: a missing or mistyped value is just a default.
+    fun str(key: String) = runCatching { prefs.getString(key, null) }.getOrNull()?.takeIf { it.isNotBlank() }
+    val tint = parseColor(str("color"), DEFAULT_TINT)
+    val opacity = runCatching { prefs.getFloat("opacity", DEFAULT_OPACITY) }.getOrDefault(DEFAULT_OPACITY).coerceIn(0f, 1f)
+    val title = str("title")
+    val subtitle = str("subtitle")
+    val playing = runCatching { prefs.getBoolean("playing", false) }.getOrDefault(false)
+    val art = if (title != null) loadArt(str("artwork")) else null
+
+    val wxTemp = str("wx_temp")
+    val wxIcon = str("wx_icon")
+    val wxPlace = str("wx_place")
+    val wxDetail = str("wx_detail")
 
     // Light glass that's mostly opaque gets dark text; anything else, light.
     val dark = luminance(tint) > 0.6 && opacity > 0.5f
@@ -49,64 +81,62 @@ class BoaWidgetProvider : AppWidgetProvider() {
     val accent = if (dark) Color.parseColor("#9A6A22") else Color.parseColor("#E2A84B")
     val rule = if (dark) Color.parseColor("#1F141416") else Color.parseColor("#1FF3EFE8")
 
-    val openPlaying = deepLink(context, "boa://now-playing", 0)
-    val openWeather = deepLink(context, "boa://weather", 1)
+    val openPlaying = deepLink(context, "network.boa://now-playing", 0)
+    val openWeather = deepLink(context, "network.boa://weather", 1)
 
-    for (id in appWidgetIds) {
-      val views = RemoteViews(context.packageName, R.layout.boa_widget)
-      views.setInt(R.id.boa_widget_glass, "setColorFilter", tint or OPAQUE)
-      views.setInt(R.id.boa_widget_glass, "setImageAlpha", (opacity * 255).toInt())
-      views.setTextColor(R.id.boa_widget_time, primary)
-      views.setTextColor(R.id.boa_widget_date, secondary)
-      views.setTextColor(R.id.boa_widget_wx_temp, primary)
-      views.setTextColor(R.id.boa_widget_wx_place, primary)
-      views.setTextColor(R.id.boa_widget_wx_detail, secondary)
-      views.setTextColor(R.id.boa_widget_title, accent)
-      views.setTextColor(R.id.boa_widget_subtitle, secondary)
-      views.setInt(R.id.boa_widget_rule, "setBackgroundColor", rule)
+    val views = RemoteViews(context.packageName, R.layout.boa_widget)
+    views.setInt(R.id.boa_widget_glass, "setColorFilter", tint or OPAQUE)
+    views.setInt(R.id.boa_widget_glass, "setImageAlpha", (opacity * 255).toInt())
+    views.setTextColor(R.id.boa_widget_time, primary)
+    views.setTextColor(R.id.boa_widget_date, secondary)
+    views.setTextColor(R.id.boa_widget_wx_temp, primary)
+    views.setTextColor(R.id.boa_widget_wx_place, primary)
+    views.setTextColor(R.id.boa_widget_wx_detail, secondary)
+    views.setTextColor(R.id.boa_widget_title, accent)
+    views.setTextColor(R.id.boa_widget_subtitle, secondary)
+    views.setInt(R.id.boa_widget_rule, "setBackgroundColor", rule)
 
-      // Weather: the icon tinted to the text, or a prompt until there is any.
-      if (wxTemp != null) {
-        views.setTextViewText(R.id.boa_widget_wx_temp, wxTemp)
-        views.setImageViewResource(R.id.boa_widget_wx_icon, iconFor(wxIcon))
-        views.setInt(R.id.boa_widget_wx_icon, "setColorFilter", if (wxIcon == "sun") accent else primary)
-        views.setViewVisibility(R.id.boa_widget_wx_icon, View.VISIBLE)
-        views.setTextViewText(R.id.boa_widget_wx_place, wxPlace ?: "")
-      } else {
-        views.setTextViewText(R.id.boa_widget_wx_temp, context.getString(R.string.boa_widget_wx_blank))
-        views.setViewVisibility(R.id.boa_widget_wx_icon, View.GONE)
-        views.setTextViewText(R.id.boa_widget_wx_place, context.getString(R.string.boa_widget_wx_setup))
-      }
-      if (wxTemp != null && !wxDetail.isNullOrBlank()) {
-        views.setTextViewText(R.id.boa_widget_wx_detail, wxDetail)
-        views.setViewVisibility(R.id.boa_widget_wx_detail, View.VISIBLE)
-      } else {
-        views.setViewVisibility(R.id.boa_widget_wx_detail, View.GONE)
-      }
-
-      // What's playing: the station's record, else the BOA logo.
-      if (art != null) {
-        views.setImageViewBitmap(R.id.boa_widget_art, art)
-        views.setViewVisibility(R.id.boa_widget_art, View.VISIBLE)
-        views.setViewVisibility(R.id.boa_widget_logo, View.GONE)
-      } else {
-        views.setViewVisibility(R.id.boa_widget_art, View.GONE)
-        views.setViewVisibility(R.id.boa_widget_logo, View.VISIBLE)
-      }
-      views.setTextViewText(R.id.boa_widget_title, title?.uppercase() ?: context.getString(R.string.boa_widget_cta))
-      if (subtitle.isNullOrBlank()) {
-        views.setViewVisibility(R.id.boa_widget_subtitle, View.GONE)
-      } else {
-        views.setTextViewText(R.id.boa_widget_subtitle, subtitle)
-        views.setViewVisibility(R.id.boa_widget_subtitle, View.VISIBLE)
-      }
-      views.setViewVisibility(R.id.boa_widget_live, if (playing && title != null) View.VISIBLE else View.GONE)
-
-      if (openPlaying != null) views.setOnClickPendingIntent(R.id.boa_widget_root, openPlaying)
-      if (openPlaying != null) views.setOnClickPendingIntent(R.id.boa_widget_media, openPlaying)
-      if (openWeather != null) views.setOnClickPendingIntent(R.id.boa_widget_weather, openWeather)
-      appWidgetManager.updateAppWidget(id, views)
+    // Weather: the icon tinted to the text, or a prompt until there is any.
+    if (wxTemp != null) {
+      views.setTextViewText(R.id.boa_widget_wx_temp, wxTemp)
+      views.setImageViewResource(R.id.boa_widget_wx_icon, iconFor(wxIcon))
+      views.setInt(R.id.boa_widget_wx_icon, "setColorFilter", if (wxIcon == "sun") accent else primary)
+      views.setViewVisibility(R.id.boa_widget_wx_icon, View.VISIBLE)
+      views.setTextViewText(R.id.boa_widget_wx_place, wxPlace ?: "")
+    } else {
+      views.setTextViewText(R.id.boa_widget_wx_temp, context.getString(R.string.boa_widget_wx_blank))
+      views.setViewVisibility(R.id.boa_widget_wx_icon, View.GONE)
+      views.setTextViewText(R.id.boa_widget_wx_place, context.getString(R.string.boa_widget_wx_setup))
     }
+    if (wxTemp != null && !wxDetail.isNullOrBlank()) {
+      views.setTextViewText(R.id.boa_widget_wx_detail, wxDetail)
+      views.setViewVisibility(R.id.boa_widget_wx_detail, View.VISIBLE)
+    } else {
+      views.setViewVisibility(R.id.boa_widget_wx_detail, View.GONE)
+    }
+
+    // What's playing: the station's record, else the BOA logo.
+    if (art != null) {
+      views.setImageViewBitmap(R.id.boa_widget_art, art)
+      views.setViewVisibility(R.id.boa_widget_art, View.VISIBLE)
+      views.setViewVisibility(R.id.boa_widget_logo, View.GONE)
+    } else {
+      views.setViewVisibility(R.id.boa_widget_art, View.GONE)
+      views.setViewVisibility(R.id.boa_widget_logo, View.VISIBLE)
+    }
+    views.setTextViewText(R.id.boa_widget_title, title?.uppercase() ?: context.getString(R.string.boa_widget_cta))
+    if (subtitle.isNullOrBlank()) {
+      views.setViewVisibility(R.id.boa_widget_subtitle, View.GONE)
+    } else {
+      views.setTextViewText(R.id.boa_widget_subtitle, subtitle)
+      views.setViewVisibility(R.id.boa_widget_subtitle, View.VISIBLE)
+    }
+    views.setViewVisibility(R.id.boa_widget_live, if (playing && title != null) View.VISIBLE else View.GONE)
+
+    if (openPlaying != null) views.setOnClickPendingIntent(R.id.boa_widget_root, openPlaying)
+    if (openPlaying != null) views.setOnClickPendingIntent(R.id.boa_widget_media, openPlaying)
+    if (openWeather != null) views.setOnClickPendingIntent(R.id.boa_widget_weather, openWeather)
+    return views
   }
 
   private fun deepLink(context: Context, uri: String, requestCode: Int): PendingIntent? {
@@ -161,6 +191,7 @@ class BoaWidgetProvider : AppWidgetProvider() {
     (0.2126 * Color.red(color) + 0.7152 * Color.green(color) + 0.0722 * Color.blue(color)) / 255.0
 
   companion object {
+    private const val TAG = "BoaWidget"
     private val DEFAULT_TINT = Color.parseColor("#141416")
     private const val DEFAULT_OPACITY = 0.55f
     private const val OPAQUE = 0xFF000000.toInt()

@@ -45,7 +45,7 @@ async function schedule(alarm) {
     body: alarm.sound?.type === 'station' ? `Waking up to ${alarm.sound.station.name}` : `${formatTime(alarm.hour, alarm.minute)} · Good morning`,
     sound: tone.file,
     priority: Notifications.AndroidNotificationPriority.MAX,
-    data: { alarmId: alarm.id, url: `boa://alarm/${alarm.id}` },
+    data: { alarmId: alarm.id, url: `network.boa://alarm/${alarm.id}` },
   };
   const channelId = channelFor(tone.id);
   const days = alarm.days ?? [];

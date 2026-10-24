@@ -16,17 +16,26 @@ jest.mock('react-native-safe-area-context', () => require('react-native-safe-are
 
 // Audio: an in-memory engine with the same API as src/audio/engine.native.js.
 jest.mock('./src/audio/engine', () => {
+  const focus = jest.requireActual('./src/audio/focus');
   let state = { status: 'idle', title: null, rate: 1, retry: 0, position: 0, duration: 0 };
   const subs = new Set();
   const emit = (patch) => {
     state = { ...state, ...patch };
     subs.forEach((fn) => fn(state));
   };
+  const pause = jest.fn(async () => emit({ status: 'paused' }));
+  // Like the real engines: one sound at a time (src/audio/focus.js).
+  focus.register('radio', () => {
+    if (state.status === 'playing' || state.status === 'loading') pause();
+  });
   return {
     MAX_RETRIES: 2,
     supportsTrackTitles: false,
-    play: jest.fn(() => emit({ status: 'playing' })),
-    pause: jest.fn(async () => emit({ status: 'paused' })),
+    play: jest.fn(() => {
+      focus.claim('radio');
+      emit({ status: 'playing' });
+    }),
+    pause,
     seek: jest.fn(async () => {}),
     skip: jest.fn(),
     setRate: jest.fn(async () => {}),

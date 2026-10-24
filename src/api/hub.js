@@ -80,7 +80,7 @@ const LINK_GRACE_MS = 800;
 // On the web the sign-in popup closes itself through this.
 WebBrowser.maybeCompleteAuthSession();
 
-/** Finishes an OAuth return (boa://auth-callback?code=...): a session, or null. */
+/** Finishes an OAuth return (network.boa://auth-callback?code=...): a session, or null. */
 async function completeOAuth(sb, returnUrl) {
   const params = new URL(returnUrl.replace('#', '?')).searchParams;
   const code = params.get('code');
@@ -92,7 +92,7 @@ async function completeOAuth(sb, returnUrl) {
 
 /**
  * Google, through the system browser: Supabase's OAuth page comes back to
- * boa://auth-callback with a code, exchanged here for a session (PKCE).
+ * network.boa://auth-callback with a code, exchanged here for a session (PKCE).
  * Some Android browsers hand the redirect to the app as an ordinary link
  * and report the browser as dismissed, so the link is caught here too.
  */
@@ -133,22 +133,32 @@ export async function isUsernameFree(username, myId) {
   return !rows.length || rows[0].id === myId;
 }
 
-export async function createProfile(userId, fields) {
-  const now = new Date().toISOString();
-  return check(
-    await need()
-      .from('profiles')
-      .insert({
-        id: userId,
-        ...fields,
-        username: fields.username.toLowerCase(),
-        adult_confirmed_at: now,
-        terms_accepted_at: now,
-        terms_version: TERMS_VERSION,
-      })
-      .select(PROFILE_FIELDS)
-      .single(),
-  );
+/**
+ * Creates your Hub profile. `adultConfirmedAt` is when you ticked "I am 18
+ * or over" (an ISO timestamp); it's required, and stored with the terms you
+ * agreed to.
+ */
+export async function createProfile(userId, fields, { adultConfirmedAt } = {}) {
+  if (!adultConfirmedAt || Number.isNaN(Date.parse(adultConfirmedAt))) {
+    throw new Error('Please confirm you are 18 or over.');
+  }
+  const res = await need()
+    .from('profiles')
+    .insert({
+      id: userId,
+      ...fields,
+      username: fields.username.toLowerCase(),
+      adult_confirmed_at: new Date(adultConfirmedAt).toISOString(),
+      terms_accepted_at: new Date().toISOString(),
+      terms_version: TERMS_VERSION,
+    })
+    .select(PROFILE_FIELDS)
+    .single();
+  // The database still updating after a change to its tables.
+  if (res.error && /schema cache/i.test(res.error.message || '')) {
+    throw new Error("The Hub is finishing an update. Please try again in a minute.");
+  }
+  return check(res);
 }
 
 export async function updateProfile(userId, patch) {
@@ -157,18 +167,63 @@ export async function updateProfile(userId, patch) {
   return check(await need().from('profiles').update(fields).eq('id', userId).select(PROFILE_FIELDS).single());
 }
 
-/** Uploads a picked photo to avatars/<user id>/ and returns its public URL. */
+// The avatars bucket's own limits (supabase/migrations).
+export const MAX_AVATAR_BYTES = 5 * 1024 * 1024;
+const AVATAR_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+const UPLOAD_TIMEOUT_MS = 30000;
+
+/** Whether a picked photo can be uploaded: null if so, else why not. */
+export function avatarProblem(asset) {
+  if (!asset?.uri) return 'That photo could not be opened.';
+  if (asset.fileSize && asset.fileSize > MAX_AVATAR_BYTES) return 'That photo is over 5 MB. Choose a smaller one.';
+  if (asset.mimeType && !AVATAR_TYPES.includes(asset.mimeType)) return 'Use a JPEG, PNG or WebP photo.';
+  return null;
+}
+
+/**
+ * Uploads a picked photo to avatars/<user id>/ and returns its public URL.
+ * Throws an Error with a readable message (too large, no connection, timed
+ * out) rather than anything raw.
+ */
 export async function uploadAvatar(userId, asset) {
   const sb = need();
+  const problem = avatarProblem(asset);
+  if (problem) throw new Error(problem);
   const type = asset.mimeType || 'image/jpeg';
   const ext = type.includes('png') ? 'png' : type.includes('webp') ? 'webp' : 'jpg';
   const path = `${userId}/avatar-${Date.now()}.${ext}`;
-  const body = await (await fetch(asset.uri)).arrayBuffer();
-  check(await sb.storage.from('avatars').upload(path, body, { contentType: type, upsert: true }));
-  // Old pictures go, so only the current one is kept.
-  const listed = (await sb.storage.from('avatars').list(userId)).data ?? [];
-  const old = listed.map((f) => `${userId}/${f.name}`).filter((p) => p !== path);
-  if (old.length) await sb.storage.from('avatars').remove(old);
+  let body;
+  try {
+    body = await (await fetch(asset.uri)).arrayBuffer();
+  } catch {
+    throw new Error('That photo could not be read from your phone.');
+  }
+  if (body.byteLength > MAX_AVATAR_BYTES) throw new Error('That photo is over 5 MB. Choose a smaller one.');
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error('The upload timed out. Check your connection and try again.')), UPLOAD_TIMEOUT_MS);
+  });
+  try {
+    const res = await Promise.race([sb.storage.from('avatars').upload(path, body, { contentType: type, upsert: true }), timeout]);
+    if (res?.error) {
+      const msg = res.error.message || '';
+      if (/size|large|413/i.test(msg)) throw new Error('That photo is over 5 MB. Choose a smaller one.');
+      if (/network|fetch|timed? ?out/i.test(msg)) throw new Error("Couldn't upload: no connection. Try again in a moment.");
+      throw new Error(`Couldn't upload the photo. ${msg}`.trim());
+    }
+  } catch (err) {
+    if (/Network request failed|Failed to fetch/i.test(err?.message || '')) throw new Error("Couldn't upload: no connection. Try again in a moment.");
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+  // Old pictures go, so only the current one is kept. Best effort: a
+  // failure here never undoes the new photo.
+  try {
+    const listed = (await sb.storage.from('avatars').list(userId)).data ?? [];
+    const old = listed.map((f) => `${userId}/${f.name}`).filter((p) => p !== path);
+    if (old.length) await sb.storage.from('avatars').remove(old);
+  } catch {}
   return sb.storage.from('avatars').getPublicUrl(path).data.publicUrl;
 }
 

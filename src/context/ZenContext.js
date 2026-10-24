@@ -75,9 +75,9 @@ export function ZenProvider({ children }) {
   const overLock = useRef(false);
   const unlocking = useRef(false);
 
-  const leave = useCallback(() => {
+  const leave = useCallback((toControls) => {
     setAmbient(false);
-    const back = returnTo.current;
+    const back = toControls ? null : returnTo.current;
     returnTo.current = null;
     setReturnTab(null);
     if (back && navigationRef.isReady() && currentTab() === 'Zen') goToTab(back);
@@ -85,10 +85,12 @@ export function ZenProvider({ children }) {
 
   /**
    * Ends the screensaver. Opened by a lock from another tab, it goes back
-   * there; opened on the Zen tab, it shows Zen's controls. Over the lock
-   * screen, only once the phone is unlocked (cancelling stays on Zen).
+   * there; opened on the Zen tab, it shows Zen's controls. With
+   * `{ toControls: true }` (the screensaver's soundscape button) it always
+   * stays on Zen with its controls. Over the lock screen, only once the
+   * phone is unlocked (cancelling stays on the screensaver).
    */
-  const wake = useCallback(async () => {
+  const wake = useCallback(async ({ toControls = false } = {}) => {
     if (overLock.current) {
       if (unlocking.current) return;
       unlocking.current = true;
@@ -97,7 +99,7 @@ export function ZenProvider({ children }) {
       if (!ok) return;
       overLock.current = false;
     }
-    leave();
+    leave(toControls);
   }, [leave]);
 
   // Whether the app is on screen, and when it last stopped being.

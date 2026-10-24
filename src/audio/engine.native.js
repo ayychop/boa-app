@@ -1,6 +1,7 @@
 import { AppState, Platform } from 'react-native';
 import { createAudioPlayer, requestNotificationPermissionsAsync, setAudioModeAsync } from 'expo-audio';
 import { splitTrack } from '../utils/track';
+import * as focus from './focus';
 
 export { splitTrack };
 
@@ -181,6 +182,8 @@ function fail(attempt) {
 
 /** User-initiated play: resets the retry budget. */
 export function play(item) {
+  // The radio takes over from a Zen soundscape.
+  focus.claim('radio');
   clearTimers();
   attempts = 0;
   established = false;
@@ -389,3 +392,8 @@ export function setRemoteControls(handlers) {
 // expo-audio doesn't surface ICY stream titles, so state.title stays null;
 // the UI gets them from useNowPlaying (api/nowPlaying.js + api/icy.js).
 export const supportsTrackTitles = false;
+
+// A Zen soundscape starting pauses the radio at once.
+focus.register('radio', () => {
+  if (state.status === 'playing' || state.status === 'loading') pause();
+});
