@@ -1,4 +1,5 @@
-import { screen, userEvent } from '@testing-library/react-native';
+import { act, screen, userEvent, within } from '@testing-library/react-native';
+import { BackHandler } from 'react-native';
 import { curatedStations } from '../src/data/radioStations';
 import { advance, bootApp, bootIntoTabs, instrument, LANDSCAPE, openTab, PORTRAIT, setWindow } from './helpers';
 
@@ -129,6 +130,57 @@ test('locking the phone: straight to the Zen screensaver, never a modal, 25 cycl
   await openTab(user, 'Radio');
   expect(screen.getByText(FIRST_STATION)).toBeOnTheScreen();
   expect(probe.errors).toEqual([]);
+});
+
+test('the screensaver shows the radio with its controls while it plays, and Back returns to the tab it came from', async () => {
+  const back = [];
+  jest.spyOn(BackHandler, 'addEventListener').mockImplementation((event, handler) => {
+    back.push(handler);
+    return { remove: () => back.splice(back.indexOf(handler), 1) };
+  });
+  const user = userEvent.setup();
+  await bootIntoTabs(user);
+  const station = screen.getAllByRole('button', { name: /^Play / })[0];
+  const name = station.props.accessibilityLabel.replace(/^Play /, '');
+  await user.press(station);
+  await advance(200);
+  await openTab(user, 'Talent');
+  await probe.lock();
+  await advance(500);
+  await probe.unlock();
+  await advance(400);
+  expect(screen.getByTestId('zen-screensaver')).toBeOnTheScreen();
+  expect(screen.getByText('Tap to go back to Talent')).toBeOnTheScreen();
+  const card = screen.getByTestId('zen-radio-info');
+  expect(within(card).getByText(name)).toBeOnTheScreen();
+  // Its controls work the radio without waking Zen, and stay to play it again.
+  await user.press(within(card).getByRole('button', { name: 'Pause radio' }));
+  await advance(200);
+  expect(screen.getByTestId('zen-screensaver')).toBeOnTheScreen();
+  expect(within(screen.getByTestId('zen-radio-info')).getByRole('button', { name: 'Play radio' })).toBeOnTheScreen();
+  // Back wakes it, straight to the tab the phone was locked on (handlers
+  // run newest first, as on Android, until one takes it).
+  const listening = back.length;
+  await act(async () => {
+    [...back].reverse().some((handler) => handler());
+  });
+  await advance(300);
+  expect(screen.queryByTestId('zen-screensaver')).toBeNull();
+  expect(screen.getByTestId('talent-scroll')).toBeOnTheScreen();
+  expect(back).toHaveLength(listening - 1);
+});
+
+test('with nothing playing, the screensaver has no radio card', async () => {
+  const user = userEvent.setup();
+  await bootIntoTabs(user);
+  await openTab(user, 'Radio');
+  await probe.lock();
+  await advance(500);
+  await probe.unlock();
+  await advance(400);
+  expect(screen.getByTestId('zen-screensaver')).toBeOnTheScreen();
+  expect(screen.queryByTestId('zen-radio-info')).toBeNull();
+  expect(screen.getByText('Tap to go back to Radio')).toBeOnTheScreen();
 });
 
 test('locking while Zen is open with its controls turns it into the screensaver', async () => {

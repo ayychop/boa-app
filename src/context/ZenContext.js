@@ -12,32 +12,37 @@ const LOCK_WINDOW_MS = 2000;
 const ZenContext = createContext(null);
 
 /**
- * Zen is an ordinary tab (screens/ZenScreen.js), opened in exactly two ways:
+ * Zen is an ordinary tab (screens/ZenScreen.js), opened in exactly these ways:
  * - by hand: the Zen tab, or a Zen button (Home, Radio, Profile), with its
  *   controls;
- * - when the phone's screen turns off (power button, lock, screen timeout)
- *   while the app is the one on screen: it opens as the screensaver
- *   ("ambient": just the room, the clock and what's playing), and a tap
- *   takes you back to the tab you were on.
+ * - when the phone's screen turns off while the app is the one on screen,
+ *   whether from the power button or the screen timing out: it opens as
+ *   the screensaver ("ambient": the room, the clock, and the radio with its
+ *   controls if it's playing). Waking it (a tap, or Back) returns to the
+ *   exact tab you were on.
  *
  * Nothing else opens it. Leaving the app (home button, app switcher, a
  * permission dialog, opening Shazam) is not a lock: React Native's AppState
- * reports all of those as 'background' too, so the lock comes from the
- * system's own screen-off broadcast (modules/boa-screen). Coming back to
- * the app always lands on the screen you left.
+ * reports all of those as 'background' too, so the lock and the timeout
+ * come from the system's own screen-off broadcast (modules/boa-screen),
+ * which Android sends for both. Coming back to the app after leaving it
+ * always lands on the screen you left.
  */
 export function ZenProvider({ children }) {
   const [ambient, setAmbient] = useState(false);
   const { onboarded } = useUser();
   const onboardedRef = useRef(onboarded);
   onboardedRef.current = onboarded;
-  // Where the screensaver was opened from, to go back there on waking.
+  // Where the screensaver was opened from, to go back there on waking (the
+  // state copy is for the screensaver to say where a tap goes).
   const returnTo = useRef(null);
+  const [returnTab, setReturnTab] = useState(null);
 
   /** Goes to the Zen tab with its controls. */
   const openZen = useCallback(() => {
     if (!navigationRef.isReady()) return false;
     returnTo.current = null;
+    setReturnTab(null);
     setAmbient(false);
     if (currentTab() !== 'Zen') goToTab('Zen');
     return true;
@@ -50,7 +55,10 @@ export function ZenProvider({ children }) {
     // A page over the tabs (the forecast, a chat, alarms) stays put: locking
     // the phone never closes what you were reading or writing.
     if (from && !TABS.includes(from)) return false;
-    if (from !== 'Zen') returnTo.current = from;
+    if (from !== 'Zen') {
+      returnTo.current = from;
+      setReturnTab(from);
+    }
     setAmbient(true);
     if (from !== 'Zen') goToTab('Zen');
     return true;
@@ -64,6 +72,7 @@ export function ZenProvider({ children }) {
     setAmbient(false);
     const back = returnTo.current;
     returnTo.current = null;
+    setReturnTab(null);
     if (back && navigationRef.isReady() && currentTab() === 'Zen') goToTab(back);
   }, []);
 
@@ -91,7 +100,7 @@ export function ZenProvider({ children }) {
     [openScreensaver],
   );
 
-  const value = useMemo(() => ({ ambient, openZen, openScreensaver, wake }), [ambient, openZen, openScreensaver, wake]);
+  const value = useMemo(() => ({ ambient, returnTab, openZen, openScreensaver, wake }), [ambient, returnTab, openZen, openScreensaver, wake]);
 
   return <ZenContext.Provider value={value}>{children}</ZenContext.Provider>;
 }

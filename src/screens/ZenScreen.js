@@ -1,5 +1,5 @@
 import { Component, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Image, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, BackHandler, Image, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { setStatusBarHidden } from 'expo-status-bar';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import { useVideoPlayer, VideoView } from 'expo-video';
@@ -38,6 +38,7 @@ import { haptics } from '../utils/haptics';
 import { shiftHex, withAlpha } from '../utils/color';
 import DriftingFog from '../components/DriftingFog';
 import Grain from '../components/Grain';
+import StationLogo from '../components/StationLogo';
 import { PulseDot, Slate } from '../components/ui';
 import { colors, fonts, radius, space } from '../theme';
 
@@ -58,6 +59,9 @@ const KEN_BURNS_MS = 40000;
 const DRIFT = 10;
 const DRIFT_LOOP = 180000;
 const KEEP_AWAKE_TAG = 'boa-zen';
+// The screensaver's radio card, and what each tab is called on its button.
+const RADIO_CARD = 72;
+const TAB_TITLES = { Originals: 'BOA Originals' };
 
 // Re-renders on the minute, not every second: the sweep under the clock
 // shows the seconds, on the UI thread.
@@ -390,12 +394,13 @@ function Clock({ width, height, compact }) {
 }
 
 // What's on: the soundscape and/or the radio, and when it fades out.
-function NowLine({ sound }) {
+// With the radio card showing, the radio is left to it.
+function NowLine({ sound, withRadio = true }) {
   const { current, status, trackTitle } = usePlayer();
   const remaining = useSleepRemaining();
   const nowPlaying = useNowPlaying(current, current?.kind === 'radio');
   const podcast = current?.kind === 'podcast' ? podcastById(current.podcastId) : null;
-  const radioLine = current
+  const radioLine = current && withRadio
     ? [podcast ? podcast.title : current.name, podcast ? current.name : trackTitle || nowPlaying].filter(Boolean).join(' · ')
     : null;
   const scape = sound.id && sound.status !== 'idle' ? soundscapeById(sound.id) : null;
@@ -406,7 +411,7 @@ function NowLine({ sound }) {
     <View pointerEvents="none" style={styles.nowLine}>
       {lines.length > 0 && (
         <View style={styles.nowRow}>
-          <PulseDot color={status === 'playing' || sound.status === 'playing' ? colors.live : colors.gold} size={7} />
+          <PulseDot color={(withRadio && status === 'playing') || sound.status === 'playing' ? colors.live : colors.gold} size={7} />
           <Text style={styles.nowText} numberOfLines={1}>
             {lines.join('  +  ')}
           </Text>
@@ -569,22 +574,50 @@ function Transport() {
 }
 
 /**
+ * The screensaver's radio, while it plays: the station, what's on, and its
+ * controls, so the radio can be paused or changed without waking Zen.
+ */
+function RadioCard() {
+  const { current, trackTitle } = usePlayer();
+  const nowPlaying = useNowPlaying(current, current?.kind === 'radio');
+  const podcast = current?.kind === 'podcast' ? podcastById(current.podcastId) : null;
+  const title = podcast ? podcast.title : current.name;
+  const detail = podcast ? current.name : trackTitle || nowPlaying || 'Live on BOA Radio';
+  return (
+    <View style={styles.radioCard} testID="zen-radio-info">
+      {current.kind === 'radio' ? <StationLogo station={current} size={44} rounded={22} fit="cover" /> : null}
+      <View style={styles.radioText} accessible accessibilityLabel={`${title}, ${detail}`}>
+        <Text style={styles.radioTitle} numberOfLines={1}>
+          {title}
+        </Text>
+        <Text style={styles.radioDetail} numberOfLines={1}>
+          {detail}
+        </Text>
+      </View>
+      <Transport />
+    </View>
+  );
+}
+
+/**
  * The Zen tab: a Sleep & Meditation Hub. With its controls: the room (a
  * looping video scene over a photograph), the clock, soundscapes, the
- * fade-out timer and radio controls (the credits live in Profile). As the screensaver (after the
- * phone locks or the app sits idle): just the room, the clock and what's
- * playing, with the tab bar and status bar hidden; a tap brings the
- * controls back. It is an ordinary tab screen, so nothing ever sits over
- * the app.
+ * fade-out timer and radio controls (the credits live in Profile). As the
+ * screensaver (after the screen turns off, by the power button or by timing
+ * out): the room, the clock, what's playing and, while the radio plays, the
+ * radio with its controls; the tab bar and status bar are hidden. A tap, or
+ * Back, wakes it: back to the tab it was opened from, or to the controls if
+ * it was opened on Zen. It is an ordinary tab screen, so nothing ever sits
+ * over the app.
  */
 function ZenRoom() {
   const { width, height } = useLayout();
   const insets = useSafeAreaInsets();
   const reduceMotion = useReducedMotion();
   const focused = useIsFocused();
-  const { ambient, wake } = useZen();
+  const { ambient, returnTab, wake } = useZen();
   const sound = useAmbientAudio();
-  const { isPlaying } = usePlayer();
+  const { current, isPlaying } = usePlayer();
   const bottomSpace = useBottomSpace(space.md);
   const hint = useSharedValue(0);
 
@@ -593,6 +626,24 @@ function ZenRoom() {
   useEffect(() => {
     if (wasFocused.current && !focused && ambient) wake();
     wasFocused.current = focused;
+  }, [focused, ambient, wake]);
+
+  // The radio card shows while the radio plays, and stays once shown, so
+  // a radio paused from the screensaver can be played again from it.
+  const [radioShown, setRadioShown] = useState(false);
+  useEffect(() => {
+    if (!ambient) setRadioShown(false);
+    else if (isPlaying && current) setRadioShown(true);
+  }, [ambient, isPlaying, current]);
+
+  // Back wakes the screensaver, like a tap, instead of leaving the app.
+  useEffect(() => {
+    if (!focused || !ambient) return;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      wake();
+      return true;
+    });
+    return () => sub.remove();
   }, [focused, ambient, wake]);
 
   useEffect(() => {
@@ -645,12 +696,14 @@ function ZenRoom() {
   const bottom = ambient ? Math.max(insets.bottom, space.lg) : bottomSpace;
   const edge = { left: space.xl, right: space.xl };
   const panelBeside = !ambient && short;
+  const radioCard = ambient && !!current && (isPlaying || radioShown);
+  const backTo = returnTab ? TAB_TITLES[returnTab] ?? returnTab : null;
   // Tall enough for the soundscapes, the timer and the radio's controls
   // without scrolling.
   const panelHeight = short ? 0 : 312;
   const clockArea = {
     top: top + (ambient ? 0 : 56),
-    bottom: ambient ? bottom + 40 : panelBeside ? bottom : bottom + panelHeight + space.md,
+    bottom: ambient ? bottom + 40 + (radioCard ? RADIO_CARD + space.md : 0) : panelBeside ? bottom : bottom + panelHeight + space.md,
     left: 0,
     right: panelBeside ? width / 2 : 0,
   };
@@ -662,12 +715,18 @@ function ZenRoom() {
       <Atmosphere sceneId={sceneId} width={width} height={height} running={focused} />
       <ToneWash tone={playingScape?.tone} />
       {ambient && (
-        <Pressable style={StyleSheet.absoluteFill} onPress={wake} accessibilityRole="button" accessibilityLabel="Wake Zen controls" />
+        <Pressable
+          style={StyleSheet.absoluteFill}
+          onPress={wake}
+          accessibilityRole="button"
+          accessibilityLabel="Wake Zen controls"
+          accessibilityHint={backTo ? `Goes back to ${backTo}` : undefined}
+        />
       )}
 
       <View pointerEvents="none" style={[styles.clockArea, clockArea]}>
         <Clock width={clockW} height={clockH} compact={short} />
-        <NowLine sound={sound} />
+        <NowLine sound={sound} withRadio={!radioCard} />
       </View>
 
       {/* The controls only exist outside the screensaver, so screen readers
@@ -712,9 +771,21 @@ function ZenRoom() {
         </Animated.View>
       )}
 
+      {/* Over the wake tap, so its buttons work the radio instead. */}
+      {radioCard && (
+        <Animated.View
+          entering={FadeIn.duration(reduceMotion ? 150 : 600)}
+          exiting={FadeOut.duration(reduceMotion ? 150 : 400)}
+          pointerEvents="box-none"
+          style={[styles.radioRow, edge, { bottom: bottom + (short ? 0 : 40) }]}
+        >
+          <RadioCard />
+        </Animated.View>
+      )}
+
       {ambient && !short && (
         <View pointerEvents="none" style={[styles.hintRow, edge, { bottom: bottom + space.md }]}>
-          <Animated.Text style={[styles.hint, hintStyle]}>Tap anywhere for controls</Animated.Text>
+          <Animated.Text style={[styles.hint, hintStyle]}>{backTo ? `Tap to go back to ${backTo}` : 'Tap anywhere for controls'}</Animated.Text>
         </View>
       )}
     </View>
@@ -829,6 +900,24 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.16)',
   },
   glassPrimary: { backgroundColor: colors.text, borderColor: colors.text },
+  radioRow: { position: 'absolute', alignItems: 'center' },
+  radioCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    height: RADIO_CARD,
+    width: '100%',
+    maxWidth: 480,
+    paddingLeft: space.md,
+    paddingRight: space.md,
+    borderRadius: radius.xl,
+    backgroundColor: 'rgba(12,12,14,0.6)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+  },
+  radioText: { flex: 1, gap: 2 },
+  radioTitle: { fontFamily: fonts.semibold, fontSize: 15, color: colors.text, letterSpacing: -0.2 },
+  radioDetail: { fontFamily: fonts.medium, fontSize: 12.5, color: colors.textMuted },
   hintRow: { position: 'absolute', alignItems: 'center' },
   hint: { fontFamily: fonts.mono, fontSize: 10.5, letterSpacing: 2, textTransform: 'uppercase', color: colors.textFaint },
 });
