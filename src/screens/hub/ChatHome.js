@@ -8,7 +8,7 @@ import { useHub } from '../../context/HubContext';
 import * as hub from '../../api/hub';
 import useConversations from '../../hooks/useConversations';
 import { talent as roster } from '../../data/boaContent';
-import { Avatar, IconButton } from '../../components/kit';
+import { Avatar, IconButton, BoaStarBadge } from '../../components/kit';
 import { Button, Slate } from '../../components/ui';
 import DailySpark from '../../components/DailySpark';
 import Headshot from '../../components/Headshot';
@@ -67,6 +67,7 @@ function PersonCard({ person, online, onPress, index }) {
         <Text style={styles.personRole} numberOfLines={1}>
           {role ?? 'Creative'}
         </Text>
+        {person.is_boa_star ? <BoaStarBadge size={18} style={{ marginTop: space.sm }} /> : null}
         {person.open_for_work ? (
           <View style={styles.badge}>
             <Text style={styles.badgeText}>Open for work</Text>
@@ -113,8 +114,9 @@ function Row({ children }) {
 
 /**
  * The Chat tab once you're on the Hub: a cinematic header with you in it,
- * today's Daily Spark, the Community Pulse (BOA's featured talent, the
- * newest people on the Hub, and creatives who do what you do) and your
+ * today's Daily Spark, the Community Pulse (members BOA's admins feature,
+ * BOA's roster, the newest people on the Hub, and creatives who do what
+ * you do) and your
  * conversations. Never an empty page: with no messages yet, the Pulse is
  * where to start.
  */
@@ -122,7 +124,7 @@ export default function ChatHome({ navigation, bottomPadding }) {
   const insets = useSafeAreaInsets();
   const { userId, profile, isOnline, blocked } = useHub();
   const { rows, state, error, reload } = useConversations(userId);
-  const [pulse, setPulse] = useState({ fresh: [], suggested: [], ready: false });
+  const [pulse, setPulse] = useState({ featured: [], fresh: [], suggested: [], ready: false });
 
   // Keyed on what the roles are, not on the array itself, so a profile
   // that's re-read (same roles, new object) doesn't fetch the Pulse again.
@@ -131,12 +133,16 @@ export default function ChatHome({ navigation, bottomPadding }) {
     let alive = true;
     const roles = rolesKey ? rolesKey.split(',') : [];
     Promise.all([
+      hub.listFeatured({ excludeId: userId }).catch(() => []),
       hub.listNewMembers({ excludeId: userId }).catch(() => []),
       hub.listSuggested({ roles, excludeId: userId }).catch(() => []),
-    ]).then(([fresh, suggested]) => {
+    ]).then(([featured, fresh, suggested]) => {
       if (!alive) return;
-      const seen = new Set(fresh.map((p) => p.id));
-      setPulse({ fresh, suggested: suggested.filter((p) => !seen.has(p.id)), ready: true });
+      // Each person once: featured first, then new, then suggested.
+      const seen = new Set(featured.map((p) => p.id));
+      const newOnes = fresh.filter((p) => !seen.has(p.id));
+      newOnes.forEach((p) => seen.add(p.id));
+      setPulse({ featured, fresh: newOnes, suggested: suggested.filter((p) => !seen.has(p.id)), ready: true });
     });
     return () => {
       alive = false;
@@ -144,6 +150,7 @@ export default function ChatHome({ navigation, bottomPadding }) {
   }, [userId, rolesKey]);
 
   const visible = rows.filter((c) => !blocked.has(c.otherId));
+  const featured = pulse.featured.filter((p) => !blocked.has(p.id));
   const fresh = pulse.fresh.filter((p) => !blocked.has(p.id));
   const suggested = pulse.suggested.filter((p) => !blocked.has(p.id));
   const openPerson = (p) => navigation.navigate('HubProfile', { id: p.id });
@@ -169,6 +176,7 @@ export default function ChatHome({ navigation, bottomPadding }) {
               <Text style={styles.heroTitle} accessibilityRole="header">
                 Messages
               </Text>
+              {profile?.is_boa_star ? <BoaStarBadge size={18} style={{ alignSelf: 'flex-start', marginTop: 6 }} /> : null}
               <Text style={styles.heroSub} numberOfLines={1}>
                 {unread ? `${unread} unread` : profile ? `Hi, ${profile.display_name || profile.username}` : ''}
               </Text>
@@ -180,6 +188,17 @@ export default function ChatHome({ navigation, bottomPadding }) {
         <Animated.View entering={FadeInDown.delay(80).springify().damping(18)} style={styles.spark}>
           <DailySpark category={profile?.quote_category} hint={profile?.quote_category ? null : 'Choose your kind in Hub settings.'} />
         </Animated.View>
+
+        {featured.length > 0 && (
+          <>
+            <SectionTitle kicker="Community Pulse" title="Featured by BOA" />
+            <Row>
+              {featured.map((p, i) => (
+                <PersonCard key={p.id} person={p} index={i} online={isOnline(p.id)} onPress={() => openPerson(p)} />
+              ))}
+            </Row>
+          </>
+        )}
 
         <SectionTitle kicker="Community Pulse" title="Featured talent" action="Roster" onAction={() => navigation.navigate('Talent')} />
         <Row>

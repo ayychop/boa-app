@@ -189,9 +189,24 @@ export function HubProvider({ children }) {
     setStage('signedOut');
   }, [userId]);
 
+  // Admin: asked of the database whenever who's signed in changes.
+  const [isAdmin, setIsAdmin] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    if (!supabase || !userId) {
+      setIsAdmin(false);
+      return undefined;
+    }
+    hub.amIAdmin().then((yes) => alive && setIsAdmin(yes));
+    return () => {
+      alive = false;
+    };
+  }, [userId]);
+
   const value = useMemo(
     () => ({
       configured: isConfigured,
+      isAdmin,
       stage,
       session,
       userId,
@@ -209,7 +224,7 @@ export function HubProvider({ children }) {
       signOut,
       deleteAccount,
     }),
-    [stage, session, userId, profile, online, blocked, shareStatus, setShareStatus, loadProfile, saveProfile, finishOnboarding, block, unblock, signOut, deleteAccount],
+    [isAdmin, stage, session, userId, profile, online, blocked, shareStatus, setShareStatus, loadProfile, saveProfile, finishOnboarding, block, unblock, signOut, deleteAccount],
   );
   return <HubContext.Provider value={value}>{children}</HubContext.Provider>;
 }

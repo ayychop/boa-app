@@ -21,7 +21,7 @@ import CreditsSheet from '../components/zen/CreditsSheet';
 import { colors, fonts, radius, space, type } from '../theme';
 import { useOpenHub } from '../components/hub/hubNav';
 import { useHub } from '../context/HubContext';
-import { Avatar } from '../components/kit';
+import { Avatar, BoaStarBadge } from '../components/kit';
 import DailySpark from '../components/DailySpark';
 
 // Until you sign in, the profile card has a placeholder name.
@@ -48,7 +48,7 @@ export default function ProfileScreen({ navigation }) {
   const { width, wide } = useLayout();
   const { openZen } = useZen();
   const openHub = useOpenHub();
-  const { stage, profile } = useHub();
+  const { stage, profile, isAdmin } = useHub();
   const signedIn = stage === 'ready' && !!profile;
   const name = signedIn ? profile.display_name || `@${profile.username}` : LISTENER_NAME;
   const nameSub = signedIn
@@ -109,6 +109,7 @@ export default function ProfileScreen({ navigation }) {
                   {name}
                 </Text>
                 {user.isPremium && <GoldBadge label="PREMIUM" icon="diamond" />}
+                {signedIn && profile.is_boa_star ? <BoaStarBadge size={20} /> : null}
               </View>
               <Text style={styles.nameSub}>{nameSub}</Text>
             </View>
@@ -124,6 +125,27 @@ export default function ProfileScreen({ navigation }) {
             </View>
           )}
         </Tappable>
+
+        {/* Only for BOA's admins (the database says who). */}
+        {isAdmin ? (
+          <Tappable
+            onPress={() => navigation.navigate('AdminDashboard')}
+            accessibilityRole="button"
+            accessibilityLabel="Admin Portal"
+            testID="admin-portal-button"
+            style={styles.adminButton}
+          >
+            <LinearGradient colors={['#1A1408', '#0B0B0D']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+            <View style={styles.adminIcon}>
+              <Ionicons name="shield-half" size={20} color={colors.bg} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.adminKicker}>BOA CONTROL ROOM</Text>
+              <Text style={styles.adminTitle}>Admin Portal</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={colors.gold} />
+          </Tappable>
+        ) : null}
 
         {/* Today's line, in the kind chosen when joining the Hub. */}
         <DailySpark
@@ -266,6 +288,21 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   content: { paddingHorizontal: space.xl, maxWidth: 720, width: '100%', alignSelf: 'center' },
   contentWide: { maxWidth: 1100 },
+  adminButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    marginTop: space.lg,
+    padding: space.lg,
+    borderRadius: 20,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: colors.gold,
+    boxShadow: '0px 0px 22px rgba(226,168,75,0.35)',
+  },
+  adminIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.gold, alignItems: 'center', justifyContent: 'center' },
+  adminKicker: { fontFamily: fonts.mono, fontSize: 10, letterSpacing: 1.8, color: colors.gold },
+  adminTitle: { fontFamily: fonts.semibold, fontSize: 18, color: colors.text, marginTop: 2 },
   card: {
     padding: space.xl,
     borderRadius: 20,

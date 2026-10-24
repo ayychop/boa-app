@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useHub } from '../../context/HubContext';
 import { roleLabel, ROLES, searchProfiles } from '../../api/hub';
-import { Avatar, Chip, Field, IconButton, PageHeader } from '../../components/kit';
+import { BoaStarBadge, Avatar, Chip, Field, IconButton, PageHeader } from '../../components/kit';
 import { lastSeen, statusLine } from '../../components/hub/hubNav';
 import { GoldBadge } from '../../components/ui';
 import { colors, fonts, radius, space, type } from '../../theme';
@@ -27,6 +27,7 @@ function PersonRow({ person, online, onPress, index }) {
             <Text style={styles.name} numberOfLines={1}>
               {person.display_name || `@${person.username}`}
             </Text>
+            {person.is_boa_star ? <BoaStarBadge size={16} /> : null}
             {person.open_for_work && <GoldBadge label="OPEN FOR WORK" />}
           </View>
           <Text style={styles.roles} numberOfLines={1}>

@@ -128,7 +128,7 @@ export async function signOut() {
 // --------------------------------------------------------------- profiles
 
 const PROFILE_FIELDS =
-  'id, username, display_name, avatar_url, bio, roles, quote_category, visible_on_hub, open_for_work, status_kind, status_text, status_updated_at, last_seen_at, created_at';
+  'id, username, display_name, avatar_url, bio, roles, quote_category, is_boa_star, is_featured, banned_at, visible_on_hub, open_for_work, status_kind, status_text, status_updated_at, last_seen_at, created_at';
 
 export async function getProfile(id) {
   return check(await need().from('profiles').select(PROFILE_FIELDS).eq('id', id).maybeSingle());
@@ -291,6 +291,23 @@ export async function listSuggested({ roles = [], limit = 12, excludeId } = {}) 
   if (roles.length) q = q.overlaps('roles', roles);
   if (excludeId) q = q.neq('id', excludeId);
   return check(await q);
+}
+
+/** People BOA's admins chose to feature in the Community Pulse. */
+export async function listFeatured({ limit = 12, excludeId } = {}) {
+  let q = need().from('profiles').select(PROFILE_FIELDS).eq('is_featured', true).eq('visible_on_hub', true).order('last_seen_at', { ascending: false }).limit(limit);
+  if (excludeId) q = q.neq('id', excludeId);
+  return check(await q);
+}
+
+/**
+ * Whether you're a BOA admin. The database decides (your confirmed sign-in
+ * email is in its admin list); the app never holds that list.
+ */
+export async function amIAdmin() {
+  const { data, error } = await need().rpc('is_admin');
+  if (error) return false;
+  return data === true;
 }
 
 // ---------------------------------------------------------- block, report

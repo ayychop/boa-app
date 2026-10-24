@@ -63,6 +63,7 @@ import HubProfileScreen from './src/screens/hub/HubProfileScreen';
 import HubSettingsScreen from './src/screens/hub/HubSettingsScreen';
 import HubChatsScreen from './src/screens/hub/HubChatsScreen';
 import HubThreadScreen from './src/screens/hub/HubThreadScreen';
+import AdminDashboard from './src/screens/admin/AdminDashboard';
 import { colors, fonts } from './src/theme';
 import { haptics } from './src/utils/haptics';
 import useLayout from './src/hooks/useLayout';
@@ -331,6 +332,7 @@ function MainTabs({ narrow }) {
         <Stack.Screen name="HubSettings" component={HubSettingsScreen} />
         <Stack.Screen name="HubChats" component={HubChatsScreen} />
         <Stack.Screen name="HubThread" component={HubThreadScreen} />
+        <Stack.Screen name="AdminDashboard" component={AdminDashboard} />
       </Stack.Navigator>
       <AlarmRinger navReady={navReady} />
       <DeepLinks navReady={navReady} />

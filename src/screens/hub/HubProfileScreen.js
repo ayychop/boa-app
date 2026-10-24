@@ -6,7 +6,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { useHub } from '../../context/HubContext';
 import { getProfile, roleLabel, startConversation } from '../../api/hub';
-import { Avatar, IconButton, PageHeader } from '../../components/kit';
+import { BoaStarBadge, Avatar, IconButton, PageHeader } from '../../components/kit';
 import { lastSeen, statusLine } from '../../components/hub/hubNav';
 import ReportSheet from '../../components/hub/ReportSheet';
 import { Button, Fog, GoldBadge, Slate, Viewfinder } from '../../components/ui';
@@ -97,7 +97,10 @@ export default function HubProfileScreen({ navigation, route }) {
           <Fog opacity={0.22} />
           <Viewfinder inset={12} size={12} />
           <Avatar uri={person.avatar_url} name={person.display_name || person.username} size={112} online={online} ring />
-          <Text style={styles.name}>{person.display_name || `@${person.username}`}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Text style={styles.name}>{person.display_name || `@${person.username}`}</Text>
+            {person.is_boa_star ? <BoaStarBadge size={22} /> : null}
+          </View>
           <Text style={styles.seen}>{mine ? (person.visible_on_hub ? 'Visible on the Hub' : 'Hidden from the Hub') : lastSeen(person.last_seen_at, online)}</Text>
           {person.open_for_work && <GoldBadge label="OPEN FOR WORK" icon="briefcase" style={{ marginTop: space.md }} />}
           {status ? (

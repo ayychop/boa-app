@@ -16,9 +16,23 @@ import { colors, space, type } from '../theme';
  */
 export default function ChatScreen({ navigation }) {
   const insets = useSafeAreaInsets();
-  const { stage } = useHub();
+  const { stage, profile } = useHub();
   const bottom = useBottomSpace(space.xxl);
 
+  // A suspended account: said plainly, with nothing it can no longer do.
+  if (stage === 'ready' && profile?.banned_at) {
+    return (
+      <View style={[styles.screen, styles.banned]} testID="chat-banned">
+        <Slate dot color={colors.gold}>
+          Creative Hub
+        </Slate>
+        <Text style={[type.h1, { marginTop: space.md, textAlign: 'center' }]}>Your Hub account is suspended</Text>
+        <Text style={[type.bodyMuted, { marginTop: space.sm, textAlign: 'center' }]}>
+          A BOA moderator suspended it after a report. If you think that's a mistake, contact BOA from your Profile.
+        </Text>
+      </View>
+    );
+  }
   if (stage === 'ready') return <ChatHome navigation={navigation} bottomPadding={bottom} />;
 
   return (
@@ -51,4 +65,5 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   body: { paddingHorizontal: space.xl },
   title: { marginTop: space.sm, marginBottom: space.xl },
+  banned: { alignItems: 'center', justifyContent: 'center', padding: space.xl },
 });

@@ -5,7 +5,7 @@ import Animated, { FadeInDown, LinearTransition } from 'react-native-reanimated'
 import { LinearGradient } from 'expo-linear-gradient';
 import { useHub } from '../../context/HubContext';
 import useConversations from '../../hooks/useConversations';
-import { Avatar, IconButton, PageHeader } from '../../components/kit';
+import { Avatar, IconButton, PageHeader, BoaStarBadge } from '../../components/kit';
 import { Button } from '../../components/ui';
 import { colors, fonts, radius, space, type } from '../../theme';
 
@@ -44,9 +44,11 @@ export function ThreadRow({ conv, online, onPress, index, myId }) {
         <Avatar uri={conv.other?.avatar_url} name={name} size={64} online={online} />
         <View style={{ flex: 1, minWidth: 0 }}>
           <View style={styles.line}>
-            <Text style={[styles.name, conv.unread && { fontFamily: fonts.bold }]} numberOfLines={1}>
+            <Text style={[styles.name, conv.unread && { fontFamily: fonts.bold }, conv.other?.is_boa_star && { flex: 0, flexShrink: 1 }]} numberOfLines={1}>
               {name}
             </Text>
+            {conv.other?.is_boa_star ? <BoaStarBadge size={16} /> : null}
+            {conv.other?.is_boa_star ? <View style={{ flex: 1 }} /> : null}
             <Text style={[styles.time, conv.unread && { color: colors.gold }]}>{chatTime(conv.last_message_at)}</Text>
           </View>
           <View style={styles.line}>

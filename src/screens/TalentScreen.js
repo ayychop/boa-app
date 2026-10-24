@@ -7,6 +7,7 @@ import { talent } from '../data/boaContent';
 import { useForms } from '../context/FormsContext';
 import Headshot from '../components/Headshot';
 import BottomSheet from '../components/BottomSheet';
+import CastingBoard from '../components/casting/CastingBoard';
 import { Button, Fog, Slate, Tappable } from '../components/ui';
 import useBottomSpace from '../hooks/useBottomSpace';
 import useLayout from '../hooks/useLayout';
@@ -123,6 +124,11 @@ export default function TalentScreen({ route, navigation }) {
           })}
         </View>
         <Slate style={{ marginTop: space.lg }}>Showing {visible.length} people</Slate>
+      </View>
+
+      {/* Casting & Gigs: BOA's productions and paid, BOA-checked gigs. */}
+      <View style={{ width: contentWidth, alignSelf: 'center' }}>
+        <CastingBoard navigation={navigation} />
       </View>
 
       <View style={[styles.grid, { width: contentWidth, gap: GAP }]}>

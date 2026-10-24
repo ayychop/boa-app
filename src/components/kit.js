@@ -180,6 +180,40 @@ export function Segmented({ options, value, onChange }) {
 
 /** A round profile picture with initials behind it and an optional online dot. */
 /**
+ * The BOA Star badge: exceptional talent, chosen by BOA. A gold gradient
+ * pill with a star, a bright rim and a soft gold glow. `size` is its height.
+ */
+export function BoaStarBadge({ size = 18, style }) {
+  return (
+    <View
+      accessible
+      accessibilityLabel="BOA Star"
+      testID="boa-star"
+      style={[{ borderRadius: size, boxShadow: `0px 0px ${Math.round(size * 0.7)}px rgba(226,168,75,0.65)` }, style]}
+    >
+      <LinearGradient
+        colors={['#FFE6A8', colors.gold, colors.goldDeep]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={{
+          height: size,
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: Math.round(size * 0.18),
+          paddingHorizontal: Math.round(size * 0.45),
+          borderRadius: size,
+          borderWidth: 1,
+          borderColor: 'rgba(255,240,200,0.9)',
+        }}
+      >
+        <Ionicons name="star" size={Math.round(size * 0.58)} color={colors.bg} />
+        <Text style={{ fontFamily: fonts.bold, fontSize: Math.round(size * 0.5), letterSpacing: size * 0.08, color: colors.bg }}>BOA STAR</Text>
+      </LinearGradient>
+    </View>
+  );
+}
+
+/**
  * A round profile picture (initials if there isn't one). People who are
  * online, or `ring`, get BOA's gold ring: a gradient band with a dark gap
  * between it and the photo, like a story ring.
