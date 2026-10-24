@@ -4,7 +4,6 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as widget from '../modules/boa-widget';
 import { routeLink } from '../App';
-import { AUTH_REDIRECT, authRedirect } from '../src/api/hub';
 import { QUOTE_CATEGORIES, QUOTES } from '../src/data/quotes';
 import { dailyQuote, dayOfYear } from '../src/utils/dailyQuote';
 import { advance, bootIntoTabs, instrument, openTab, PORTRAIT, setWindow } from './helpers';
@@ -46,9 +45,20 @@ describe('the Daily Spark', () => {
   });
 });
 
-test('Google sign-in returns to exactly network.boa://auth-callback', () => {
-  expect(AUTH_REDIRECT).toBe('network.boa://auth-callback');
-  expect(authRedirect()).toBe('network.boa://auth-callback');
+test('Google sign-in returns to exactly network.boa://auth-callback, built by makeRedirectUri', () => {
+  // As in an installed build: the real app.json as the manifest, standalone.
+  const expoConfig = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'app.json'), 'utf8')).expo;
+  let redirect;
+  jest.isolateModules(() => {
+    jest.doMock('expo-constants', () => {
+      const constants = { expoConfig, manifest: expoConfig, executionEnvironment: 'standalone', appOwnership: null };
+      return { __esModule: true, default: constants, ...constants, ExecutionEnvironment: { Bare: 'bare', Standalone: 'standalone', StoreClient: 'storeClient' } };
+    });
+    redirect = require('../src/api/hub').authRedirect();
+  });
+  expect(redirect).toBe('network.boa://auth-callback');
+  const src = fs.readFileSync(path.join(__dirname, '..', 'src/api/hub.js'), 'utf8');
+  expect(src).toContain("makeRedirectUri({ scheme: 'network.boa', path: 'auth-callback' })");
 });
 
 test('the reset migration recreates the Hub with quote_category, in one transaction', () => {

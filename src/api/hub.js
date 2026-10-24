@@ -1,4 +1,5 @@
 import * as WebBrowser from 'expo-web-browser';
+import { makeRedirectUri } from 'expo-auth-session';
 import * as Linking from 'expo-linking';
 import { supabase } from '../lib/supabase';
 
@@ -66,12 +67,11 @@ function check({ data, error }) {
 // ------------------------------------------------------------------- auth
 
 // Where Supabase sends you back after Google or an email link: the app's
-// own scheme (app.json), spelled out so it's exactly this in every build.
-// It must be in Supabase's Redirect URLs list. (Google's own Console lists
-// Supabase's callback, https://<project>.supabase.co/auth/v1/callback,
-// not this.)
-export const AUTH_REDIRECT = 'network.boa://auth-callback';
-export const authRedirect = () => AUTH_REDIRECT;
+// own scheme (app.json), network.boa://auth-callback in an installed
+// build. It must match Supabase's Redirect URLs (network.boa://**).
+// (Google's own Console lists Supabase's callback,
+// https://<project>.supabase.co/auth/v1/callback, not this.)
+export const authRedirect = () => makeRedirectUri({ scheme: 'network.boa', path: 'auth-callback' });
 
 export async function signInWithEmail(email, password) {
   return check(await need().auth.signInWithPassword({ email: email.trim(), password }));
