@@ -9,7 +9,8 @@ import { CHAT_SOUNDS, DEFAULT_CHAT_SOUND, RETIRED_CHAT_SOUNDS, chatChannel, chat
 import { ensureChatChannels } from '../src/chat/notifications';
 import { STATUS_STALE_MS, statusLine } from '../src/components/hub/hubNav';
 import NowPlaying from '../src/components/hub/NowPlaying';
-import AmbientGlow, { LIGHTS } from '../src/components/chat/AmbientGlow';
+import AmbientGlow from '../src/components/chat/AmbientGlow';
+import { VIBES } from '../src/chat/vibes';
 import { ThreadRow } from '../src/screens/hub/HubChatsScreen';
 import HubThreadScreen from '../src/screens/hub/HubThreadScreen';
 import { zenStatusText } from '../src/context/HubContext';
@@ -181,16 +182,19 @@ describe('now playing', () => {
 // --------------------------------------------------------------- the look
 
 describe('chat ambiance and layout', () => {
-  test('every ambient light travels across the screen, never off it', async () => {
-    for (const l of LIGHTS) {
-      for (const v of [...l.x, ...l.y]) {
-        expect(v).toBeGreaterThanOrEqual(0);
-        expect(v).toBeLessThanOrEqual(1);
+  test('every ambient light, in every vibe, travels across the screen, never off it', async () => {
+    for (const vibe of VIBES) {
+      for (const l of vibe.lights) {
+        for (const v of [...l.x, ...l.y]) {
+          expect(v).toBeGreaterThanOrEqual(0);
+          expect(v).toBeLessThanOrEqual(1);
+        }
+        expect(Math.min(...l.opacity)).toBeGreaterThan(0.15);
       }
-      expect(Math.min(...l.opacity)).toBeGreaterThan(0.15);
+      await render(<AmbientGlow vibe={vibe} />);
+      for (const l of vibe.lights) expect(screen.getByTestId(`chat-ambient-${l.id}`)).toBeOnTheScreen();
+      await screen.unmount();
     }
-    await render(<AmbientGlow />);
-    for (const l of LIGHTS) expect(screen.getByTestId(`chat-ambient-${l.id}`)).toBeOnTheScreen();
   });
 
   test('the Messages title stays on one line on any width', async () => {

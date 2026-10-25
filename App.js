@@ -32,6 +32,8 @@ import {
 } from '@expo-google-fonts/manrope';
 import { JetBrainsMono_400Regular, JetBrainsMono_500Medium } from '@expo-google-fonts/jetbrains-mono';
 import { InstrumentSerif_400Regular_Italic } from '@expo-google-fonts/instrument-serif';
+import { PlusJakartaSans_500Medium, PlusJakartaSans_700Bold } from '@expo-google-fonts/plus-jakarta-sans';
+import { SpaceGrotesk_500Medium } from '@expo-google-fonts/space-grotesk';
 import { PlayerProvider } from './src/context/PlayerContext';
 import { MediaProvider } from './src/context/MediaContext';
 import { FormsProvider } from './src/context/FormsContext';
@@ -407,6 +409,9 @@ export default function App() {
     JetBrainsMono_400Regular,
     JetBrainsMono_500Medium,
     InstrumentSerif_400Regular_Italic,
+    PlusJakartaSans_500Medium,
+    PlusJakartaSans_700Bold,
+    SpaceGrotesk_500Medium,
     // Every icon is a glyph in this font. Loaded with the rest, so icons
     // (Shazam, YouTube Music, the tab bar) draw on their first frame rather
     // than popping in once the font arrives.

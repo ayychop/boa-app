@@ -1,29 +1,24 @@
 import { useEffect } from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import Animated, { Easing, interpolate, useAnimatedStyle, useReducedMotion, useSharedValue } from 'react-native-reanimated';
+import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
 import Grain from '../Grain';
 import { startLoop } from '../../utils/loop';
-import { colors } from '../../theme';
+import { vibeById } from '../../chat/vibes';
 
-// Three soft lights drifting behind the conversation, each on its own slow
-// loop so the scene never repeats exactly: warm gold up top, a deep amber
-// low down, and a faint cool light for contrast. x and y are where each
-// light's centre travels between (fractions of the screen); size is its
-// diameter as a fraction of the screen's width. They only move transform
-// and opacity (no layout), so they stay on the UI thread.
-export const LIGHTS = [
-  { id: 'gold', color: colors.gold, size: 1.5, x: [0.12, 0.5], y: [0.1, 0.24], opacity: [0.55, 0.8], ms: 14000 },
-  { id: 'amber', color: '#C2601F', size: 1.7, x: [0.85, 0.5], y: [0.78, 0.6], opacity: [0.45, 0.65], ms: 19000 },
-  { id: 'cool', color: '#3B5B8C', size: 1.2, x: [0.95, 0.7], y: [0.36, 0.5], opacity: [0.22, 0.38], ms: 23000 },
-];
+// The vibe's three soft lights drift over its mesh, each on its own slow
+// loop so the scene never repeats exactly. x and y are where each light's
+// centre travels between (fractions of the screen); size is its diameter
+// as a fraction of the screen's width. They only move transform and
+// opacity (no layout), so they stay on the UI thread.
 
 // A faint night sky over the lights: three sets of stars, each set
 // brightening and dimming on its own slow breath, so a few twinkle at a
 // time. Positions are fixed (a seeded scatter), as fractions of the screen.
 const STAR_SETS = 3;
 const STARS_PER_SET = 9;
-const STAR_MS = [5200, 7300, 9100];
+const STAR_MS = [5200, 7300, 9100, 6100];
 const seeded = (n) => {
   const x = Math.sin(n * 127.1 + 311.7) * 43758.5453;
   return x - Math.floor(x);
@@ -35,17 +30,25 @@ export const STARS = Array.from({ length: STAR_SETS * STARS_PER_SET }, (_, i) =>
   size: 1 + Math.round(seeded(i + 201) * 1.5),
   gold: seeded(i + 301) > 0.7,
 }));
+// Midnight's deeper sky: a fourth set, denser and a little larger.
+export const DEEP_STARS = Array.from({ length: 36 }, (_, i) => ({
+  set: STAR_SETS,
+  x: seeded(i + 401),
+  y: seeded(i + 501),
+  size: 1 + Math.round(seeded(i + 601) * 2),
+  gold: seeded(i + 701) > 0.85,
+}));
 
-function StarSet({ set, width, height, still }) {
+function StarSet({ stars, set, width, height, still, max }) {
   const t = useSharedValue(0.5);
   useEffect(() => {
     if (still) return undefined;
     return startLoop(t, STAR_MS[set], Easing.inOut(Easing.sin), true);
   }, [still, t, set]);
-  const style = useAnimatedStyle(() => ({ opacity: interpolate(t.value, [0, 1], [0.15, 0.6]) }));
+  const style = useAnimatedStyle(() => ({ opacity: interpolate(t.value, [0, 1], [max * 0.25, max]) }));
   return (
     <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, style]} testID={`chat-stars-${set}`}>
-      {STARS.filter((s) => s.set === set).map((s, i) => (
+      {stars.map((s, i) => (
         <View
           key={i}
           style={[
@@ -98,28 +101,34 @@ function Light({ light, width, height, still }) {
   );
 }
 
-/** The chat thread's living backdrop. Render it first, behind everything. */
-export default function AmbientGlow() {
+/**
+ * The chat thread's living backdrop in the chosen vibe: a three-tone mesh,
+ * the drifting lights, a veil, the stars and a film grain. Render it first,
+ * behind everything. The mesh's middle tone is also its plain fill, so the
+ * screen is never black while the gradient draws.
+ */
+export default function AmbientGlow({ vibe = vibeById() }) {
   const { width, height } = useWindowDimensions();
   const still = useReducedMotion();
   return (
-    <View pointerEvents="none" style={styles.fill} testID="chat-ambient">
-      {LIGHTS.map((l) => (
-        <Light key={l.id} light={l} width={width} height={height} still={still} />
+    <View pointerEvents="none" style={[styles.fill, { backgroundColor: vibe.mesh[1] }]} testID="chat-ambient">
+      <LinearGradient colors={vibe.mesh} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} testID={`chat-mesh-${vibe.id}`} />
+      {vibe.lights.map((l) => (
+        <Light key={`${vibe.id}-${l.id}`} light={l} width={width} height={height} still={still} />
       ))}
-      {/* A dark veil keeps the lights behind the words, never over them. */}
-      <View style={styles.veil} />
+      {/* A veil keeps the lights behind the words, never over them. */}
+      <View style={[StyleSheet.absoluteFill, { backgroundColor: vibe.veil }]} />
       {Array.from({ length: STAR_SETS }, (_, set) => (
-        <StarSet key={set} set={set} width={width} height={height} still={still} />
+        <StarSet key={set} stars={STARS.filter((s) => s.set === set)} set={set} width={width} height={height} still={still} max={vibe.stars.max} />
       ))}
+      {vibe.stars.deep ? <StarSet stars={DEEP_STARS} set={STAR_SETS} width={width} height={height} still={still} max={vibe.stars.max} /> : null}
       <Grain width={width} height={height} opacity={0.07} running={!still} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  fill: { ...StyleSheet.absoluteFillObject, zIndex: 0, backgroundColor: colors.bg, overflow: 'hidden' },
+  fill: { ...StyleSheet.absoluteFillObject, zIndex: 0, overflow: 'hidden' },
   light: { position: 'absolute', left: 0, top: 0 },
   star: { position: 'absolute' },
-  veil: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(5,5,6,0.22)' },
 });

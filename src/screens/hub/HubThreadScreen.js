@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { BlurTargetView } from 'expo-blur';
 import * as ImagePicker from 'expo-image-picker';
 import Animated, { withSpring, withTiming } from 'react-native-reanimated';
 import { useHub } from '../../context/HubContext';
@@ -24,7 +25,7 @@ import {
 } from '../../api/hub';
 import { setOpenThread } from '../../chat/notifications';
 import { openTyping, TYPING_HOLD_MS } from '../../chat/typing';
-import { Avatar, BoaStarBadge, PageHeader } from '../../components/kit';
+import { BoaStarBadge } from '../../components/kit';
 import { lastSeen, statusLine } from '../../components/hub/hubNav';
 import ReportSheet from '../../components/hub/ReportSheet';
 import NowPlaying from '../../components/hub/NowPlaying';
@@ -32,6 +33,10 @@ import useProfileUpdates from '../../hooks/useProfileUpdates';
 import AmbientGlow from '../../components/chat/AmbientGlow';
 import Composer from '../../components/chat/Composer';
 import TypingIndicator, { TypingDots } from '../../components/chat/TypingIndicator';
+import ThreadHeader from '../../components/chat/ThreadHeader';
+import VibePicker from '../../components/chat/VibePicker';
+import BottomSheet from '../../components/BottomSheet';
+import useChatVibe, { vibeById } from '../../chat/vibes';
 import { MediaTile, MediaViewer, VoiceNote } from '../../components/chat/media';
 import { Button, PulseDot } from '../../components/ui';
 import ErrorBoundary from '../../components/ErrorBoundary';
@@ -62,44 +67,50 @@ function timeLeft(expiresAt) {
   return h >= 1 ? `${h}h left` : `${Math.max(1, Math.round(ms / 60000))}m left`;
 }
 
-// A new message rises into place: up a touch, from just under full size,
-// settling on a soft spring as it fades in. Messages already there when
-// the thread opens don't animate.
+// A new message slides in from its own side (yours from the right, theirs
+// from the left), rising a touch from just under full size and settling on
+// a soft spring as it fades in. Messages already there when the thread
+// opens don't animate.
 const RISE_SPRING = { damping: 16, stiffness: 220, mass: 0.7 };
-export function rise() {
+const slideIn = (dx) => () => {
   'worklet';
   return {
-    initialValues: { opacity: 0, transform: [{ translateY: 12 }, { scale: 0.92 }] },
+    initialValues: { opacity: 0, transform: [{ translateX: dx }, { translateY: 10 }, { scale: 0.92 }] },
     animations: {
-      opacity: withTiming(1, { duration: 180 }),
-      transform: [{ translateY: withSpring(0, RISE_SPRING) }, { scale: withSpring(1, RISE_SPRING) }],
+      opacity: withTiming(1, { duration: 200 }),
+      transform: [{ translateX: withSpring(0, RISE_SPRING) }, { translateY: withSpring(0, RISE_SPRING) }, { scale: withSpring(1, RISE_SPRING) }],
     },
   };
-}
+};
+export const riseMine = slideIn(28);
+export const riseTheirs = slideIn(-28);
 
-// Frosted glass: a translucent fill with a light sheen across the top and a
-// fine bright edge, over the ambient glow behind the thread. Yours are
-// champagne-to-amber gold glass with a warm glow; theirs are smoky.
-const MINE_GLASS = ['rgba(252,230,182,0.97)', 'rgba(232,180,96,0.94)', 'rgba(196,130,44,0.92)'];
-const THEIR_GLASS = ['rgba(255,255,255,0.14)', 'rgba(255,255,255,0.04)'];
-
-function Bubble({ message, mine, seen, fresh, onLongPress, onOpenMedia }) {
+// Frosted glass: a translucent fill in the vibe's colours with a light sheen
+// across the top and a fine bright edge, over the backdrop. Yours are the
+// vibe's gradient glass; theirs are smoky glass with a solid tint under the
+// gradient, so they read on any backdrop, blur or no blur.
+function Bubble({ message, mine, seen, fresh, vibe, onLongPress, onOpenMedia }) {
   const media = message.kind === 'image' || message.kind === 'video';
   const voice = message.kind === 'voice';
   const caption = message.body?.trim();
   const status = message.failed ? 'Not sent · hold to retry' : message.pending ? 'Sending…' : chatTime(message.created_at);
   const left = message.expires_at ? timeLeft(message.expires_at) : null;
   return (
-    <Animated.View entering={fresh ? rise : undefined} style={[styles.bubbleRow, mine && { justifyContent: 'flex-end' }]} testID={fresh ? `hub-message-fresh-${message.id}` : undefined}>
+    <Animated.View entering={fresh ? (mine ? riseMine : riseTheirs) : undefined} style={[styles.bubbleRow, mine && { justifyContent: 'flex-end' }]} testID={fresh ? `hub-message-fresh-${message.id}` : undefined}>
       <Pressable
         onLongPress={onLongPress}
         delayLongPress={350}
         accessibilityHint={mine ? 'Hold to delete' : 'Hold to report'}
-        style={[styles.bubble, mine ? styles.mine : styles.theirs, media && styles.mediaBubble, message.pending && !media && { opacity: 0.6 }]}
+        style={[
+          styles.bubble,
+          mine ? [styles.mine, { borderColor: vibe.mineEdge }, vibe.mineGlow && { boxShadow: vibe.mineGlow }] : [styles.theirs, { backgroundColor: vibe.theirsFill, borderColor: vibe.theirsEdge }],
+          media && styles.mediaBubble,
+          message.pending && !media && { opacity: 0.6 },
+        ]}
         testID={`hub-message-${message.id}`}
       >
         <LinearGradient
-          colors={mine ? MINE_GLASS : THEIR_GLASS}
+          colors={mine ? vibe.mine : vibe.theirs}
           start={{ x: 0, y: 0 }}
           end={{ x: 0.5, y: 1 }}
           style={StyleSheet.absoluteFill}
@@ -108,9 +119,9 @@ function Bubble({ message, mine, seen, fresh, onLongPress, onOpenMedia }) {
         {media ? <MediaTile message={message} onOpen={onOpenMedia} /> : null}
         {voice ? <VoiceNote message={message} mine={mine} /> : null}
         {(!media && !voice) || caption ? (
-          <Text style={[styles.body, mine && { color: colors.bg }, media && { marginTop: space.sm, paddingHorizontal: space.xs }]}>{message.body}</Text>
+          <Text style={[styles.body, mine && { color: vibe.mineText }, media && { marginTop: space.sm, paddingHorizontal: space.xs }]}>{message.body}</Text>
         ) : null}
-        <Text style={[styles.meta, mine && { color: 'rgba(5,5,6,0.6)' }, media && { paddingHorizontal: space.xs }]}>
+        <Text style={[styles.meta, mine && { color: vibe.mineMeta }, media && { paddingHorizontal: space.xs }]}>
           {left ? (
             <>
               <Ionicons name="timer-outline" size={9} /> {left} ·{' '}
@@ -128,12 +139,12 @@ function Bubble({ message, mine, seen, fresh, onLongPress, onOpenMedia }) {
  * The live line under their name, most telling first: typing, then what
  * they're playing, then "Online in the Hub", then when they were last about.
  */
-function HeaderStatus({ person, online, typing }) {
+function HeaderStatus({ person, online, typing, accent }) {
   if (typing) {
     return (
       <View style={styles.status} testID="thread-status-typing">
-        <TypingDots size={4} />
-        <Text style={styles.statusText}>typing</Text>
+        <TypingDots size={4} color={accent} />
+        <Text style={[styles.statusText, { color: accent }]}>typing</Text>
       </View>
     );
   }
@@ -168,6 +179,14 @@ function Thread({ navigation, route }) {
   const [viewing, setViewing] = useState(null);
   const [keyboard, setKeyboard] = useState(false);
   const [theyType, setTheyType] = useState(false);
+  const [picking, setPicking] = useState(false);
+  // The header and composer float over the conversation on glass, so the
+  // list keeps their heights clear at its ends.
+  const [headerH, setHeaderH] = useState(insets.top + 60);
+  const [composerH, setComposerH] = useState(64);
+  const { vibe, setVibe } = useChatVibe();
+  // What the glass blurs on Android: the backdrop and the messages.
+  const behind = useRef(null);
   const alive = useRef(true);
   const list = useRef(null);
   const typing = useRef(null);
@@ -422,96 +441,125 @@ function Thread({ navigation, route }) {
   const bottom = keyboard ? 0 : insets.bottom;
 
   const header = (
-    <PageHeader
-      kicker="Creative Hub"
-      title={name}
-      badge={other?.is_boa_star ? <BoaStarBadge size={16} /> : null}
-      subtitle={other ? <HeaderStatus person={other} online={online} typing={theyType} /> : null}
+    <ThreadHeader
+      name={name}
+      person={other}
+      online={online}
+      vibe={vibe}
+      blurTarget={behind}
+      badge={other?.is_boa_star ? <BoaStarBadge size={15} /> : null}
+      status={other ? <HeaderStatus person={other} online={online} typing={theyType} accent={vibe.accent} /> : null}
       onBack={() => navigation.goBack()}
-      right={
-        conv && other ? (
-          <Pressable
-            onPress={() => navigation.navigate('HubProfile', { id: conv.otherId })}
-            accessibilityRole="button"
-            accessibilityLabel={`View ${name}'s profile`}
-          >
-            <Avatar uri={other.avatar_url} name={name} size={40} online={online} />
-          </Pressable>
-        ) : undefined
-      }
+      onProfile={conv && other ? () => navigation.navigate('HubProfile', { id: conv.otherId }) : null}
+      onVibe={() => setPicking(true)}
+      onLayout={(e) => setHeaderH(e.nativeEvent.layout.height)}
     />
   );
 
+  const picker = (
+    <BottomSheet open={picking} onClose={() => setPicking(false)} glass>
+      <View style={styles.sheet} testID="chat-vibe-sheet">
+        <Text style={styles.sheetKicker}>Chat vibe</Text>
+        <Text style={[type.bodyMuted, { marginBottom: space.lg }]}>How your conversations look. Applies to every chat on this phone.</Text>
+        <VibePicker value={vibe.id} onChange={setVibe} />
+      </View>
+    </BottomSheet>
+  );
+
+  // Layers, back to front: the backdrop and the messages (together, the
+  // glass's blur target), then the glass header and composer floating over
+  // them. Nothing between the backdrop and the screen draws a fill of its
+  // own; the screen's fill is the vibe's middle tone, the same colour the
+  // backdrop starts from, so there's no black flash before it draws.
   if (state !== 'ready') {
     return (
-      <View style={styles.screen} testID="hub-thread">
-        <AmbientGlow />
-        {header}
-        {state === 'loading' ? (
-          <ActivityIndicator color={colors.gold} style={{ marginTop: space.xxxl }} />
-        ) : (
-          <View style={styles.empty}>
-            <Ionicons name="cloud-offline-outline" size={30} color={colors.gold} />
-            <Text style={[type.title, { marginTop: space.md, textAlign: 'center' }]}>Couldn't open this conversation</Text>
-            <Text style={[type.bodyMuted, { textAlign: 'center', marginTop: space.sm }]}>{error}</Text>
-            <Button label="Try again" icon="refresh" onPress={load} style={{ marginTop: space.xl }} />
+      <View style={[styles.screen, { backgroundColor: vibe.mesh[1] }]} testID="hub-thread">
+        <BlurTargetView ref={behind} style={StyleSheet.absoluteFill} collapsable={false}>
+          <AmbientGlow vibe={vibe} />
+          <View style={{ paddingTop: headerH }}>
+            {state === 'loading' ? (
+              <ActivityIndicator color={vibe.accent} style={{ marginTop: space.xxxl }} />
+            ) : (
+              <View style={styles.empty}>
+                <Ionicons name="cloud-offline-outline" size={30} color={vibe.accent} />
+                <Text style={[type.title, { marginTop: space.md, textAlign: 'center' }]}>Couldn't open this conversation</Text>
+                <Text style={[type.bodyMuted, { textAlign: 'center', marginTop: space.sm }]}>{error}</Text>
+                <Button label="Try again" icon="refresh" onPress={load} style={{ marginTop: space.xl }} />
+              </View>
+            )}
           </View>
-        )}
+        </BlurTargetView>
+        {header}
+        {picker}
       </View>
     );
   }
 
   return (
-    <View style={styles.screen} testID="hub-thread">
-      <AmbientGlow />
+    <View style={[styles.screen, { backgroundColor: vibe.mesh[1] }]} testID="hub-thread">
       <KeyboardAvoidingView style={styles.fill} behavior={keyboardBehavior()} testID="hub-thread-keyboard">
-        {header}
-        <FlatList
-          ref={list}
-          inverted
-          data={messages}
-          keyExtractor={(m, i) => String(m?.id ?? i)}
-          renderItem={({ item }) => (
-            <Bubble
-              message={item}
-              mine={item.sender_id === userId}
-              seen={item.id === seenId}
-              fresh={!known.current.has(item.id)}
-              onLongPress={() => onLongPress(item)}
-              onOpenMedia={setViewing}
+        {/* The keyboard shortens this; the floating layers sit inside it. */}
+        <View style={styles.fill}>
+          <BlurTargetView ref={behind} style={StyleSheet.absoluteFill} collapsable={false} testID="hub-thread-behind">
+            <AmbientGlow vibe={vibe} />
+            <FlatList
+              ref={list}
+              inverted
+              data={messages}
+              keyExtractor={(m, i) => String(m?.id ?? i)}
+              renderItem={({ item }) => (
+                <Bubble
+                  message={item}
+                  mine={item.sender_id === userId}
+                  seen={item.id === seenId}
+                  fresh={!known.current.has(item.id)}
+                  vibe={vibe}
+                  onLongPress={() => onLongPress(item)}
+                  onOpenMedia={setViewing}
+                />
+              )}
+              onEndReachedThreshold={0.4}
+              onEndReached={loadOlder}
+              // Inverted: the top padding sits at the bottom of the screen.
+              contentContainerStyle={{ paddingHorizontal: space.lg, paddingTop: composerH + space.md, paddingBottom: headerH + space.md, flexGrow: 1 }}
+              scrollIndicatorInsets={{ top: composerH, bottom: headerH }}
+              style={styles.list}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="interactive"
+              ListHeaderComponent={theyType ? <TypingIndicator name={name} vibe={vibe} /> : null}
+              ListFooterComponent={older === 'loading' ? <ActivityIndicator color={vibe.accent} style={{ margin: space.lg }} /> : null}
+              ListEmptyComponent={
+                <View style={styles.empty}>
+                  <Text style={[type.bodyMuted, { textAlign: 'center' }]}>Say hello to {name}.</Text>
+                </View>
+              }
+            />
+          </BlurTargetView>
+          {header}
+          {isBlocked ? (
+            <View style={[styles.blocked, { paddingBottom: insets.bottom + space.md, backgroundColor: vibe.bar }]} onLayout={(e) => setComposerH(e.nativeEvent.layout.height)}>
+              <Text style={[type.bodyMuted, { flex: 1 }]}>You've blocked {name}. Unblock them to send messages.</Text>
+              <Button label="Unblock" variant="ghost" onPress={() => unblock(conv.otherId).catch((e) => Alert.alert('Unblock failed', e.message))} />
+            </View>
+          ) : (
+            <Composer
+              onSend={(text) => send(text)}
+              onAttach={attach}
+              onVoice={sendVoice}
+              onTyping={(on) => (on ? typing.current?.ping() : typing.current?.stop())}
+              bottomInset={bottom}
+              onFocus={toNewest}
+              vibe={vibe}
+              blurTarget={behind}
+              onLayout={(e) => setComposerH(e.nativeEvent.layout.height)}
+              style={styles.floating}
             />
           )}
-          onEndReachedThreshold={0.4}
-          onEndReached={loadOlder}
-          contentContainerStyle={{ paddingHorizontal: space.lg, paddingVertical: space.md, flexGrow: 1 }}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="interactive"
-          ListHeaderComponent={theyType ? <TypingIndicator name={name} /> : null}
-          ListFooterComponent={older === 'loading' ? <ActivityIndicator color={colors.gold} style={{ margin: space.lg }} /> : null}
-          ListEmptyComponent={
-            <View style={styles.empty}>
-              <Text style={[type.bodyMuted, { textAlign: 'center' }]}>Say hello to {name}.</Text>
-            </View>
-          }
-        />
-        {isBlocked ? (
-          <View style={[styles.blocked, { paddingBottom: insets.bottom + space.md }]}>
-            <Text style={[type.bodyMuted, { flex: 1 }]}>You've blocked {name}. Unblock them to send messages.</Text>
-            <Button label="Unblock" variant="ghost" onPress={() => unblock(conv.otherId).catch((e) => Alert.alert('Unblock failed', e.message))} />
-          </View>
-        ) : (
-          <Composer
-            onSend={(text) => send(text)}
-            onAttach={attach}
-            onVoice={sendVoice}
-            onTyping={(on) => (on ? typing.current?.ping() : typing.current?.stop())}
-            bottomInset={bottom}
-            onFocus={toNewest}
-          />
-        )}
+        </View>
       </KeyboardAvoidingView>
       <MediaViewer item={viewing} onClose={() => setViewing(null)} />
       <ReportSheet target={reporting} onClose={(didBlock) => (setReporting(null), didBlock && navigation.goBack())} />
+      {picker}
     </View>
   );
 }
@@ -523,8 +571,10 @@ function Thread({ navigation, route }) {
  */
 function ThreadFallback({ error, retry, navigation }) {
   const insets = useSafeAreaInsets();
+  const vibe = vibeById();
   return (
-    <View style={[styles.screen, styles.fallback, { paddingTop: insets.top + space.md }]} testID="hub-thread-fallback">
+    <View style={[styles.screen, styles.fallback, { paddingTop: insets.top + space.md, backgroundColor: vibe.mesh[1] }]} testID="hub-thread-fallback">
+      <LinearGradient colors={vibe.mesh} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
       <Pressable
         onPress={() => (navigation?.canGoBack?.() ? navigation.goBack() : null)}
         accessibilityRole="button"
@@ -555,9 +605,13 @@ export default function HubThreadScreen(props) {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
-  // Above the ambient glow (which sits over the screen's black), transparent.
-  fill: { flex: 1, zIndex: 1, backgroundColor: 'transparent' },
+  // Its fill is set from the vibe where it's drawn.
+  screen: { flex: 1 },
+  fill: { flex: 1 },
+  list: { zIndex: 1 },
+  floating: { position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 2 },
+  sheet: { paddingHorizontal: space.lg, paddingBottom: space.sm },
+  sheetKicker: { fontFamily: fonts.stamp, fontSize: 11, letterSpacing: 2.4, textTransform: 'uppercase', color: colors.textMuted, marginBottom: space.xs },
   bubbleRow: { flexDirection: 'row', marginVertical: 3 },
   bubble: {
     maxWidth: '80%',
@@ -565,28 +619,27 @@ const styles = StyleSheet.create({
     paddingVertical: space.sm,
     borderRadius: radius.lg,
     overflow: 'hidden',
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 1,
   },
   mediaBubble: { padding: 4, paddingBottom: space.xs },
-  mine: {
-    borderBottomRightRadius: radius.sm,
-    borderColor: 'rgba(255,236,196,0.85)',
-    // Gold glass gives off a little warm light of its own.
-    boxShadow: '0px 4px 18px rgba(226,168,75,0.28)',
-  },
-  theirs: {
-    borderBottomLeftRadius: radius.sm,
-    backgroundColor: 'rgba(20,20,24,0.42)',
-    borderColor: 'rgba(255,255,255,0.16)',
-  },
+  // No drop shadows: the glass is lit by its edge and sheen. Neon alone
+  // gives yours a glow of its own (vibe.mineGlow).
+  mine: { borderBottomRightRadius: radius.sm },
+  theirs: { borderBottomLeftRadius: radius.sm },
   // The glass's top edge catching the light.
   sheen: { position: 'absolute', left: 10, right: 10, top: 0, height: StyleSheet.hairlineWidth * 2, backgroundColor: 'rgba(255,255,255,0.22)' },
-  body: { fontFamily: fonts.medium, fontSize: 15, lineHeight: 21, color: colors.text },
+  body: { fontFamily: fonts.chat, fontSize: 15.5, lineHeight: 22, letterSpacing: -0.1, color: colors.text },
   status: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3 },
-  statusText: { fontFamily: fonts.medium, fontSize: 12, color: colors.gold },
+  statusText: { fontFamily: fonts.chat, fontSize: 12.5, color: colors.gold },
   statusFaint: { color: colors.textMuted, marginTop: 2 },
-  meta: { fontFamily: fonts.mono, fontSize: 9.5, color: colors.textFaint, marginTop: 3, alignSelf: 'flex-end' },
+  // Times and receipts in spaced capitals.
+  meta: { fontFamily: fonts.stamp, fontSize: 9.5, letterSpacing: 1.3, textTransform: 'uppercase', color: colors.textMuted, marginTop: 4, alignSelf: 'flex-end' },
   blocked: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 2,
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.md,
@@ -594,7 +647,6 @@ const styles = StyleSheet.create({
     paddingTop: space.md,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.border,
-    backgroundColor: 'rgba(11,11,13,0.8)',
   },
   empty: { alignItems: 'center', padding: space.xxl },
   fallback: { paddingHorizontal: space.lg },

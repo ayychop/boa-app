@@ -10,6 +10,7 @@ import { haptics } from '../../utils/haptics';
 import { PulseDot } from '../ui';
 import { clock, downsample, level, Waveform } from './media';
 import { TYPING_EVERY_MS } from '../../chat/typing';
+import { vibeById } from '../../chat/vibes';
 import { colors, fonts, radius, space } from '../../theme';
 
 const MAX_LENGTH = 2000;
@@ -22,10 +23,10 @@ const RECORDING = { ...RecordingPresets.HIGH_QUALITY, isMeteringEnabled: true };
 const PLAYBACK_MODE = { allowsRecording: false, playsInSilentMode: true, shouldPlayInBackground: true, interruptionMode: 'doNotMix' };
 
 /**
- * A gold ring of light around the mic or send button: a fine bright edge,
- * and a halo behind it that slowly breathes out and fades.
+ * A ring of the vibe's light around the mic or send button: a fine bright
+ * edge, and a halo behind it that slowly breathes out and fades.
  */
-function GlowRing({ children, size = 42, testID }) {
+function GlowRing({ children, size = 42, testID, vibe }) {
   const still = useReducedMotion();
   const t = useSharedValue(0);
   useEffect(() => {
@@ -36,8 +37,8 @@ function GlowRing({ children, size = 42, testID }) {
   const halo = useAnimatedStyle(() => ({ opacity: 0.55 * (1 - t.value), transform: [{ scale: 1 + t.value * 0.35 }] }));
   return (
     <View style={{ width: size, height: size }} testID={testID}>
-      <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.halo, { borderRadius: size }, halo]} />
-      <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.ring, { borderRadius: size }]} />
+      <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderRadius: size, backgroundColor: vibe.accentSoft }, halo]} />
+      <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.ring, { borderRadius: size, borderColor: vibe.accentEdge }]} />
       {children}
     </View>
   );
@@ -48,9 +49,10 @@ function GlowRing({ children, size = 42, testID }) {
  * videos, and a mic for voice notes (tap to record, then send or bin it).
  * onSend(text), onAttach(), onVoice({ uri, durationMs, waveform }),
  * onTyping(true) while you type (at most every few seconds), false on send
- * or when the field empties.
+ * or when the field empties. `vibe` sets its colours; on Android the glass
+ * blurs `blurTarget` (the view holding what's behind it).
  */
-export default function Composer({ onSend, onAttach, onVoice, onTyping, bottomInset = 0, onFocus }) {
+export default function Composer({ onSend, onAttach, onVoice, onTyping, bottomInset = 0, onFocus, vibe = vibeById(), blurTarget, onLayout, style }) {
   const [draft, setDraft] = useState('');
   const lastPing = useRef(0);
   const change = (text) => {
@@ -129,9 +131,10 @@ export default function Composer({ onSend, onAttach, onVoice, onTyping, bottomIn
   const typing = draft.trim().length > 0;
 
   return (
-    <View style={[styles.wrap, { paddingBottom: bottomInset + space.sm }]}>
-      <BlurView intensity={60} tint="dark" blurMethod="dimezisBlurView" style={StyleSheet.absoluteFill} />
-      <View style={styles.tint} />
+    <View style={[styles.wrap, { paddingBottom: bottomInset + space.sm }, style]} onLayout={onLayout} testID="hub-composer-bar">
+      <BlurView intensity={50} tint="dark" blurMethod="dimezisBlurView" blurTarget={blurTarget} style={StyleSheet.absoluteFill} />
+      {/* The glass's tint, which is also its look wherever blur isn't drawn. */}
+      <View style={[StyleSheet.absoluteFill, { backgroundColor: vibe.bar }]} />
       {recording ? (
         <Animated.View entering={FadeIn.duration(160)} exiting={FadeOut.duration(120)} style={styles.row} testID="voice-recording">
           <Pressable onPress={() => finish(false)} accessibilityRole="button" accessibilityLabel="Discard voice note" hitSlop={10} style={styles.side}>
@@ -145,7 +148,8 @@ export default function Composer({ onSend, onAttach, onVoice, onTyping, bottomIn
             </View>
           </View>
           <Pressable onPress={() => finish(true)} accessibilityRole="button" accessibilityLabel="Send voice note" style={styles.send} testID="voice-send">
-            <Ionicons name="arrow-up" size={20} color={colors.bg} />
+            <LinearGradient colors={vibe.send} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+            <Ionicons name="arrow-up" size={20} color={vibe.sendIcon} />
           </Pressable>
         </Animated.View>
       ) : (
@@ -155,10 +159,10 @@ export default function Composer({ onSend, onAttach, onVoice, onTyping, bottomIn
             accessibilityRole="button"
             accessibilityLabel="Send a photo or video"
             hitSlop={10}
-            style={({ pressed }) => [styles.attach, pressed && styles.pressed]}
+            style={({ pressed }) => [styles.attach, { backgroundColor: vibe.accentSoft, borderColor: vibe.accentEdge }, pressed && styles.pressed]}
             testID="hub-attach"
           >
-            <Ionicons name="add" size={24} color={colors.gold} />
+            <Ionicons name="add" size={24} color={vibe.accent} />
           </Pressable>
           <TextInput
             value={draft}
@@ -166,7 +170,7 @@ export default function Composer({ onSend, onAttach, onVoice, onTyping, bottomIn
             onFocus={onFocus}
             placeholder="Message"
             placeholderTextColor={colors.textFaint}
-            selectionColor={colors.gold}
+            selectionColor={vibe.accent}
             multiline
             maxLength={MAX_LENGTH}
             style={styles.input}
@@ -174,16 +178,16 @@ export default function Composer({ onSend, onAttach, onVoice, onTyping, bottomIn
             testID="hub-composer"
           />
           {typing ? (
-            <GlowRing testID="hub-send-glow">
+            <GlowRing testID="hub-send-glow" vibe={vibe}>
               <Pressable onPress={submit} accessibilityRole="button" accessibilityLabel="Send" style={({ pressed }) => [styles.send, pressed && styles.pressed]} testID="hub-send">
-                <LinearGradient colors={['#FBE3B0', colors.gold, '#C7862E']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
-                <Ionicons name="arrow-up" size={20} color={colors.bg} />
+                <LinearGradient colors={vibe.send} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+                <Ionicons name="arrow-up" size={20} color={vibe.sendIcon} />
               </Pressable>
             </GlowRing>
           ) : (
-            <GlowRing testID="hub-mic-glow">
-              <Pressable onPress={start} accessibilityRole="button" accessibilityLabel="Record a voice note" style={({ pressed }) => [styles.mic, pressed && styles.pressed]} testID="hub-mic">
-                <Ionicons name="mic" size={20} color={colors.gold} />
+            <GlowRing testID="hub-mic-glow" vibe={vibe}>
+              <Pressable onPress={start} accessibilityRole="button" accessibilityLabel="Record a voice note" style={({ pressed }) => [styles.mic, { backgroundColor: vibe.accentSoft }, pressed && styles.pressed]} testID="hub-mic">
+                <Ionicons name="mic" size={20} color={vibe.accent} />
               </Pressable>
             </GlowRing>
           )}
@@ -201,25 +205,12 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: 'rgba(255,255,255,0.12)',
   },
-  tint: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(11,11,13,0.55)' },
   row: { flexDirection: 'row', alignItems: 'flex-end', gap: space.sm },
   side: { width: 40, height: 42, alignItems: 'center', justifyContent: 'center' },
-  // The + is a small gold-rimmed coin, lit from within.
-  attach: {
-    width: 40,
-    height: 40,
-    marginBottom: 1,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(226,168,75,0.16)',
-    borderWidth: 1,
-    borderColor: 'rgba(226,168,75,0.7)',
-    boxShadow: '0px 0px 10px rgba(226,168,75,0.35)',
-  },
+  // The + is a small coin rimmed in the vibe's accent.
+  attach: { width: 40, height: 40, marginBottom: 1, borderRadius: 20, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
   pressed: { transform: [{ scale: 0.92 }], opacity: 0.85 },
-  halo: { backgroundColor: 'rgba(226,168,75,0.35)' },
-  ring: { borderWidth: 1.5, borderColor: 'rgba(246,206,132,0.9)', boxShadow: '0px 0px 12px rgba(226,168,75,0.6)' },
+  ring: { borderWidth: 1.5 },
   input: {
     flex: 1,
     maxHeight: 120,
@@ -228,22 +219,15 @@ const styles = StyleSheet.create({
     paddingTop: 11,
     paddingBottom: 11,
     borderRadius: 21,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.16)',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.14)',
     color: colors.text,
-    fontFamily: fonts.medium,
+    fontFamily: fonts.chat,
     fontSize: 15,
   },
-  send: { width: 42, height: 42, borderRadius: 21, overflow: 'hidden', backgroundColor: colors.gold, alignItems: 'center', justifyContent: 'center' },
-  mic: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(226,168,75,0.12)',
-  },
+  send: { width: 42, height: 42, borderRadius: 21, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
+  mic: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' },
   recording: {
     flex: 1,
     height: 42,

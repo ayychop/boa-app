@@ -33,6 +33,11 @@ export const fonts = {
   mono: 'JetBrainsMono_400Regular',
   monoMedium: 'JetBrainsMono_500Medium',
   serif: 'InstrumentSerif_400Regular_Italic',
+  // The chat thread: Plus Jakarta Sans for messages, Space Grotesk set in
+  // spaced capitals for the times and receipts under them.
+  chat: 'PlusJakartaSans_500Medium',
+  chatBold: 'PlusJakartaSans_700Bold',
+  stamp: 'SpaceGrotesk_500Medium',
 };
 
 // Custom fonts carry their weight in the family name, so these presets never

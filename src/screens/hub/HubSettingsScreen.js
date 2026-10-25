@@ -10,13 +10,15 @@ import { Button, Slate } from '../../components/ui';
 import { haptics } from '../../utils/haptics';
 import { QUOTE_CATEGORIES } from '../../data/quotes';
 import { CHAT_SOUNDS } from '../../chat/sounds';
+import useChatVibe from '../../chat/vibes';
+import VibePicker from '../../components/chat/VibePicker';
 import { colors, fonts, radius, space } from '../../theme';
 
 /**
  * Your Hub profile and privacy: name, photo, bio and roles; your Daily
  * Spark's kind; whether you're
  * visible on the Hub and open for work; whether your listening / watching
- * shows; chat (the new-message sound, disappearing messages); the people
+ * shows; chat (its vibe, the new-message sound, disappearing messages); the people
  * you've blocked; and your data (export or delete).
  */
 export default function HubSettingsScreen({ navigation }) {
@@ -41,6 +43,7 @@ export default function HubSettingsScreen({ navigation }) {
     bio: profile?.bio ?? '',
     roles: profile?.roles ?? [],
   }));
+  const { vibe, setVibe } = useChatVibe();
   const [saving, setSaving] = useState(false);
   const [busy, setBusy] = useState(null);
   const [blockedPeople, setBlockedPeople] = useState([]);
@@ -204,6 +207,9 @@ export default function HubSettingsScreen({ navigation }) {
               <Toggle value={shareStatus} onChange={setShareStatus} label="Show what I'm playing" testID="hub-share-status" />
             </SettingRow>
           </View>
+
+          <Slate style={styles.section}>Chat vibe</Slate>
+          <VibePicker value={vibe.id} onChange={setVibe} />
 
           <Slate style={styles.section}>Chat</Slate>
           <View style={styles.group}>

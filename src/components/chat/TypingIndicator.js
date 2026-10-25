@@ -18,18 +18,18 @@ import { colors, radius, space } from '../../theme';
 // One bounce of all three dots, each a third of a beat behind the last.
 const BEAT_MS = 1100;
 
-function Dot({ t, index, size }) {
+function Dot({ t, index, size, color }) {
   const style = useAnimatedStyle(() => {
     // Each dot rises and glows in its own slice of the beat, then rests.
     const local = (t.value - index * 0.18 + 1) % 1;
     const up = interpolate(local, [0, 0.25, 0.5, 1], [0, 1, 0, 0]);
     return { opacity: 0.45 + up * 0.55, transform: [{ translateY: -up * size * 0.9 }, { scale: 1 + up * 0.18 }] };
   });
-  return <Animated.View style={[styles.dot, { width: size, height: size, borderRadius: size, boxShadow: `0px 0px ${size * 1.4}px ${colors.gold}` }, style]} />;
+  return <Animated.View style={[{ width: size, height: size, borderRadius: size, backgroundColor: color, boxShadow: `0px 0px ${size * 1.4}px ${color}` }, style]} />;
 }
 
-/** Three gold dots bouncing in turn, glowing as they rise. Still under Reduce Motion. */
-export function TypingDots({ size = 7 }) {
+/** Three dots (gold unless told otherwise) bouncing in turn, glowing as they rise. Still under Reduce Motion. */
+export function TypingDots({ size = 7, color = colors.gold }) {
   const still = useReducedMotion();
   const t = useSharedValue(0);
   useEffect(() => {
@@ -40,14 +40,14 @@ export function TypingDots({ size = 7 }) {
   return (
     <View style={[styles.dots, { gap: size * 0.7, height: size * 2.2 }]} accessibilityElementsHidden importantForAccessibility="no">
       {[0, 1, 2].map((i) => (
-        <Dot key={i} t={t} index={i} size={size} />
+        <Dot key={i} t={t} index={i} size={size} color={color} />
       ))}
     </View>
   );
 }
 
 /** "They're typing": the dots in one of their glass bubbles, at the foot of the thread. */
-export default function TypingIndicator({ name }) {
+export default function TypingIndicator({ name, vibe }) {
   return (
     <Animated.View
       entering={FadeIn.duration(180)}
@@ -58,9 +58,9 @@ export default function TypingIndicator({ name }) {
       accessibilityLiveRegion="polite"
       accessibilityLabel={`${name ?? 'They'} ${name ? 'is' : 'are'} typing`}
     >
-      <View style={styles.bubble}>
-        <LinearGradient colors={['rgba(255,255,255,0.13)', 'rgba(255,255,255,0.04)']} start={{ x: 0, y: 0 }} end={{ x: 0.4, y: 1 }} style={StyleSheet.absoluteFill} />
-        <TypingDots />
+      <View style={[styles.bubble, vibe && { backgroundColor: vibe.theirsFill, borderColor: vibe.theirsEdge }]}>
+        <LinearGradient colors={vibe?.theirs ?? ['rgba(255,255,255,0.13)', 'rgba(255,255,255,0.04)']} start={{ x: 0, y: 0 }} end={{ x: 0.4, y: 1 }} style={StyleSheet.absoluteFill} />
+        <TypingDots color={vibe?.accent} />
       </View>
     </Animated.View>
   );
@@ -75,9 +75,8 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     borderBottomLeftRadius: radius.sm,
     backgroundColor: 'rgba(20,20,24,0.42)',
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 1,
     borderColor: 'rgba(226,168,75,0.35)',
   },
   dots: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'center' },
-  dot: { backgroundColor: colors.gold },
 });
