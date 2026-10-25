@@ -4,14 +4,15 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeIn, FadeInDown, FadeOut, LinearTransition } from 'react-native-reanimated';
 import { createAudioPlayer } from 'expo-audio';
+import { LinearGradient } from 'expo-linear-gradient';
 import { newAlarm, useAlarms } from '../context/AlarmContext';
 import { useUser } from '../context/UserContext';
-import { ALARM_SOUNDS, formatTime, repeatLabel, ringsIn, WEEKDAYS } from '../data/alarms';
+import { ALARM_SOUNDS, formatTime, repeatLabel, ringsIn, timeParts, WEEKDAYS } from '../data/alarms';
 import { STATIONS_BY_GENRE } from '../data/radioStations';
 import { GENRES } from '../api/radio';
 import TimeWheel from '../components/alarms/TimeWheel';
 import StationLogo from '../components/StationLogo';
-import { Chip, Field, PageHeader, Segmented, Toggle } from '../components/kit';
+import { Field, PageHeader, Toggle } from '../components/kit';
 import { Button, Fog, Slate } from '../components/ui';
 import { haptics } from '../utils/haptics';
 import { colors, fonts, radius, space, type } from '../theme';
@@ -71,7 +72,10 @@ function AlarmCard({ alarm, onEdit, onToggle, index }) {
         style={({ pressed }) => [styles.card, !alarm.enabled && { opacity: 0.55 }, pressed && { transform: [{ scale: 0.98 }] }]}
       >
         <View style={{ flex: 1, minWidth: 0 }}>
-          <Text style={styles.cardTime}>{formatTime(alarm.hour, alarm.minute)}</Text>
+          <Text style={styles.cardTime}>
+            {timeParts(alarm.hour, alarm.minute).time}
+            <Text style={styles.cardPeriod}> {timeParts(alarm.hour, alarm.minute).period}</Text>
+          </Text>
           <Text style={styles.cardName} numberOfLines={1}>
             {alarm.name}
           </Text>
@@ -86,6 +90,60 @@ function AlarmCard({ alarm, onEdit, onToggle, index }) {
   );
 }
 
+const WAKE_MODES = [
+  { id: 'tone', label: 'A sound', detail: 'Bowl, chimes or a classic ring', icon: 'musical-notes' },
+  { id: 'station', label: 'BOA Radio', detail: 'Your favourite station tunes in', icon: 'radio' },
+];
+
+// "Wake up to": two big cards side by side. The chosen one is lit in gold
+// (a warm gradient, a gold rim, a filled icon and a tick); the other sits
+// back, dimmed.
+function WakeChoice({ value, onChange }) {
+  return (
+    <View style={styles.wake} accessibilityRole="radiogroup" accessibilityLabel="Wake up to">
+      {WAKE_MODES.map((m) => {
+        const on = m.id === value;
+        return (
+          <Pressable
+            key={m.id}
+            onPress={() => {
+              if (on) return;
+              haptics.selection();
+              onChange(m.id);
+            }}
+            accessibilityRole="radio"
+            accessibilityState={{ checked: on }}
+            accessibilityLabel={`${m.label}. ${m.detail}`}
+            testID={`alarm-wake-${m.id}`}
+            style={({ pressed }) => [styles.wakeCard, on ? styles.wakeOn : styles.wakeOff, pressed && { transform: [{ scale: 0.97 }] }]}
+          >
+            {on ? (
+              <LinearGradient
+                colors={['rgba(226,168,75,0.32)', 'rgba(226,168,75,0.06)']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={StyleSheet.absoluteFill}
+              />
+            ) : null}
+            <View style={[styles.wakeIcon, on && styles.wakeIconOn]}>
+              <Ionicons name={on ? m.icon : `${m.icon}-outline`} size={20} color={on ? colors.bg : colors.textMuted} />
+            </View>
+            <Text style={[styles.wakeTitle, !on && { color: colors.textMuted }]}>{m.label}</Text>
+            <Text style={styles.wakeDetail} numberOfLines={2}>
+              {m.detail}
+            </Text>
+            {on ? (
+              <Animated.View entering={FadeIn.duration(160)} style={styles.wakeTick}>
+                <Ionicons name="checkmark-circle" size={22} color={colors.gold} />
+              </Animated.View>
+            ) : null}
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
 function Editor({ initial, onDone, onDelete, isNew }) {
   const { save } = useAlarms();
   const stations = useWakeStations();
@@ -96,7 +154,7 @@ function Editor({ initial, onDone, onDelete, isNew }) {
   const toggleDay = (day) => set({ days: a.days.includes(day) ? a.days.filter((d) => d !== day) : [...a.days, day].sort() });
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
       <ScrollView contentContainerStyle={styles.editor} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         <Animated.View entering={FadeIn.duration(300)}>
           <TimeWheel hour={a.hour} minute={a.minute} onChange={(hour, minute) => set({ hour, minute })} />
@@ -138,16 +196,12 @@ function Editor({ initial, onDone, onDelete, isNew }) {
         <Text style={styles.repeatLabel}>{repeatLabel(a.days)}</Text>
 
         <Slate style={styles.section}>Wake up to</Slate>
-        <Segmented
+        <WakeChoice
           value={mode}
           onChange={(m) => {
             preview.stop();
             set({ sound: m === 'tone' ? { type: 'tone', id: 'bowl' } : { type: 'station', station: stations[0] } });
           }}
-          options={[
-            { id: 'tone', label: 'A sound', icon: 'musical-notes-outline' },
-            { id: 'station', label: 'BOA Radio', icon: 'radio-outline' },
-          ]}
         />
 
         {mode === 'tone' ? (
@@ -318,6 +372,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   cardTime: { fontFamily: fonts.extralight, fontSize: 46, lineHeight: 50, letterSpacing: -2, color: colors.text, fontVariant: ['tabular-nums'] },
+  cardPeriod: { fontFamily: fonts.semibold, fontSize: 16, letterSpacing: 0.5, color: colors.gold },
   cardName: { fontFamily: fonts.semibold, fontSize: 15, color: colors.text },
   cardMeta: { fontFamily: fonts.medium, fontSize: 12.5, color: colors.textMuted, marginTop: 2 },
   cardWhen: { fontFamily: fonts.mono, fontSize: 10, letterSpacing: 1.4, color: colors.gold, marginTop: 6, textTransform: 'uppercase' },
@@ -357,5 +412,14 @@ const styles = StyleSheet.create({
   optionIcon: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surfaceRaised },
   optionTitle: { fontFamily: fonts.semibold, fontSize: 15, color: colors.text },
   optionDetail: { fontFamily: fonts.medium, fontSize: 12, color: colors.textFaint, marginTop: 2 },
+  wake: { flexDirection: 'row', gap: space.md },
+  wakeCard: { flex: 1, minHeight: 128, padding: space.lg, borderRadius: radius.xl, overflow: 'hidden', borderWidth: 1.5 },
+  wakeOn: { borderColor: colors.gold, backgroundColor: 'rgba(226,168,75,0.08)' },
+  wakeOff: { borderColor: colors.border, backgroundColor: colors.surface, opacity: 0.78 },
+  wakeIcon: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surfaceRaised },
+  wakeIconOn: { backgroundColor: colors.gold },
+  wakeTitle: { fontFamily: fonts.bold, fontSize: 16, color: colors.text, marginTop: space.md },
+  wakeDetail: { fontFamily: fonts.medium, fontSize: 12, lineHeight: 16, color: colors.textFaint, marginTop: 3 },
+  wakeTick: { position: 'absolute', top: space.md, right: space.md },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: space.md, marginTop: space.xxl },
 });

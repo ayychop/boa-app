@@ -96,11 +96,28 @@ export function repeatLabel(days = []) {
     .join(', ');
 }
 
+/**
+ * Alarms keep their hour in 24-hour form (0 to 23), which is what the
+ * notification scheduling works from; people see and pick it in 12-hour
+ * form with AM or PM. 0 is 12 AM (midnight), 12 is 12 PM (noon).
+ */
+export function to12h(hour) {
+  return { hour12: hour % 12 === 0 ? 12 : hour % 12, pm: hour >= 12 };
+}
+
+/** The 24-hour hour for a 12-hour one (1 to 12) and AM or PM. */
+export function to24h(hour12, pm) {
+  return (hour12 % 12) + (pm ? 12 : 0);
+}
+
+/** "1:05" and "PM", for showing the two at different sizes. */
+export function timeParts(hour, minute) {
+  const { hour12, pm } = to12h(hour);
+  return { time: `${hour12}:${String(minute).padStart(2, '0')}`, period: pm ? 'PM' : 'AM' };
+}
+
+/** "1:05 PM". */
 export function formatTime(hour, minute) {
-  const d = new Date(2026, 0, 1, hour, minute);
-  try {
-    return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
-  } catch {
-    return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
-  }
+  const { time, period } = timeParts(hour, minute);
+  return `${time} ${period}`;
 }
