@@ -196,11 +196,13 @@ const ANDROID_MIN_BOTTOM_INSET = 20;
 const ANDROID_BOTTOM_COMFORT = 10;
 
 // Seven tabs share the bar, so the icons and labels are sized from each
-// tab's slot: 18pt icons on the narrowest phones up to 24pt on tablets.
+// tab's slot: never under 24pt icons and 11pt labels, up to 28pt and 13pt
+// on tablets and unfolded phones, in a taller bar that's easy to hit.
 const TAB_COUNT = 7;
-const tabSizing = (slot) => ({
-  icon: Math.round(Math.min(24, Math.max(18, slot * 0.36))),
-  label: slot < 54 ? 9 : slot < 70 ? 9.5 : 10.5,
+export const TAB_BAR_HEIGHT = 66;
+export const tabSizing = (slot) => ({
+  icon: Math.round(Math.min(28, Math.max(24, slot * 0.44))),
+  label: slot < 54 ? 11 : slot < 70 ? 11.5 : 13,
 });
 
 function Tabs({ narrow }) {
@@ -233,9 +235,9 @@ function Tabs({ narrow }) {
           paddingRight: side,
           // Landscape phones: a slim bar (labels sit beside the icons) so
           // it takes as little of the short screen as it can.
-          ...(short && { height: 40 + bottomInset }),
+          height: (short ? 44 : TAB_BAR_HEIGHT) + bottomInset,
         },
-        tabBarItemStyle: { paddingHorizontal: 0 },
+        tabBarItemStyle: { paddingHorizontal: 0, paddingTop: short ? 0 : 8 },
         tabBarBackground: () => <TabBarBackground />,
         // Seven tabs: each label stays on one line and shrinks to fit its
         // slot (down to 65%) rather than wrapping into the icon or
@@ -249,7 +251,7 @@ function Tabs({ narrow }) {
             adjustsFontSizeToFit
             minimumFontScale={0.65}
             allowFontScaling={false}
-            style={[styles.tabLabel, { color, fontSize: narrow ? Math.min(9, sizing.label) : sizing.label }]}
+            style={[styles.tabLabel, { color, fontSize: narrow ? Math.min(10.5, sizing.label) : sizing.label }]}
           >
             {children}
           </Text>
@@ -437,5 +439,5 @@ function Root({ narrow }) {
 
 const styles = StyleSheet.create({
   tabBarWrap: { position: 'absolute', left: 0, right: 0, bottom: 0 },
-  tabLabel: { fontFamily: fonts.semibold, letterSpacing: -0.1, textAlign: 'center', maxWidth: '100%', paddingHorizontal: 1 },
+  tabLabel: { fontFamily: fonts.semibold, letterSpacing: -0.1, textAlign: 'center', maxWidth: '100%', paddingHorizontal: 1, marginTop: 3 },
 });

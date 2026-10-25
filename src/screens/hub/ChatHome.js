@@ -173,7 +173,8 @@ export default function ChatHome({ navigation, bottomPadding }) {
               <Slate dot color={colors.gold}>
                 Creative Hub
               </Slate>
-              <Text style={styles.heroTitle} accessibilityRole="header">
+              {/* One line on every width: it shrinks before it would wrap. */}
+              <Text style={styles.heroTitle} accessibilityRole="header" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6} testID="chat-title">
                 Messages
               </Text>
               {profile?.is_boa_star ? <BoaStarBadge size={18} style={{ alignSelf: 'flex-start', marginTop: 6 }} /> : null}
@@ -181,7 +182,7 @@ export default function ChatHome({ navigation, bottomPadding }) {
                 {unread ? `${unread} unread` : profile ? `Hi, ${profile.display_name || profile.username}` : ''}
               </Text>
             </View>
-            <View style={{ flexDirection: 'row', gap: space.sm }}>
+            <View style={{ flexDirection: 'row', gap: space.sm, flexShrink: 0 }}>
               <IconButton icon="settings-outline" label="Chat settings" onPress={() => navigation.navigate('HubSettings')} testID="chat-settings" />
               <IconButton icon="search" label="Find talent" onPress={() => navigation.navigate('HubDirectory')} />
             </View>
@@ -271,8 +272,8 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   hero: { paddingHorizontal: space.xl, paddingBottom: space.lg, overflow: 'hidden' },
   orb: { position: 'absolute', width: 300, height: 300, borderRadius: 150 },
-  heroRow: { flexDirection: 'row', alignItems: 'center', gap: space.lg },
-  heroTitle: { fontFamily: fonts.semibold, fontSize: 34, lineHeight: 38, letterSpacing: -1.4, color: colors.text, marginTop: 4 },
+  heroRow: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  heroTitle: { fontFamily: fonts.semibold, fontSize: 34, lineHeight: 38, letterSpacing: -1.4, color: colors.text, marginTop: 4, flexShrink: 1 },
   heroSub: { fontFamily: fonts.medium, fontSize: 13, color: colors.textMuted, marginTop: 2 },
   spark: { paddingHorizontal: space.lg, marginTop: -space.md },
   sectionHead: { flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: space.xl, marginTop: space.xxl, marginBottom: space.md },

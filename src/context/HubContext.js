@@ -10,13 +10,28 @@ import { chatSoundById, DEFAULT_CHAT_SOUND } from '../chat/sounds';
 import { openPage } from '../navigation/ref';
 import { usePlayer } from './PlayerContext';
 import { useMedia } from './MediaContext';
-import useNowPlaying from '../hooks/useNowPlaying';
+import * as ambient from '../audio/ambient';
+import { soundscapeById, categoryById } from '../data/sleep';
 
 const SHARE_KEY = 'boa.hub.shareStatus';
-// Status writes are batched: a station changing song every few minutes is
-// one small update, not a stream of them.
-const STATUS_DEBOUNCE_MS = 4000;
+// Status writes wait a moment, so flicking between stations is one update.
+const STATUS_DEBOUNCE_MS = 1500;
+// While something plays the status is re-stamped this often, so a phone
+// that dies mid-song doesn't leave "Listening to" up for good (statusLine
+// hides one older than STATUS_STALE_MS).
+const STATUS_HEARTBEAT_MS = 15 * 60 * 1000;
+
+/** "Rain · On the window" for a Zen soundscape (just its name if that already says it). */
+export function zenStatusText(soundscapeId) {
+  const s = soundscapeById(soundscapeId);
+  if (!s) return null;
+  const cat = categoryById(s.category)?.label;
+  if (!cat || s.label.toLowerCase().includes(cat.toLowerCase())) return s.label;
+  return `${cat} · ${s.label}`;
+}
 const PRESENCE_CHANNEL = 'hub:presence';
+// A new message's notification waits at most this long for a stranger's name.
+const NAME_WAIT_MS = 350;
 
 const HubContext = createContext(null);
 
@@ -113,30 +128,55 @@ export function HubProvider({ children }) {
     };
   }, [stage, userId, profile?.visible_on_hub]);
 
-  // Currently listening / watching.
+  // Now playing: "Listening to <station>" while the radio plays, "In the
+  // Zen Zone: <sound>" while a Zen soundscape plays, "Watching <Original>"
+  // in the screening room; cleared when nothing plays (or sharing is off).
   const player = usePlayer();
   const { watching } = useMedia();
+  const [zen, setZen] = useState(ambient.getState);
+  useEffect(() => ambient.subscribe(setZen), []);
   const radio = player.current?.kind === 'radio' && player.isPlaying ? player.current : null;
-  const track = useNowPlaying(radio, !!radio && stage === 'ready' && shareStatus);
+  const zenText = zen.id && zen.status === 'playing' ? zenStatusText(zen.id) : null;
   const status = !shareStatus
     ? null
     : watching
-      ? { status_kind: 'watching', status_text: watching }
+      ? { status_kind: 'watching', status_text: watching.slice(0, 120) }
       : radio
-        ? { status_kind: 'listening', status_text: [track || null, radio.name].filter(Boolean).join(' on ').slice(0, 120) }
-        : null;
+        ? { status_kind: 'listening', status_text: (radio.name || 'BOA Radio').slice(0, 120) }
+        : zenText
+          ? { status_kind: 'zen', status_text: zenText.slice(0, 120) }
+          : null;
   const statusKey = status ? `${status.status_kind}|${status.status_text}` : '';
   const sentKey = useRef(null);
+  const sendStatus = useCallback(
+    async (next) => {
+      const stamp = new Date().toISOString();
+      const patch = next ? { ...next, status_updated_at: stamp } : { status_kind: null, status_text: null, status_updated_at: stamp };
+      try {
+        setProfile(await hub.updateProfile(userId, patch));
+      } catch (err) {
+        // A database without the 'zen' kind yet: say it as listening.
+        if (next?.status_kind === 'zen') {
+          const fallback = { status_kind: 'listening', status_text: `the Zen Zone: ${next.status_text}`.slice(0, 120), status_updated_at: stamp };
+          hub.updateProfile(userId, fallback).then(setProfile).catch(() => {});
+        }
+      }
+    },
+    [userId],
+  );
   useEffect(() => {
-    if (stage !== 'ready' || !userId || sentKey.current === statusKey) return;
+    if (stage !== 'ready' || !userId || sentKey.current === statusKey) return undefined;
     const id = setTimeout(() => {
       sentKey.current = statusKey;
-      const patch = status
-        ? { ...status, status_updated_at: new Date().toISOString() }
-        : { status_kind: null, status_text: null, status_updated_at: new Date().toISOString() };
-      hub.updateProfile(userId, patch).then(setProfile).catch(() => {});
+      sendStatus(status);
     }, STATUS_DEBOUNCE_MS);
     return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statusKey, stage, userId]);
+  useEffect(() => {
+    if (stage !== 'ready' || !userId || !status) return undefined;
+    const id = setInterval(() => sendStatus(status), STATUS_HEARTBEAT_MS);
+    return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusKey, stage, userId]);
 
@@ -207,7 +247,6 @@ export function HubProvider({ children }) {
   const chatSoundRef = useRef(DEFAULT_CHAT_SOUND);
 
   useEffect(() => {
-    chat.installChatHandler();
     chat.getChatSound().then((id) => {
       chatSoundRef.current = id;
       setChatSoundState(id);
@@ -241,16 +280,25 @@ export function HubProvider({ children }) {
   }, [stage, userId]);
 
   // Without push, the app rings for messages itself (RLS only sends it
-  // messages from its own conversations).
+  // messages from its own conversations). It rings at once: names come
+  // from the people you already talk to, fetched ahead; a stranger's name
+  // gets a moment to load, never longer.
   useEffect(() => {
     if (!supabase || stage !== 'ready' || !userId) return undefined;
     const names = new Map();
+    const label = (p) => p?.display_name || (p?.username ? `@${p.username}` : null);
+    hub
+      .listConversations(userId)
+      .then((rows) => rows.forEach((c) => c.other && names.set(c.otherId, label(c.other))))
+      .catch(() => {});
     const nameOf = async (id) => {
-      if (!names.has(id)) {
-        const p = await hub.getProfile(id).catch(() => null);
-        names.set(id, p?.display_name || (p?.username ? `@${p.username}` : 'New message'));
-      }
-      return names.get(id);
+      if (names.get(id)) return names.get(id);
+      const lookup = hub.getProfile(id).then((p) => {
+        if (label(p)) names.set(id, label(p));
+        return label(p);
+      });
+      const quick = new Promise((r) => setTimeout(() => r(null), NAME_WAIT_MS));
+      return (await Promise.race([lookup, quick]).catch(() => null)) || 'New message';
     };
     const channel = supabase
       .channel(`hub:inbox:${userId}`)

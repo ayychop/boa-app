@@ -7,6 +7,7 @@ import { useHub } from '../../context/HubContext';
 import useConversations from '../../hooks/useConversations';
 import { Avatar, IconButton, PageHeader, BoaStarBadge } from '../../components/kit';
 import { Button } from '../../components/ui';
+import NowPlaying from '../../components/hub/NowPlaying';
 import { colors, fonts, radius, space, type } from '../../theme';
 
 /** "14:05" today, "Mon" this week, "12 Oct" before that. */
@@ -51,6 +52,7 @@ export function ThreadRow({ conv, online, onPress, index, myId }) {
             {conv.other?.is_boa_star ? <View style={{ flex: 1 }} /> : null}
             <Text style={[styles.time, conv.unread && { color: colors.gold }]}>{chatTime(conv.last_message_at)}</Text>
           </View>
+          <NowPlaying person={conv.other} style={{ marginTop: 2 }} />
           <View style={styles.line}>
             <Text style={[styles.preview, conv.unread && { color: colors.text }]} numberOfLines={2}>
               {preview}

@@ -2,7 +2,7 @@ import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
-import { CHAT_SOUNDS, DEFAULT_CHAT_SOUND, chatChannel, chatSoundById } from './sounds';
+import { CHAT_SOUNDS, DEFAULT_CHAT_SOUND, RETIRED_CHAT_SOUNDS, chatChannel, chatSoundById } from './sounds';
 
 // New-message notifications for BOA HUB Chat.
 //
@@ -39,6 +39,7 @@ export async function saveChatSound(id) {
 /** One Android channel per sound, at high importance so it pops and buzzes. */
 export async function ensureChatChannels() {
   if (Platform.OS !== 'android') return;
+  await Promise.all(RETIRED_CHAT_SOUNDS.map((id) => Notifications.deleteNotificationChannelAsync?.(`boa-chat-${id}`)?.catch(() => null)));
   await Promise.all(
     CHAT_SOUNDS.map((s) =>
       Notifications.setNotificationChannelAsync(chatChannel(s.id), {
@@ -58,7 +59,10 @@ export async function ensureChatChannels() {
  * unless its thread is on screen. Anything else (alarms) stays as before:
  * the app handles it itself.
  */
+let handlerInstalled = false;
 export function installChatHandler() {
+  if (handlerInstalled) return;
+  handlerInstalled = true;
   Notifications.setNotificationHandler({
     handleNotification: async (n) => {
       const data = n?.request?.content?.data ?? {};
@@ -92,6 +96,11 @@ export async function getPushToken() {
     return null;
   }
 }
+
+// Installed as soon as this module loads (HubContext imports it at
+// startup), so a message that arrives before the Hub has finished signing
+// in still pops up and rings straight away.
+installChatHandler();
 
 /** Rings for a message now (the app is open or in the background). */
 export async function notifyLocal({ title, body, conversationId, messageId, sound }) {

@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { useHub } from '../../context/HubContext';
 import { getProfile, roleLabel, startConversation } from '../../api/hub';
 import { BoaStarBadge, Avatar, IconButton, PageHeader } from '../../components/kit';
 import { lastSeen, statusLine } from '../../components/hub/hubNav';
+import NowPlaying from '../../components/hub/NowPlaying';
+import useProfileUpdates from '../../hooks/useProfileUpdates';
 import ReportSheet from '../../components/hub/ReportSheet';
 import { Button, Fog, GoldBadge, Slate, Viewfinder } from '../../components/ui';
 import { colors, fonts, radius, space, type } from '../../theme';
@@ -41,6 +42,9 @@ export default function HubProfileScreen({ navigation, route }) {
       alive = false;
     };
   }, [id, mine, me]);
+
+  // Their now-playing status (and anything else they change), live.
+  useProfileUpdates(mine ? [] : [id], (p) => setPerson((prev) => (prev ? { ...prev, ...p } : prev)));
 
   const isBlocked = blocked.has(id);
   const online = isOnline(id);
@@ -105,10 +109,7 @@ export default function HubProfileScreen({ navigation, route }) {
           {person.open_for_work && <GoldBadge label="OPEN FOR WORK" icon="briefcase" style={{ marginTop: space.md }} />}
           {status ? (
             <Animated.View entering={FadeIn} style={styles.status}>
-              <Ionicons name={person.status_kind === 'watching' ? 'film' : 'musical-notes'} size={14} color={colors.gold} />
-              <Text style={styles.statusText} numberOfLines={2}>
-                {status}
-              </Text>
+              <NowPlaying person={person} size="lg" lines={2} />
             </Animated.View>
           ) : null}
         </Animated.View>

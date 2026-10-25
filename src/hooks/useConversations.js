@@ -2,11 +2,13 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { listConversations } from '../api/hub';
+import useProfileUpdates from './useProfileUpdates';
 
 /**
  * Your conversations, latest first, kept live as messages arrive (any
  * change to one of your threads reloads the list) and fresh each time the
- * screen comes back into view (read receipts change).
+ * screen comes back into view (read receipts change). The other people's
+ * profiles (their now-playing status) update live too.
  * Returns { rows, state: 'loading' | 'ready' | 'error' | 'refreshing', error, reload }.
  */
 export default function useConversations(userId) {
@@ -57,6 +59,12 @@ export default function useConversations(userId) {
       supabase.removeChannel(channel);
     };
   }, [userId, load]);
+
+  // The people you talk to: their now-playing status changes live.
+  useProfileUpdates(
+    rows.map((c) => c.otherId),
+    (p) => setRows((list) => list.map((c) => (c.otherId === p.id ? { ...c, other: { ...c.other, ...p } } : c))),
+  );
 
   return { rows, state, error, reload: load };
 }

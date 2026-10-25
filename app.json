@@ -115,11 +115,10 @@
             "./assets/sounds/alarm_classic.wav",
             "./assets/sounds/chat_pager.wav",
             "./assets/sounds/chat_messenger.wav",
-            "./assets/sounds/chat_beep.wav",
-            "./assets/sounds/chat_rimshot.wav",
-            "./assets/sounds/chat_laugh.wav",
-            "./assets/sounds/chat_trombone.wav",
-            "./assets/sounds/chat_boing.wav"
+            "./assets/sounds/chat_airhorn.wav",
+            "./assets/sounds/chat_scratch.wav",
+            "./assets/sounds/chat_cashregister.wav",
+            "./assets/sounds/chat_bassdrop.wav"
           ],
           "color": "#E2A84B"
         }

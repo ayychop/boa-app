@@ -300,6 +300,7 @@ jest.mock('expo-notifications', () => {
     SchedulableTriggerInputTypes: { DATE: 'date', WEEKLY: 'weekly' },
     setNotificationHandler: jest.fn(),
     setNotificationChannelAsync: jest.fn(() => Promise.resolve(null)),
+    deleteNotificationChannelAsync: jest.fn(() => Promise.resolve()),
     getPermissionsAsync: jest.fn(() => Promise.resolve({ granted: false, canAskAgain: true })),
     requestPermissionsAsync: jest.fn(() => Promise.resolve({ granted: true })),
     scheduleNotificationAsync: jest.fn(() => Promise.resolve('notification-id')),

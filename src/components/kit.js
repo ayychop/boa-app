@@ -10,8 +10,8 @@ import { colors, fonts, radius, space } from '../theme';
 // Building blocks for the full-screen pages over the tabs (alarms, the
 // forecast, the Creative Hub), in the app's dark-and-gold style.
 
-/** Back (or close), a title, and an optional action on the right. */
-export function PageHeader({ title, onBack, backIcon = 'chevron-back', right, kicker }) {
+/** Back (or close), a title (with an optional line under it), and an optional action on the right. */
+export function PageHeader({ title, onBack, backIcon = 'chevron-back', right, kicker, subtitle }) {
   const insets = useSafeAreaInsets();
   return (
     <View style={[styles.header, { paddingTop: insets.top + space.sm }]}>
@@ -32,6 +32,7 @@ export function PageHeader({ title, onBack, backIcon = 'chevron-back', right, ki
         <Text style={styles.title} numberOfLines={1} accessibilityRole="header">
           {title}
         </Text>
+        {subtitle ?? null}
       </View>
       {right ?? <View style={{ width: 40 }} />}
     </View>

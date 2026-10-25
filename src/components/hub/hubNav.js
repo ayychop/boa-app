@@ -32,8 +32,15 @@ export function lastSeen(iso, online) {
   return days === 1 ? 'Active yesterday' : `Active ${days} days ago`;
 }
 
-/** The "Currently listening / watching" line, or null. */
-export function statusLine(p) {
-  if (!p?.status_kind || !p.status_text) return null;
-  return `${p.status_kind === 'watching' ? 'Watching' : 'Listening to'} ${p.status_text}`;
+// A status not re-stamped for this long is from a phone that stopped
+// without saying so (the app re-stamps every 15 minutes while it plays).
+export const STATUS_STALE_MS = 40 * 60 * 1000;
+
+const STATUS_VERB = { listening: 'Listening to', watching: 'Watching', zen: 'In the Zen Zone:' };
+
+/** The now-playing line ("Listening to Capital Xtra", "In the Zen Zone: Rain"), or null. */
+export function statusLine(p, now = Date.now()) {
+  if (!p?.status_kind || !p.status_text || !STATUS_VERB[p.status_kind]) return null;
+  if (p.status_updated_at && now - new Date(p.status_updated_at).getTime() > STATUS_STALE_MS) return null;
+  return `${STATUS_VERB[p.status_kind]} ${p.status_text}`;
 }

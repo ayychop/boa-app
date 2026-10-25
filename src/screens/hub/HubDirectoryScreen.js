@@ -7,6 +7,7 @@ import { useHub } from '../../context/HubContext';
 import { roleLabel, ROLES, searchProfiles } from '../../api/hub';
 import { BoaStarBadge, Avatar, Chip, Field, IconButton, PageHeader } from '../../components/kit';
 import { lastSeen, statusLine } from '../../components/hub/hubNav';
+import NowPlaying from '../../components/hub/NowPlaying';
 import { GoldBadge } from '../../components/ui';
 import { colors, fonts, radius, space, type } from '../../theme';
 
@@ -34,12 +35,7 @@ function PersonRow({ person, online, onPress, index }) {
             {person.roles.map(roleLabel).join(' · ') || `@${person.username}`}
           </Text>
           {status ? (
-            <View style={styles.statusRow}>
-              <Ionicons name={person.status_kind === 'watching' ? 'film-outline' : 'musical-notes'} size={11} color={colors.gold} />
-              <Text style={styles.status} numberOfLines={1}>
-                {status}
-              </Text>
-            </View>
+            <NowPlaying person={person} style={{ marginTop: 3 }} />
           ) : (
             <Text style={styles.seen}>{lastSeen(person.last_seen_at, online)}</Text>
           )}
@@ -163,8 +159,6 @@ const styles = StyleSheet.create({
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   name: { fontFamily: fonts.semibold, fontSize: 16, color: colors.text, flexShrink: 1 },
   roles: { fontFamily: fonts.medium, fontSize: 12.5, color: colors.textMuted, marginTop: 2 },
-  statusRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 4 },
-  status: { fontFamily: fonts.medium, fontSize: 11.5, color: colors.gold, flexShrink: 1 },
   seen: { fontFamily: fonts.medium, fontSize: 11.5, color: colors.textFaint, marginTop: 4 },
   empty: { alignItems: 'center', padding: space.xxl },
 });

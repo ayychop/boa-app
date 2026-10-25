@@ -182,19 +182,19 @@ describe('notifications', () => {
     }
     expect(Notifications.setNotificationChannelAsync).toHaveBeenCalledTimes(CHAT_SOUNDS.length);
     expect(Notifications.setNotificationChannelAsync).toHaveBeenCalledWith(
-      chatChannel('rimshot'),
-      expect.objectContaining({ sound: 'chat_rimshot.wav', vibrationPattern: expect.any(Array) }),
+      chatChannel('airhorn'),
+      expect.objectContaining({ sound: 'chat_airhorn.wav', vibrationPattern: expect.any(Array) }),
     );
   });
 
   test('a message rings with your sound, but not for the thread on screen', async () => {
-    await notifyLocal({ title: 'Ama Mensah', body: 'Hey', conversationId: 'conv-2', messageId: 'x', sound: 'laugh' });
+    await notifyLocal({ title: 'Ama Mensah', body: 'Hey', conversationId: 'conv-2', messageId: 'x', sound: 'cashregister' });
     expect(Notifications.scheduleNotificationAsync).toHaveBeenCalledWith(
-      expect.objectContaining({ content: expect.objectContaining({ title: 'Ama Mensah', sound: 'chat_laugh.wav', data: expect.objectContaining({ type: 'chat', conversationId: 'conv-2' }) }) }),
+      expect.objectContaining({ content: expect.objectContaining({ title: 'Ama Mensah', sound: 'chat_cashregister.wav', data: expect.objectContaining({ type: 'chat', conversationId: 'conv-2' }) }) }),
     );
     Notifications.scheduleNotificationAsync.mockClear();
     setOpenThread('conv-2');
-    await notifyLocal({ title: 'Ama Mensah', body: 'Again', conversationId: 'conv-2', messageId: 'y', sound: 'laugh' });
+    await notifyLocal({ title: 'Ama Mensah', body: 'Again', conversationId: 'conv-2', messageId: 'y', sound: 'cashregister' });
     setOpenThread(null);
     expect(Notifications.scheduleNotificationAsync).not.toHaveBeenCalled();
   });
@@ -233,8 +233,8 @@ describe('Chat settings', () => {
     );
     await flush();
     expect(screen.getByTestId('chat-sound-pager-selected')).toBeOnTheScreen();
-    await user.press(screen.getByText('Ba-dum-tss'));
-    expect(setChatSound).toHaveBeenCalledWith('rimshot');
+    await user.press(screen.getByText('Air horn'));
+    expect(setChatSound).toHaveBeenCalledWith('airhorn');
     await user.press(screen.getByTestId('hub-disappearing'));
     expect(setDisappearing).toHaveBeenCalledWith(true);
   });

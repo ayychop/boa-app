@@ -25,6 +25,8 @@ import { setOpenThread } from '../../chat/notifications';
 import { Avatar, PageHeader } from '../../components/kit';
 import { lastSeen } from '../../components/hub/hubNav';
 import ReportSheet from '../../components/hub/ReportSheet';
+import NowPlaying from '../../components/hub/NowPlaying';
+import useProfileUpdates from '../../hooks/useProfileUpdates';
 import AmbientGlow from '../../components/chat/AmbientGlow';
 import Composer from '../../components/chat/Composer';
 import { MediaTile, MediaViewer, VoiceNote } from '../../components/chat/media';
@@ -168,6 +170,11 @@ export default function HubThreadScreen({ navigation, route }) {
   useEffect(() => {
     if (id && userId) load();
   }, [id, userId, load]);
+
+  // What they're playing, live in the header.
+  useProfileUpdates(conv?.otherId ? [conv.otherId] : [], (p) =>
+    setConv((prev) => (prev ? { ...prev, other: { ...prev.other, ...p } } : prev)),
+  );
 
   // Disappearing messages leave the screen when their 24 hours are up.
   useEffect(() => {
@@ -333,6 +340,7 @@ export default function HubThreadScreen({ navigation, route }) {
     <PageHeader
       kicker={conv ? (online ? 'Online' : lastSeen(other?.last_seen_at, false) || 'Creative Hub') : 'Creative Hub'}
       title={name}
+      subtitle={other ? <NowPlaying person={other} style={{ marginTop: 2 }} /> : null}
       onBack={() => navigation.goBack()}
       right={
         conv && other ? (
@@ -415,7 +423,8 @@ export default function HubThreadScreen({ navigation, route }) {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
-  fill: { flex: 1 },
+  // Above the ambient glow (which sits over the screen's black), transparent.
+  fill: { flex: 1, zIndex: 1, backgroundColor: 'transparent' },
   bubbleRow: { flexDirection: 'row', marginVertical: 3 },
   bubble: {
     maxWidth: '80%',
