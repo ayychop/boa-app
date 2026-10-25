@@ -3,7 +3,8 @@
      clear as you like in the app). Laid out like a weather widget: the clock
      and date on the left, today's weather on the right, and under a
      hairline what's playing, with the station's record (or the BOA logo
-     when nothing plays). TextClock keeps time on its own, so the widget
+     when nothing plays). The two halves share the height evenly, so
+     there's no dead space between them. TextClock keeps time on its own, so the widget
      never needs to wake the app. The weather opens the forecast; the rest
      opens what's playing. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
@@ -38,15 +39,15 @@
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:paddingStart="18dp"
-    android:paddingTop="14dp"
+    android:paddingTop="16dp"
     android:paddingEnd="16dp"
-    android:paddingBottom="12dp">
+    android:paddingBottom="14dp">
 
     <!-- Time and date | weather -->
     <LinearLayout
       android:layout_width="match_parent"
       android:layout_height="0dp"
-      android:layout_weight="1"
+      android:layout_weight="1.1"
       android:baselineAligned="false"
       android:gravity="center_vertical"
       android:orientation="horizontal">
@@ -157,21 +158,23 @@
       android:id="@+id/boa_widget_rule"
       android:layout_width="match_parent"
       android:layout_height="1dp"
-      android:layout_marginTop="8dp"
-      android:layout_marginBottom="8dp"
+      android:layout_marginTop="6dp"
+      android:layout_marginBottom="6dp"
       android:background="#1FF3EFE8" />
 
     <!-- What's playing -->
     <LinearLayout
       android:id="@+id/boa_widget_media"
       android:layout_width="match_parent"
-      android:layout_height="40dp"
+      android:layout_height="0dp"
+      android:layout_weight="1"
+      android:minHeight="56dp"
       android:gravity="center_vertical"
       android:orientation="horizontal">
 
       <FrameLayout
-        android:layout_width="40dp"
-        android:layout_height="40dp">
+        android:layout_width="56dp"
+        android:layout_height="56dp">
 
         <ImageView
           android:id="@+id/boa_widget_art"
@@ -193,7 +196,7 @@
       <LinearLayout
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:layout_marginStart="12dp"
+        android:layout_marginStart="14dp"
         android:layout_weight="1"
         android:orientation="vertical">
 
@@ -204,31 +207,32 @@
           android:ellipsize="end"
           android:fontFamily="monospace"
           android:includeFontPadding="false"
-          android:letterSpacing="0.12"
-          android:maxLines="1"
+          android:letterSpacing="0.1"
+          android:maxLines="2"
           android:text="@string/boa_widget_cta"
           android:textColor="#E2A84B"
-          android:textSize="10sp" />
+          android:textSize="12.5sp"
+          android:textStyle="bold" />
 
         <TextView
           android:id="@+id/boa_widget_subtitle"
           android:layout_width="wrap_content"
           android:layout_height="wrap_content"
-          android:layout_marginTop="3dp"
+          android:layout_marginTop="4dp"
           android:ellipsize="end"
           android:fontFamily="sans-serif-medium"
           android:includeFontPadding="false"
-          android:maxLines="1"
+          android:maxLines="2"
           android:textColor="#B3F3EFE8"
-          android:textSize="12.5sp"
+          android:textSize="15sp"
           android:visibility="gone" />
       </LinearLayout>
 
       <ImageView
         android:id="@+id/boa_widget_live"
-        android:layout_width="8dp"
-        android:layout_height="8dp"
-        android:layout_marginStart="8dp"
+        android:layout_width="10dp"
+        android:layout_height="10dp"
+        android:layout_marginStart="10dp"
         android:importantForAccessibility="no"
         android:src="@drawable/boa_widget_live"
         android:visibility="gone" />

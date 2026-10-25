@@ -99,7 +99,21 @@ test('RecordArtwork draws the record off screen and hands the captured PNG to th
   expect(File.downloadFileAsync).toHaveBeenCalledWith(station.logo, expect.objectContaining({ uri: 'file:///cache/logos/joy-0' }), expect.anything());
   // ...and once the logo has loaded it's captured and passed on.
   await fireEvent(logo, 'load');
-  await act(async () => jest.advanceTimersByTime(50));
-  expect(captureRef).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ format: 'png', width: 512, height: 512 }));
+  // A moment for the logo to be drawn, then the snapshot, at 1024 px so
+  // it stays sharp however large the lock screen shows it.
+  await act(async () => jest.advanceTimersByTime(100));
+  expect(captureRef).not.toHaveBeenCalled();
+  await act(async () => jest.advanceTimersByTime(300));
+  expect(captureRef).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ format: 'png', width: 1024, height: 1024 }));
   expect(appEngine.setArtwork).toHaveBeenCalledWith('joy', expect.stringMatching(/^file:\/\/\/cache\/record-\d+\.png$/));
+});
+
+test("a station logo that won't load gives way to the BOA logo, never a blank label", async () => {
+  const { RecordFace } = require('../src/components/RecordArtwork');
+  const settled = jest.fn();
+  const screen = await render(<RecordFace station={{ id: 'x' }} logo="https://dead.example/logo.png" onLogoSettled={settled} />);
+  await fireEvent(screen.getByTestId('record-artwork-logo'), 'error');
+  expect(screen.queryByTestId('record-artwork-logo')).toBeNull();
+  expect(screen.getByTestId('record-artwork-boa')).toBeOnTheScreen();
+  expect(settled).toHaveBeenCalled();
 });

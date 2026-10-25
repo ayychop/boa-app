@@ -240,7 +240,7 @@ class BoaWidgetProvider : AppWidgetProvider() {
           R.id.boa_widget_time, R.id.boa_widget_date, R.id.boa_widget_rule, R.id.boa_widget_weather,
           R.id.boa_widget_wx_icon, R.id.boa_widget_wx_temp, R.id.boa_widget_wx_place, R.id.boa_widget_wx_detail,
         ),
-        160,
+        240,
       ),
       "glass_flipped" to Style(
         R.layout.boa_widget_flipped,
@@ -248,12 +248,12 @@ class BoaWidgetProvider : AppWidgetProvider() {
           R.id.boa_widget_time, R.id.boa_widget_date, R.id.boa_widget_rule, R.id.boa_widget_weather,
           R.id.boa_widget_wx_icon, R.id.boa_widget_wx_temp, R.id.boa_widget_wx_place, R.id.boa_widget_wx_detail,
         ),
-        160,
+        240,
       ),
       "compact" to Style(
         R.layout.boa_widget_compact,
         MEDIA + setOf(R.id.boa_widget_time, R.id.boa_widget_rule, R.id.boa_widget_weather, R.id.boa_widget_wx_icon, R.id.boa_widget_wx_temp),
-        96,
+        128,
       ),
       "record" to Style(R.layout.boa_widget_record, MEDIA, 360),
     )

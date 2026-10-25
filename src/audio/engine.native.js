@@ -380,9 +380,15 @@ export function subscribe(fn) {
   return () => listeners.delete(fn);
 }
 
-/** Handlers for next/previous station from outside the app. */
+/**
+ * Handlers for next/previous station from outside the app. The lock screen
+ * only offers next/previous if they were there when it was set up, so a
+ * station already showing there is set up again to pick them up.
+ */
 export function setRemoteControls(handlers) {
+  const had = !!remote;
   remote = handlers;
+  if (had !== !!handlers && lockScreenOn && current && isLive(current)) showOnLockScreen(current);
 }
 
 // expo-audio doesn't surface ICY stream titles, so state.title stays null;
