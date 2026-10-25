@@ -6,6 +6,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { useHub } from '../../context/HubContext';
 import * as admin from '../../api/admin';
+import * as trending from '../../api/trending';
+import StationLogo from '../../components/StationLogo';
 import { formatBudget } from '../../api/casting';
 import { ROLES } from '../../api/hub';
 import BottomSheet from '../../components/BottomSheet';
@@ -19,6 +21,7 @@ const TABS = [
   { id: 'moderation', label: 'Moderation', icon: 'shield-outline' },
   { id: 'casting', label: 'Casting', icon: 'film-outline' },
   { id: 'pulse', label: 'Pulse', icon: 'pulse-outline' },
+  { id: 'radio', label: 'Radio', icon: 'radio-outline' },
 ];
 const MONO_GOLD = 'rgba(226,168,75,0.9)';
 const roleLabel = (id) => ROLES.find((r) => r.id === id)?.label ?? id;
@@ -193,6 +196,77 @@ function PulseManager({ users, onToggleFeature }) {
   ));
 }
 
+const CATALOGUE = trending.catalogue();
+
+// Trending Radio: what Home's "Trending on BOA Radio" shows, in order, and
+// BOA's curated stations to pick from.
+function RadioManager({ picked, onAdd, onRemove, onMove }) {
+  const [query, setQuery] = useState('');
+  const pickedIds = new Set(picked.map((s) => s.id));
+  const term = query.trim().toLowerCase();
+  const choices = CATALOGUE.filter((s) => !term || s.name.toLowerCase().includes(term) || (s.genreLabel ?? '').toLowerCase().includes(term));
+  return (
+    <>
+      <Text style={styles.mono}>ON HOME NOW · {picked.length ? `${picked.length} STATION${picked.length === 1 ? '' : 'S'}` : 'AUTOMATIC TIER 1 PICKS'}</Text>
+      {picked.length === 0 ? (
+        <Panel>
+          <Text style={styles.sub}>Nothing picked, so Home shows its automatic top stations. Switch stations on below to choose them yourself.</Text>
+        </Panel>
+      ) : (
+        picked.map((s, i) => (
+          <Panel key={s.id} testID={`admin-trending-${s.id}`}>
+            <View style={styles.userRow}>
+              <Text style={styles.rank}>{String(i + 1).padStart(2, '0')}</Text>
+              <StationLogo station={s} size={40} rounded={20} fit="cover" />
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={styles.name} numberOfLines={1}>
+                  {s.name}
+                </Text>
+                <Text style={styles.sub} numberOfLines={1}>
+                  {s.genreLabel ?? s.genre ?? 'Radio'}
+                </Text>
+              </View>
+              <Pressable onPress={() => onMove(i, -1)} disabled={i === 0} accessibilityRole="button" accessibilityLabel={`Move ${s.name} up`} testID={`admin-trending-up-${s.id}`} style={[styles.iconBtn, i === 0 && { opacity: 0.3 }]}>
+                <Ionicons name="chevron-up" size={18} color={MONO_GOLD} />
+              </Pressable>
+              <Pressable onPress={() => onMove(i, 1)} disabled={i === picked.length - 1} accessibilityRole="button" accessibilityLabel={`Move ${s.name} down`} testID={`admin-trending-down-${s.id}`} style={[styles.iconBtn, i === picked.length - 1 && { opacity: 0.3 }]}>
+                <Ionicons name="chevron-down" size={18} color={MONO_GOLD} />
+              </Pressable>
+              <Pressable onPress={() => onRemove(s)} accessibilityRole="button" accessibilityLabel={`Take ${s.name} off trending`} testID={`admin-trending-remove-${s.id}`} style={styles.iconBtn}>
+                <Ionicons name="close" size={18} color="#FF6B6B" />
+              </Pressable>
+            </View>
+          </Panel>
+        ))
+      )}
+
+      <Text style={[styles.mono, { marginTop: space.lg }]}>BOA CURATED STATIONS</Text>
+      <Field value={query} onChangeText={setQuery} placeholder="Search stations or genres" autoCapitalize="none" testID="admin-radio-search" />
+      {choices.map((s) => {
+        const on = pickedIds.has(s.id);
+        return (
+          <Panel key={s.id} testID={`admin-station-${s.id}`}>
+            <View style={styles.userRow}>
+              <StationLogo station={s} size={40} rounded={20} fit="cover" />
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={styles.name} numberOfLines={1}>
+                  {s.name}
+                </Text>
+                <Text style={styles.sub} numberOfLines={1}>
+                  {s.genreLabel}
+                  {s.country ? ` · ${s.country}` : ''}
+                </Text>
+              </View>
+              <Toggle value={on} onChange={(v) => (v ? onAdd(s) : onRemove(s))} label={`${s.name} trending`} testID={`admin-trending-toggle-${s.id}`} />
+            </View>
+          </Panel>
+        );
+      })}
+      {choices.length === 0 ? <Text style={styles.empty}>No stations match.</Text> : null}
+    </>
+  );
+}
+
 function EditCallSheet({ call, onClose, onSave }) {
   const [form, setForm] = useState(null);
   useEffect(() => {
@@ -220,7 +294,8 @@ function EditCallSheet({ call, onClose, onSave }) {
 /**
  * The Admin Portal: BOA's control room. Talent (search every member, badge
  * BOA Stars), Moderation (reports: ban or dismiss), Casting (approve, edit,
- * delete) and the Community Pulse (who's featured). Only for admins; the
+ * delete), the Community Pulse (who's featured) and Radio (which stations
+ * trend on Home, in what order). Only for admins; the
  * database refuses everyone else's admin calls whatever the app shows.
  */
 export default function AdminDashboard({ navigation }) {
@@ -228,15 +303,20 @@ export default function AdminDashboard({ navigation }) {
   const { isAdmin } = useHub();
   const [tab, setTab] = useState('talent');
   const [query, setQuery] = useState('');
-  const [data, setData] = useState({ users: [], reports: [], calls: [], ready: false });
+  const [data, setData] = useState({ users: [], reports: [], calls: [], picked: [], ready: false });
   const [error, setError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [editing, setEditing] = useState(null);
 
   const load = useCallback(async () => {
     try {
-      const [users, reports, calls] = await Promise.all([admin.listUsers(query), admin.listReports(), admin.listAllCalls()]);
-      setData({ users, reports, calls, ready: true });
+      const [users, reports, calls, picked] = await Promise.all([
+        admin.listUsers(query),
+        admin.listReports(),
+        admin.listAllCalls(),
+        trending.listTrending().catch(() => []),
+      ]);
+      setData({ users, reports, calls, picked, ready: true });
       setError(null);
     } catch (err) {
       setError(err.message);
@@ -287,7 +367,7 @@ export default function AdminDashboard({ navigation }) {
         <Readout label="BOA STARS" value={data.ready ? stars : null} tone={colors.gold} />
         <Readout label="FEATURED" value={data.ready ? featured : null} />
       </View>
-      <View style={styles.tabs}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0, marginTop: space.lg }} contentContainerStyle={styles.tabs}>
         {TABS.map((t) => {
           const on = t.id === tab;
           return (
@@ -304,7 +384,7 @@ export default function AdminDashboard({ navigation }) {
             </Pressable>
           );
         })}
-      </View>
+      </ScrollView>
       <ScrollView
         contentContainerStyle={{ padding: space.lg, paddingBottom: insets.bottom + space.xxl, gap: space.md }}
         keyboardShouldPersistTaps="handled"
@@ -365,8 +445,21 @@ export default function AdminDashboard({ navigation }) {
               ])
             }
           />
-        ) : (
+        ) : tab === 'pulse' ? (
           <PulseManager users={data.users} onToggleFeature={(u, f) => run(() => admin.setFeatured(u.id, f))} />
+        ) : (
+          <RadioManager
+            picked={data.picked}
+            onAdd={(s) => run(() => trending.addTrending(s, data.picked.length))}
+            onRemove={(s) => run(() => trending.removeTrending(s.id))}
+            onMove={(i, dir) =>
+              run(() => {
+                const ids = data.picked.map((s) => s.id);
+                [ids[i], ids[i + dir]] = [ids[i + dir], ids[i]];
+                return trending.reorderTrending(ids);
+              })
+            }
+          />
         )}
       </ScrollView>
       <EditCallSheet
@@ -399,10 +492,10 @@ const styles = StyleSheet.create({
   },
   readoutValue: { fontFamily: fonts.mono, fontSize: 22, fontVariant: ['tabular-nums'] },
   readoutLabel: { fontFamily: fonts.mono, fontSize: 8.5, letterSpacing: 1.2, color: colors.textFaint, marginTop: 4 },
-  tabs: { flexDirection: 'row', gap: space.xs, paddingHorizontal: space.lg, marginTop: space.lg },
+  tabs: { flexDirection: 'row', gap: space.xs, paddingHorizontal: space.lg },
   tab: {
-    flex: 1,
     flexDirection: 'row',
+    paddingHorizontal: space.md,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 5,
@@ -412,7 +505,9 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(226,168,75,0.4)',
   },
   tabOn: { backgroundColor: colors.gold, borderColor: colors.gold, boxShadow: '0px 0px 16px rgba(226,168,75,0.45)' },
-  tabText: { fontFamily: fonts.semibold, fontSize: 12, color: MONO_GOLD },
+  tabText: { fontFamily: fonts.semibold, fontSize: 12.5, color: MONO_GOLD },
+  rank: { fontFamily: fonts.mono, fontSize: 16, color: colors.gold, width: 24 },
+  iconBtn: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(226,168,75,0.35)' },
   panel: {
     padding: space.lg,
     borderRadius: radius.lg,

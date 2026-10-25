@@ -89,7 +89,8 @@ export function SectionHeader({ index, kicker, title, action, onAction, style })
     <View style={[styles.section, style]}>
       <View style={{ flex: 1 }}>
         <Slate lines={2}>{[index, kicker].filter(Boolean).join(' · ')}</Slate>
-        <Text style={[type.title, { marginTop: 6 }]}>{title}</Text>
+        {/* Room between the kicker (often a long genre list) and the title. */}
+        <Text style={[type.title, { marginTop: space.md }]}>{title}</Text>
       </View>
       {action && (
         <Pressable onPress={onAction} hitSlop={10} style={({ pressed }) => [styles.action, pressed && { opacity: 0.6 }]}>

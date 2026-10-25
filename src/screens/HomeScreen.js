@@ -15,6 +15,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { featuredProduction, productions, talent } from '../data/boaContent';
 import { podcasts } from '../data/podcasts';
 import { fetchTier1Stations, GENRES } from '../api/radio';
+import { listTrending } from '../api/trending';
 import { usePlayer } from '../context/PlayerContext';
 import { useMedia } from '../context/MediaContext';
 import { useForms } from '../context/FormsContext';
@@ -189,11 +190,15 @@ export default function HomeScreen({ navigation }) {
   const forms = useForms();
   const [trending, setTrending] = useState(null);
 
-  // Curated Tier 1 only: premium R&B / Hip Hop that's been test-played and
-  // streams directly in the app, so the first tap always just plays.
+  // The stations BOA's admins pick (Admin Portal, Radio), in their order.
+  // With none picked (or offline), curated Tier 1: premium R&B / Hip Hop
+  // that's been test-played and streams directly in the app, so the first
+  // tap always just plays.
   useEffect(() => {
     let alive = true;
-    fetchTier1Stations({ limit: 5 })
+    listTrending()
+      .catch(() => [])
+      .then((picked) => (picked.length ? picked : fetchTier1Stations({ limit: 5 })))
       .then((s) => alive && setTrending(s))
       .catch(() => alive && setTrending([]));
     return () => {

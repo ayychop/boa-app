@@ -18,7 +18,15 @@ jest.mock('../src/api/admin', () => ({
   updateCall: jest.fn(async () => {}),
   deleteCall: jest.fn(async () => {}),
 }));
+jest.mock('../src/api/trending', () => ({
+  ...jest.requireActual('../src/api/trending'),
+  listTrending: jest.fn(),
+  addTrending: jest.fn(async () => {}),
+  removeTrending: jest.fn(async () => {}),
+  reorderTrending: jest.fn(async () => {}),
+}));
 const admin = require('../src/api/admin');
+const trending = require('../src/api/trending');
 
 const AMA = { id: 'u-ama', username: 'ama', display_name: 'Ama Mensah', roles: ['director'], is_boa_star: false, is_featured: false, visible_on_hub: true };
 const KOFI = { id: 'u-kofi', username: 'kofi', display_name: 'Kofi', roles: ['actor'], is_boa_star: true, is_featured: true, visible_on_hub: true };
@@ -52,6 +60,7 @@ beforeEach(() => {
   admin.listUsers.mockResolvedValue([AMA, KOFI]);
   admin.listReports.mockResolvedValue([REPORT]);
   admin.listAllCalls.mockResolvedValue([PENDING]);
+  trending.listTrending.mockResolvedValue([]);
 });
 
 test('non-admins only see a locked door, and nothing is loaded', async () => {
@@ -128,4 +137,49 @@ test('Pulse: feature someone in the Chat Hub', async () => {
   await user.press(screen.getByTestId('admin-feature-ama'));
   await act(async () => {});
   expect(admin.setFeatured).toHaveBeenCalledWith('u-ama', true);
+});
+
+describe('Radio: Trending on BOA Radio', () => {
+  const { catalogue } = jest.requireActual('../src/api/trending');
+  const [first, second, third] = catalogue();
+
+  test("the catalogue is BOA's curated stations, each once", () => {
+    const ids = catalogue().map((s) => s.id);
+    expect(ids.length).toBeGreaterThan(3);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(first.genreLabel).toBeTruthy();
+  });
+
+  test('nothing picked: Home uses its automatic picks; switching a station on adds it to the end', async () => {
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTimeAsync });
+    await show();
+    await user.press(screen.getByTestId('admin-tab-radio'));
+    expect(screen.getByText(/AUTOMATIC TIER 1 PICKS/)).toBeOnTheScreen();
+    await user.press(screen.getByTestId(`admin-trending-toggle-${first.id}`));
+    await act(async () => {});
+    expect(trending.addTrending).toHaveBeenCalledWith(expect.objectContaining({ id: first.id, streamUrl: first.streamUrl }), 0);
+  });
+
+  test('picked stations show in order; move, and take off', async () => {
+    trending.listTrending.mockResolvedValue([first, second, third]);
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTimeAsync });
+    await show();
+    await user.press(screen.getByTestId('admin-tab-radio'));
+    expect(screen.getByText('ON HOME NOW · 3 STATIONS')).toBeOnTheScreen();
+    await user.press(screen.getByTestId(`admin-trending-down-${first.id}`));
+    await act(async () => {});
+    expect(trending.reorderTrending).toHaveBeenCalledWith([second.id, first.id, third.id]);
+    await user.press(screen.getByTestId(`admin-trending-remove-${third.id}`));
+    await act(async () => {});
+    expect(trending.removeTrending).toHaveBeenCalledWith(third.id);
+  });
+
+  test('searching narrows the catalogue', async () => {
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTimeAsync });
+    await show();
+    await user.press(screen.getByTestId('admin-tab-radio'));
+    await user.type(screen.getByTestId('admin-radio-search'), first.name);
+    expect(screen.getByTestId(`admin-station-${first.id}`)).toBeOnTheScreen();
+    expect(screen.queryAllByTestId(/^admin-station-/).length).toBeLessThan(catalogue().length);
+  });
 });
