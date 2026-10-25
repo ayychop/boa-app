@@ -9,17 +9,33 @@ import { Avatar, Chip, Field, PageHeader, SettingRow, Toggle } from '../../compo
 import { Button, Slate } from '../../components/ui';
 import { haptics } from '../../utils/haptics';
 import { QUOTE_CATEGORIES } from '../../data/quotes';
-import { colors, radius, space } from '../../theme';
+import { CHAT_SOUNDS } from '../../chat/sounds';
+import { colors, fonts, radius, space } from '../../theme';
 
 /**
  * Your Hub profile and privacy: name, photo, bio and roles; your Daily
  * Spark's kind; whether you're
  * visible on the Hub and open for work; whether your listening / watching
- * shows; the people you've blocked; and your data (export or delete).
+ * shows; chat (the new-message sound, disappearing messages); the people
+ * you've blocked; and your data (export or delete).
  */
 export default function HubSettingsScreen({ navigation }) {
   const insets = useSafeAreaInsets();
-  const { userId, profile, saveProfile, shareStatus, setShareStatus, blocked, unblock, signOut, deleteAccount } = useHub();
+  const {
+    userId,
+    profile,
+    saveProfile,
+    shareStatus,
+    setShareStatus,
+    blocked,
+    unblock,
+    signOut,
+    deleteAccount,
+    chatSound,
+    setChatSound,
+    disappearing,
+    setDisappearing,
+  } = useHub();
   const [form, setForm] = useState(() => ({
     display_name: profile?.display_name ?? '',
     bio: profile?.bio ?? '',
@@ -189,6 +205,44 @@ export default function HubSettingsScreen({ navigation }) {
             </SettingRow>
           </View>
 
+          <Slate style={styles.section}>Chat</Slate>
+          <View style={styles.group}>
+            <SettingRow
+              icon="timer-outline"
+              title="Disappearing messages"
+              detail="Messages you send vanish for both of you after 24 hours."
+            >
+              <Toggle
+                value={!!disappearing}
+                onChange={(on) => setDisappearing?.(on).catch((err) => Alert.alert("Couldn't save", err.message))}
+                label="Disappearing messages"
+                testID="hub-disappearing"
+              />
+            </SettingRow>
+            {CHAT_SOUNDS.map((s, i) => (
+              <SettingRow
+                key={s.id}
+                icon={s.icon}
+                title={s.label}
+                detail={s.detail}
+                onPress={() => {
+                  haptics.selection();
+                  setChatSound?.(s.id);
+                }}
+                last={i === CHAT_SOUNDS.length - 1}
+              >
+                {chatSound === s.id ? (
+                  <Ionicons name="checkmark-circle" size={20} color={colors.gold} accessibilityLabel="Selected" testID={`chat-sound-${s.id}-selected`} />
+                ) : (
+                  <Ionicons name="play-circle-outline" size={20} color={colors.textFaint} />
+                )}
+              </SettingRow>
+            ))}
+          </View>
+          <Text style={styles.credit}>
+            New-message sound. {CHAT_SOUNDS.filter((s) => s.source).map((s) => `${s.label}: ${s.author}, ${s.license}`).join(' · ')}. Via Wikimedia Commons.
+          </Text>
+
           {blockedPeople.length > 0 && (
             <>
               <Slate style={styles.section}>Blocked</Slate>
@@ -224,4 +278,5 @@ const styles = StyleSheet.create({
   section: { marginTop: space.xl, marginBottom: space.md },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
   group: { borderRadius: radius.lg, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
+  credit: { fontFamily: fonts.regular, fontSize: 11, lineHeight: 16, color: colors.textFaint, marginTop: space.sm },
 });

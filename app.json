@@ -68,8 +68,8 @@
       [
         "expo-audio",
         {
-          "microphonePermission": false,
-          "recordAudioAndroid": false,
+          "microphonePermission": "BOA uses the microphone to record voice notes in Creative Hub chats.",
+          "recordAudioAndroid": true,
           "enableBackgroundPlayback": true
         }
       ],
@@ -102,7 +102,7 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Choose a photo for your BOA Creative Hub avatar.",
+          "photosPermission": "Choose photos and videos for your Creative Hub avatar and chats.",
           "cameraPermission": false
         }
       ],
@@ -112,7 +112,14 @@
           "sounds": [
             "./assets/sounds/alarm_bowl.wav",
             "./assets/sounds/alarm_chimes.wav",
-            "./assets/sounds/alarm_classic.wav"
+            "./assets/sounds/alarm_classic.wav",
+            "./assets/sounds/chat_pager.wav",
+            "./assets/sounds/chat_messenger.wav",
+            "./assets/sounds/chat_beep.wav",
+            "./assets/sounds/chat_rimshot.wav",
+            "./assets/sounds/chat_laugh.wav",
+            "./assets/sounds/chat_trombone.wav",
+            "./assets/sounds/chat_boing.wav"
           ],
           "color": "#E2A84B"
         }

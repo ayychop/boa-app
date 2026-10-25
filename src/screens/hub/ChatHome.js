@@ -181,7 +181,10 @@ export default function ChatHome({ navigation, bottomPadding }) {
                 {unread ? `${unread} unread` : profile ? `Hi, ${profile.display_name || profile.username}` : ''}
               </Text>
             </View>
-            <IconButton icon="search" label="Find talent" onPress={() => navigation.navigate('HubDirectory')} />
+            <View style={{ flexDirection: 'row', gap: space.sm }}>
+              <IconButton icon="settings-outline" label="Chat settings" onPress={() => navigation.navigate('HubSettings')} testID="chat-settings" />
+              <IconButton icon="search" label="Find talent" onPress={() => navigation.navigate('HubDirectory')} />
+            </View>
           </View>
         </View>
 

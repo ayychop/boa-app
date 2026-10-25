@@ -84,11 +84,37 @@ jest.mock('expo-audio', () => {
     players.push(player);
     return player;
   });
+  // Voice notes: a recorder that "records" to a fixed file, and hook
+  // players built on the same fakes.
+  const recorder = {
+    uri: null,
+    isRecording: false,
+    prepareToRecordAsync: jest.fn(async () => {}),
+    record: jest.fn(() => {
+      recorder.isRecording = true;
+    }),
+    stop: jest.fn(async () => {
+      recorder.isRecording = false;
+      recorder.uri = 'file:///cache/voice-note.m4a';
+    }),
+  };
   return {
     createAudioPlayer,
+    useAudioPlayer: jest.fn((source) => {
+      const React = require('react');
+      const ref = React.useRef(null);
+      if (!ref.current) ref.current = createAudioPlayer(source);
+      return ref.current;
+    }),
+    useAudioPlayerStatus: jest.fn((player) => ({ playing: !!player?.playing, currentTime: 0, duration: 0, didJustFinish: false })),
+    useAudioRecorder: jest.fn(() => recorder),
+    useAudioRecorderState: jest.fn(() => ({ isRecording: recorder.isRecording, durationMillis: recorder.isRecording ? 4200 : 0, metering: -20 })),
+    RecordingPresets: { HIGH_QUALITY: { extension: '.m4a', sampleRate: 44100 } },
+    requestRecordingPermissionsAsync: jest.fn(() => Promise.resolve({ granted: true })),
     setAudioModeAsync: jest.fn(() => Promise.resolve()),
     requestNotificationPermissionsAsync: jest.fn(() => Promise.resolve({ granted: true })),
     __players: players,
+    __recorder: recorder,
   };
 });
 
@@ -266,9 +292,10 @@ jest.mock('./modules/boa-screen', () => {
 jest.mock('expo-notifications', () => {
   const sub = () => ({ remove: jest.fn() });
   return {
-    AndroidImportance: { MAX: 5 },
+    AndroidImportance: { MAX: 5, HIGH: 4 },
     AndroidNotificationPriority: { MAX: 'max' },
-    AndroidNotificationVisibility: { PUBLIC: 1 },
+    AndroidNotificationVisibility: { PUBLIC: 1, PRIVATE: 0 },
+    getExpoPushTokenAsync: jest.fn(() => Promise.resolve({ data: 'ExponentPushToken[test]' })),
     AndroidAudioUsage: { ALARM: 4 },
     SchedulableTriggerInputTypes: { DATE: 'date', WEEKLY: 'weekly' },
     setNotificationHandler: jest.fn(),

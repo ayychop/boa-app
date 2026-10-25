@@ -408,20 +408,172 @@ export async function getConversation(id, myId) {
   return shapeConversation(c, myId, { [otherId]: other });
 }
 
-/** A page of messages, newest first; `before` is an ISO time for older pages. */
+/** Whether a disappearing message has run out (the database hides it too). */
+export const isExpired = (message, now = Date.now()) => !!message?.expires_at && new Date(message.expires_at).getTime() <= now;
+
+/**
+ * A page of messages, newest first; `before` is an ISO time for older
+ * pages. Expired ones are left out: the database's read policy hides them,
+ * and anything that ran out on the way is dropped here.
+ */
 export async function listMessages(conversationId, before = null, limit = 40) {
   let q = need().from('messages').select('*').eq('conversation_id', conversationId).order('created_at', { ascending: false }).limit(limit);
   if (before) q = q.lt('created_at', before);
-  return check(await q);
+  return check(await q).filter((m) => !isExpired(m));
 }
 
 export async function sendMessage(conversationId, body) {
   return check(await need().from('messages').insert({ conversation_id: conversationId, body: body.trim() }).select('*').single());
 }
 
-/** Removes one of your own messages, for both people. */
-export async function deleteMessage(id) {
+/** Removes one of your own messages, for both people (and its file, if it had one). */
+export async function deleteMessage(id, mediaPath = null) {
   check(await need().from('messages').delete().eq('id', id));
+  if (mediaPath) await need().storage.from(CHAT_BUCKET).remove([mediaPath]).catch(() => {});
+}
+
+// ------------------------------------------------------------- chat media
+
+// WhatsApp's limits: photos up to 16 MB, videos up to 64 MB. The bucket
+// (supabase/migrations) holds files to 64 MB.
+export const CHAT_BUCKET = 'chat-media';
+export const MEDIA_LIMITS = { image: 16 * 1024 * 1024, video: 64 * 1024 * 1024, voice: 16 * 1024 * 1024 };
+export const MEDIA_QUALITY = 0.8;
+const MEDIA_UPLOAD_TIMEOUT_MS = 180000;
+const SIGNED_URL_SECONDS = 60 * 60;
+
+const mb = (bytes) => `${Math.round(bytes / (1024 * 1024))} MB`;
+
+/** 'image' | 'video' for a picked asset. */
+export const mediaKind = (asset) => (asset?.type === 'video' || /^video\//.test(asset?.mimeType ?? '') ? 'video' : 'image');
+
+/** Whether a picked photo or video can be sent: null if so, else why not. */
+export function mediaProblem(asset) {
+  if (!asset?.uri) return 'That file could not be opened.';
+  const kind = mediaKind(asset);
+  if (asset.fileSize && asset.fileSize > MEDIA_LIMITS[kind]) {
+    return kind === 'video'
+      ? `That video is over ${mb(MEDIA_LIMITS.video)}. Trim it or choose a shorter one.`
+      : `That photo is over ${mb(MEDIA_LIMITS.image)}. Choose a smaller one.`;
+  }
+  return null;
+}
+
+const EXT = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+  'image/heic': 'heic',
+  'image/gif': 'gif',
+  'video/mp4': 'mp4',
+  'video/quicktime': 'mov',
+  'video/3gpp': '3gp',
+  'video/webm': 'webm',
+  'audio/mp4': 'm4a',
+  'audio/m4a': 'm4a',
+  'audio/x-m4a': 'm4a',
+  'audio/aac': 'aac',
+  'audio/mpeg': 'mp3',
+  'audio/webm': 'webm',
+};
+
+/**
+ * Uploads a photo, video or voice note to chat-media/<conversation>/<you>/
+ * and returns its storage path. Throws a readable Error (too large, no
+ * connection, timed out).
+ */
+export async function uploadChatMedia(conversationId, userId, { uri, mimeType, kind }) {
+  const sb = need();
+  const limit = MEDIA_LIMITS[kind] ?? MEDIA_LIMITS.image;
+  const type = mimeType || (kind === 'video' ? 'video/mp4' : kind === 'voice' ? 'audio/mp4' : 'image/jpeg');
+  const path = `${conversationId}/${userId}/${kind}-${Date.now()}.${EXT[type] ?? 'bin'}`;
+  let body;
+  try {
+    body = await (await fetch(uri)).arrayBuffer();
+  } catch {
+    throw new Error('That file could not be read from your phone.');
+  }
+  if (body.byteLength > limit) throw new Error(`That file is over ${mb(limit)}.`);
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error('The upload timed out. Check your connection and try again.')), MEDIA_UPLOAD_TIMEOUT_MS);
+  });
+  try {
+    const res = await Promise.race([sb.storage.from(CHAT_BUCKET).upload(path, body, { contentType: type, upsert: false }), timeout]);
+    if (res?.error) {
+      const msg = res.error.message || '';
+      if (/size|large|413/i.test(msg)) throw new Error(`That file is too large to send (over the server's limit).`);
+      if (/network|fetch|timed? ?out/i.test(msg)) throw new Error("Couldn't send: no connection. Try again in a moment.");
+      throw new Error(`Couldn't upload. ${msg}`.trim());
+    }
+  } catch (err) {
+    if (/Network request failed|Failed to fetch/i.test(err?.message || '')) throw new Error("Couldn't send: no connection. Try again in a moment.");
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+  return { path, size: body.byteLength, mime: type };
+}
+
+/** Saves a media message (after uploadChatMedia). */
+export async function sendMedia(conversationId, { kind, path, mime, size, width = null, height = null, durationMs = null, waveform = null, caption = '' }) {
+  return check(
+    await need()
+      .from('messages')
+      .insert({
+        conversation_id: conversationId,
+        kind,
+        body: caption.trim(),
+        media_path: path,
+        media_mime: mime,
+        media_size: size,
+        media_width: width ? Math.round(width) : null,
+        media_height: height ? Math.round(height) : null,
+        media_duration_ms: durationMs ? Math.round(durationMs) : null,
+        waveform,
+      })
+      .select('*')
+      .single(),
+  );
+}
+
+// Signed links last an hour; they're reused until ten minutes before then.
+const signed = new Map(); // path -> { url, until }
+
+/** A short-lived link to a chat file (chat-media is private). */
+export async function mediaUrl(path) {
+  const hit = signed.get(path);
+  if (hit && hit.until > Date.now()) return hit.url;
+  const { data, error } = await need().storage.from(CHAT_BUCKET).createSignedUrl(path, SIGNED_URL_SECONDS);
+  if (error || !data?.signedUrl) throw new Error(error?.message || "Couldn't load that file");
+  signed.set(path, { url: data.signedUrl, until: Date.now() + (SIGNED_URL_SECONDS - 600) * 1000 });
+  return data.signedUrl;
+}
+
+/** Whether your messages disappear after 24 hours (false if the database doesn't have the setting yet). */
+export async function getDisappearing(userId) {
+  const { data, error } = await need().from('profiles').select('disappearing_messages').eq('id', userId).maybeSingle();
+  return !error && data?.disappearing_messages === true;
+}
+
+export async function setDisappearing(userId, on) {
+  const { error } = await need().from('profiles').update({ disappearing_messages: !!on }).eq('id', userId);
+  if (error) {
+    if (error.code === 'PGRST204' || error.code === '42703') throw new Error("The Hub's database isn't up to date yet, so this can't be turned on.");
+    throw new Error(error.message || "Couldn't save");
+  }
+}
+
+// ------------------------------------------------------- push notifications
+
+/** Registers this phone for new-message pushes, with its chosen sound. */
+export async function savePushToken(token, platform, sound) {
+  check(await need().rpc('claim_push_token', { t: token, plat: platform, snd: sound }));
+}
+
+/** Stops pushes to this phone (signing out). */
+export async function removePushToken(token) {
+  check(await need().from('push_tokens').delete().eq('token', token));
 }
 
 export async function markRead(conversationId) {

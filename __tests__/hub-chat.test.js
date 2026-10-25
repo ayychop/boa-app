@@ -130,11 +130,12 @@ test('a message that fails to send says so and keeps its text', async () => {
   expect(screen.getByText(/Not sent/)).toBeOnTheScreen();
 });
 
-test('an empty message is never sent', async () => {
+test('an empty message is never sent: the send button is the voice note mic until there are words', async () => {
   const user = userEvent.setup();
   await openThread();
   await user.type(screen.getByTestId('hub-composer'), '   ');
-  await user.press(screen.getByTestId('hub-send'));
+  expect(screen.queryByTestId('hub-send')).toBeNull();
+  expect(screen.getByTestId('hub-mic')).toBeOnTheScreen();
   expect(hub.sendMessage).not.toHaveBeenCalled();
 });
 

@@ -1,8 +1,13 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { AppState } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Notifications from 'expo-notifications';
+import { createAudioPlayer } from 'expo-audio';
 import { isConfigured, supabase } from '../lib/supabase';
 import * as hub from '../api/hub';
+import * as chat from '../chat/notifications';
+import { chatSoundById, DEFAULT_CHAT_SOUND } from '../chat/sounds';
+import { openPage } from '../navigation/ref';
 import { usePlayer } from './PlayerContext';
 import { useMedia } from './MediaContext';
 import useNowPlaying from '../hooks/useNowPlaying';
@@ -32,6 +37,8 @@ export function HubProvider({ children }) {
   const [blocked, setBlocked] = useState(() => new Set());
   const [shareStatus, setShareStatusState] = useState(true);
   const userId = session?.user?.id ?? null;
+  // This phone's Expo push token, once registered for message pushes.
+  const pushToken = useRef(null);
 
   // Session: restored from the phone, then kept current.
   useEffect(() => {
@@ -177,6 +184,9 @@ export function HubProvider({ children }) {
   );
 
   const signOut = useCallback(async () => {
+    // This phone stops getting the account's message pushes.
+    if (pushToken.current) await hub.removePushToken(pushToken.current).catch(() => {});
+    pushToken.current = null;
     await hub.signOut();
     setProfile(null);
     setStage('signedOut');
@@ -188,6 +198,117 @@ export function HubProvider({ children }) {
     setSession(null);
     setStage('signedOut');
   }, [userId]);
+
+  // ------------------------------------------------ chat notifications
+  // New messages buzz the phone: a push when the app is closed (this phone's
+  // token, with its sound, is registered with the database), and a local
+  // notification while it's open or in the background if push isn't set up.
+  const [chatSound, setChatSoundState] = useState(DEFAULT_CHAT_SOUND);
+  const chatSoundRef = useRef(DEFAULT_CHAT_SOUND);
+
+  useEffect(() => {
+    chat.installChatHandler();
+    chat.getChatSound().then((id) => {
+      chatSoundRef.current = id;
+      setChatSoundState(id);
+    });
+    // Tapping a message notification opens its thread.
+    const tapped = Notifications.addNotificationResponseReceivedListener((r) => {
+      const data = r?.notification?.request?.content?.data ?? {};
+      if (data.type === 'chat' && data.conversationId) openPage('HubThread', { id: data.conversationId });
+    });
+    return () => tapped.remove();
+  }, []);
+
+  useEffect(() => {
+    if (!supabase || stage !== 'ready' || !userId) return undefined;
+    let alive = true;
+    (async () => {
+      await chat.ensureChatChannels();
+      if (!(await chat.ensurePermission()) || !alive) return;
+      const token = await chat.getPushToken();
+      if (!token || !alive) return;
+      try {
+        await hub.savePushToken(token, Platform.OS, chatSoundRef.current);
+        pushToken.current = token;
+      } catch (err) {
+        console.warn('[chat] push registration failed', err.message);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [stage, userId]);
+
+  // Without push, the app rings for messages itself (RLS only sends it
+  // messages from its own conversations).
+  useEffect(() => {
+    if (!supabase || stage !== 'ready' || !userId) return undefined;
+    const names = new Map();
+    const nameOf = async (id) => {
+      if (!names.has(id)) {
+        const p = await hub.getProfile(id).catch(() => null);
+        names.set(id, p?.display_name || (p?.username ? `@${p.username}` : 'New message'));
+      }
+      return names.get(id);
+    };
+    const channel = supabase
+      .channel(`hub:inbox:${userId}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, async ({ new: m }) => {
+        if (!m || m.sender_id === userId || pushToken.current || hub.isExpired(m)) return;
+        chat.notifyLocal({
+          title: await nameOf(m.sender_id),
+          body: chat.previewOf(m),
+          conversationId: m.conversation_id,
+          messageId: m.id,
+          sound: chatSoundRef.current,
+        });
+      })
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [stage, userId]);
+
+  const preview = useRef(null);
+  /** Picks the new-message sound: plays it, saves it, and tells the database for pushes. */
+  const setChatSound = useCallback((id) => {
+    const sound = chatSoundById(id);
+    chatSoundRef.current = sound.id;
+    setChatSoundState(sound.id);
+    chat.saveChatSound(sound.id);
+    try {
+      if (!preview.current) preview.current = createAudioPlayer(sound.asset);
+      else preview.current.replace(sound.asset);
+      preview.current.seekTo?.(0);
+      preview.current.play();
+    } catch {}
+    if (pushToken.current) hub.savePushToken(pushToken.current, Platform.OS, sound.id).catch(() => {});
+  }, []);
+
+  // Disappearing messages: your setting, kept in the database (it stamps
+  // everything you send).
+  const [disappearing, setDisappearingState] = useState(false);
+  useEffect(() => {
+    if (!supabase || stage !== 'ready' || !userId) return undefined;
+    let alive = true;
+    hub.getDisappearing(userId).then((on) => alive && setDisappearingState(on)).catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [stage, userId]);
+  const setDisappearing = useCallback(
+    async (on) => {
+      setDisappearingState(on);
+      try {
+        await hub.setDisappearing(userId, on);
+      } catch (err) {
+        setDisappearingState(!on);
+        throw err;
+      }
+    },
+    [userId],
+  );
 
   // Admin: asked of the database whenever who's signed in changes.
   const [isAdmin, setIsAdmin] = useState(false);
@@ -223,8 +344,12 @@ export function HubProvider({ children }) {
       unblock,
       signOut,
       deleteAccount,
+      chatSound,
+      setChatSound,
+      disappearing,
+      setDisappearing,
     }),
-    [isAdmin, stage, session, userId, profile, online, blocked, shareStatus, setShareStatus, loadProfile, saveProfile, finishOnboarding, block, unblock, signOut, deleteAccount],
+    [chatSound, setChatSound, disappearing, setDisappearing, isAdmin, stage, session, userId, profile, online, blocked, shareStatus, setShareStatus, loadProfile, saveProfile, finishOnboarding, block, unblock, signOut, deleteAccount],
   );
   return <HubContext.Provider value={value}>{children}</HubContext.Provider>;
 }
