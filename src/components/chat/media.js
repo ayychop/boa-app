@@ -55,7 +55,9 @@ export function useMediaUrl(message) {
 }
 
 export function Waveform({ levels, progress = 0, mine, height = 28 }) {
-  const bars = levels?.length ? levels : Array.from({ length: WAVE_BARS }, (_, i) => 18 + ((i * 37) % 30));
+  // Saved levels are numbers 0..100; anything else (a string, NaN) draws the stock shape.
+  const saved = Array.isArray(levels) ? levels.map(Number).filter(Number.isFinite) : [];
+  const bars = saved.length ? saved : Array.from({ length: WAVE_BARS }, (_, i) => 18 + ((i * 37) % 30));
   const played = mine ? colors.bg : colors.gold;
   const rest = mine ? 'rgba(5,5,6,0.32)' : 'rgba(243,239,232,0.28)';
   return (

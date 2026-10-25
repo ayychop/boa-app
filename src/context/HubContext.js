@@ -4,6 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import { createAudioPlayer } from 'expo-audio';
 import { isConfigured, supabase } from '../lib/supabase';
+import { ownChannel } from '../lib/realtime';
 import * as hub from '../api/hub';
 import * as chat from '../chat/notifications';
 import { chatSoundById, DEFAULT_CHAT_SOUND } from '../chat/sounds';
@@ -300,8 +301,7 @@ export function HubProvider({ children }) {
       const quick = new Promise((r) => setTimeout(() => r(null), NAME_WAIT_MS));
       return (await Promise.race([lookup, quick]).catch(() => null)) || 'New message';
     };
-    const channel = supabase
-      .channel(`hub:inbox:${userId}`)
+    const channel = ownChannel(`hub:inbox:${userId}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, async ({ new: m }) => {
         if (!m || m.sender_id === userId || pushToken.current || hub.isExpired(m)) return;
         chat.notifyLocal({

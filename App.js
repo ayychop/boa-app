@@ -66,6 +66,8 @@ import HubChatsScreen from './src/screens/hub/HubChatsScreen';
 import HubThreadScreen from './src/screens/hub/HubThreadScreen';
 import AdminDashboard from './src/screens/admin/AdminDashboard';
 import { colors, fonts } from './src/theme';
+import ErrorBoundary from './src/components/ErrorBoundary';
+import { installCrashGuard } from './src/utils/crashGuard';
 import { haptics } from './src/utils/haptics';
 import useLayout from './src/hooks/useLayout';
 
@@ -374,6 +376,24 @@ function Gate({ narrow }) {
   );
 }
 
+// A button or timer that throws shows an alert instead of closing the app.
+installCrashGuard();
+
+/** The last line of defence: if the app itself fails to draw, say so and offer a fresh start. */
+function AppFallback({ error, retry }) {
+  return (
+    <View style={styles.crash} testID="app-fallback">
+      <Text style={styles.crashTitle}>Something went wrong</Text>
+      <Text style={styles.crashBody} numberOfLines={3}>
+        {String(error?.message ?? error ?? '')}
+      </Text>
+      <Text onPress={retry} accessibilityRole="button" style={styles.crashRetry}>
+        Start again
+      </Text>
+    </View>
+  );
+}
+
 export default function App() {
   const narrow = useWindowDimensions().width < 380;
   const [fontsLoaded, fontError] = useFonts({
@@ -397,7 +417,11 @@ export default function App() {
   // from it. A font that fails to load falls back rather than hanging here.
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
-      {(fontsLoaded || fontError) && <Root narrow={narrow} />}
+      {(fontsLoaded || fontError) && (
+        <ErrorBoundary name="app" fallback={(f) => <AppFallback {...f} />}>
+          <Root narrow={narrow} />
+        </ErrorBoundary>
+      )}
     </View>
   );
 }
@@ -440,4 +464,8 @@ function Root({ narrow }) {
 const styles = StyleSheet.create({
   tabBarWrap: { position: 'absolute', left: 0, right: 0, bottom: 0 },
   tabLabel: { fontFamily: fonts.semibold, letterSpacing: -0.1, textAlign: 'center', maxWidth: '100%', paddingHorizontal: 1, marginTop: 3 },
+  crash: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 12, backgroundColor: colors.bg },
+  crashTitle: { fontSize: 20, fontWeight: '600', color: colors.text, textAlign: 'center' },
+  crashBody: { fontSize: 13, color: colors.textMuted, textAlign: 'center' },
+  crashRetry: { marginTop: 8, paddingHorizontal: 24, paddingVertical: 10, borderRadius: 999, overflow: 'hidden', backgroundColor: colors.text, color: colors.bg, fontWeight: '600' },
 });

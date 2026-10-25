@@ -419,7 +419,7 @@ export const isExpired = (message, now = Date.now()) => !!message?.expires_at &&
 export async function listMessages(conversationId, before = null, limit = 40) {
   let q = need().from('messages').select('*').eq('conversation_id', conversationId).order('created_at', { ascending: false }).limit(limit);
   if (before) q = q.lt('created_at', before);
-  return check(await q).filter((m) => !isExpired(m));
+  return (check(await q) ?? []).filter((m) => m && !isExpired(m));
 }
 
 export async function sendMessage(conversationId, body) {

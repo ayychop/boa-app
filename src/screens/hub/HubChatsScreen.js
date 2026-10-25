@@ -14,6 +14,7 @@ import { colors, fonts, radius, space, type } from '../../theme';
 export function chatTime(iso, now = new Date()) {
   if (!iso) return '';
   const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
   if (d.toDateString() === now.toDateString()) return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
   if (now - d < 6 * 86400000) return d.toLocaleDateString(undefined, { weekday: 'short' });
   return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });

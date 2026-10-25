@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
+import { ownChannel } from '../lib/realtime';
 
 /**
  * Calls onUpdate(profile) whenever one of these people's profiles changes
@@ -15,8 +16,7 @@ export default function useProfileUpdates(ids, onUpdate) {
     const list = key.split(',');
     // Realtime filters take up to 100 values.
     const filter = list.length === 1 ? `id=eq.${list[0]}` : `id=in.(${list.slice(0, 100).join(',')})`;
-    const channel = supabase
-      .channel(`hub:profiles:${key.length > 80 ? `${list.length}-${key.slice(0, 40)}` : key}`)
+    const channel = ownChannel(`hub:profiles:${list.length}`)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter }, ({ new: p }) => p?.id && handler.current(p))
       .subscribe();
     return () => {

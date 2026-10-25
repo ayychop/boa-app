@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
+import { ownChannel } from '../lib/realtime';
 import { listConversations } from '../api/hub';
 import useProfileUpdates from './useProfileUpdates';
 
@@ -49,8 +50,7 @@ export default function useConversations(userId) {
       clearTimeout(timer);
       timer = setTimeout(() => load(), 300);
     };
-    const channel = supabase
-      .channel(`hub:chats:${userId}`)
+    const channel = ownChannel(`hub:chats:${userId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations', filter: `user_a=eq.${userId}` }, reload)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations', filter: `user_b=eq.${userId}` }, reload)
       .subscribe();

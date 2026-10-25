@@ -8,6 +8,7 @@ import * as ImagePicker from 'expo-image-picker';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { useHub } from '../../context/HubContext';
 import { supabase } from '../../lib/supabase';
+import { ownChannel } from '../../lib/realtime';
 import {
   deleteMessage,
   getConversation,
@@ -31,6 +32,7 @@ import AmbientGlow from '../../components/chat/AmbientGlow';
 import Composer from '../../components/chat/Composer';
 import { MediaTile, MediaViewer, VoiceNote } from '../../components/chat/media';
 import { Button } from '../../components/ui';
+import ErrorBoundary from '../../components/ErrorBoundary';
 import { chatTime } from './HubChatsScreen';
 import { haptics } from '../../utils/haptics';
 import { colors, fonts, radius, space, type } from '../../theme';
@@ -103,7 +105,7 @@ function Bubble({ message, mine, seen, onLongPress, onOpenMedia }) {
 }
 
 /** One conversation: messages, photos, videos and voice notes, live in both directions, with read receipts. */
-export default function HubThreadScreen({ navigation, route }) {
+function Thread({ navigation, route }) {
   const insets = useSafeAreaInsets();
   const id = route.params?.id;
   const { userId, isOnline, blocked, unblock } = useHub();
@@ -169,6 +171,10 @@ export default function HubThreadScreen({ navigation, route }) {
 
   useEffect(() => {
     if (id && userId) load();
+    else if (!id) {
+      setError("This conversation wasn't found.");
+      setState('error');
+    }
   }, [id, userId, load]);
 
   // What they're playing, live in the header.
@@ -201,8 +207,7 @@ export default function HubThreadScreen({ navigation, route }) {
   // New and deleted messages, and the other person's read receipt.
   useEffect(() => {
     if (!supabase || !id || !userId) return;
-    const channel = supabase
-      .channel(`hub:thread:${id}`)
+    const channel = ownChannel(`hub:thread:${id}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `conversation_id=eq.${id}` }, ({ new: m }) => {
         if (isExpired(m)) return;
         setMessages((l) => merge(l, [m]));
@@ -384,7 +389,7 @@ export default function HubThreadScreen({ navigation, route }) {
           ref={list}
           inverted
           data={messages}
-          keyExtractor={(m) => m.id}
+          keyExtractor={(m, i) => String(m?.id ?? i)}
           renderItem={({ item }) => (
             <Bubble
               message={item}
@@ -418,6 +423,44 @@ export default function HubThreadScreen({ navigation, route }) {
       <MediaViewer item={viewing} onClose={() => setViewing(null)} />
       <ReportSheet target={reporting} onClose={(didBlock) => (setReporting(null), didBlock && navigation.goBack())} />
     </View>
+  );
+}
+
+/**
+ * If anything in the conversation fails to draw, the thread says so, with
+ * a way back and a retry, instead of taking the app down. Plain views
+ * only, so the fallback can't fail the same way.
+ */
+function ThreadFallback({ error, retry, navigation }) {
+  const insets = useSafeAreaInsets();
+  return (
+    <View style={[styles.screen, styles.fallback, { paddingTop: insets.top + space.md }]} testID="hub-thread-fallback">
+      <Pressable
+        onPress={() => (navigation?.canGoBack?.() ? navigation.goBack() : null)}
+        accessibilityRole="button"
+        accessibilityLabel="Back"
+        hitSlop={12}
+        style={styles.fallbackBack}
+      >
+        <Ionicons name="chevron-back" size={26} color={colors.text} />
+      </Pressable>
+      <View style={styles.empty}>
+        <Ionicons name="chatbubbles-outline" size={30} color={colors.gold} />
+        <Text style={[type.title, { marginTop: space.md, textAlign: 'center' }]}>This conversation couldn't open</Text>
+        <Text style={[type.bodyMuted, { textAlign: 'center', marginTop: space.sm }]} numberOfLines={3}>
+          {String(error?.message ?? error ?? 'Something went wrong.')}
+        </Text>
+        <Button label="Try again" icon="refresh" onPress={retry} style={{ marginTop: space.xl }} />
+      </View>
+    </View>
+  );
+}
+
+export default function HubThreadScreen(props) {
+  return (
+    <ErrorBoundary name="hub-thread" fallback={(f) => <ThreadFallback {...f} navigation={props.navigation} />}>
+      <Thread {...props} />
+    </ErrorBoundary>
   );
 }
 
@@ -459,4 +502,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(11,11,13,0.8)',
   },
   empty: { alignItems: 'center', padding: space.xxl },
+  fallback: { paddingHorizontal: space.lg },
+  fallbackBack: { width: 44, height: 44, justifyContent: 'center' },
 });
