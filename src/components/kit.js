@@ -10,8 +10,8 @@ import { colors, fonts, radius, space } from '../theme';
 // Building blocks for the full-screen pages over the tabs (alarms, the
 // forecast, the Creative Hub), in the app's dark-and-gold style.
 
-/** Back (or close), a title (with an optional line under it), and an optional action on the right. */
-export function PageHeader({ title, onBack, backIcon = 'chevron-back', right, kicker, subtitle }) {
+/** Back (or close), a title (with an optional badge beside it and a line under it), and an optional action on the right. */
+export function PageHeader({ title, onBack, backIcon = 'chevron-back', right, kicker, subtitle, badge }) {
   const insets = useSafeAreaInsets();
   return (
     <View style={[styles.header, { paddingTop: insets.top + space.sm }]}>
@@ -29,9 +29,18 @@ export function PageHeader({ title, onBack, backIcon = 'chevron-back', right, ki
       ) : null}
       <View style={{ flex: 1, minWidth: 0 }}>
         {kicker ? <Text style={styles.kicker}>{kicker}</Text> : null}
-        <Text style={styles.title} numberOfLines={1} accessibilityRole="header">
-          {title}
-        </Text>
+        {badge ? (
+          <View style={styles.titleRow}>
+            <Text style={[styles.title, { flexShrink: 1 }]} numberOfLines={1} accessibilityRole="header">
+              {title}
+            </Text>
+            {badge}
+          </View>
+        ) : (
+          <Text style={styles.title} numberOfLines={1} accessibilityRole="header">
+            {title}
+          </Text>
+        )}
         {subtitle ?? null}
       </View>
       {right ?? <View style={{ width: 40 }} />}
@@ -286,6 +295,7 @@ const styles = StyleSheet.create({
   roundFilled: { backgroundColor: colors.gold, borderColor: colors.gold },
   kicker: { fontFamily: fonts.mono, fontSize: 9.5, letterSpacing: 2, color: colors.gold, textTransform: 'uppercase' },
   title: { fontFamily: fonts.semibold, fontSize: 22, letterSpacing: -0.6, color: colors.text },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, minWidth: 0 },
   label: { fontFamily: fonts.mono, fontSize: 10, letterSpacing: 1.8, textTransform: 'uppercase', color: colors.textMuted, marginBottom: 8 },
   input: {
     minHeight: 50,

@@ -5,7 +5,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
-import Animated, { FadeIn } from 'react-native-reanimated';
+import Animated, { withSpring, withTiming } from 'react-native-reanimated';
 import { useHub } from '../../context/HubContext';
 import { supabase } from '../../lib/supabase';
 import { ownChannel } from '../../lib/realtime';
@@ -23,15 +23,17 @@ import {
   uploadChatMedia,
 } from '../../api/hub';
 import { setOpenThread } from '../../chat/notifications';
-import { Avatar, PageHeader } from '../../components/kit';
-import { lastSeen } from '../../components/hub/hubNav';
+import { openTyping, TYPING_HOLD_MS } from '../../chat/typing';
+import { Avatar, BoaStarBadge, PageHeader } from '../../components/kit';
+import { lastSeen, statusLine } from '../../components/hub/hubNav';
 import ReportSheet from '../../components/hub/ReportSheet';
 import NowPlaying from '../../components/hub/NowPlaying';
 import useProfileUpdates from '../../hooks/useProfileUpdates';
 import AmbientGlow from '../../components/chat/AmbientGlow';
 import Composer from '../../components/chat/Composer';
+import TypingIndicator, { TypingDots } from '../../components/chat/TypingIndicator';
 import { MediaTile, MediaViewer, VoiceNote } from '../../components/chat/media';
-import { Button } from '../../components/ui';
+import { Button, PulseDot } from '../../components/ui';
 import ErrorBoundary from '../../components/ErrorBoundary';
 import { chatTime } from './HubChatsScreen';
 import { haptics } from '../../utils/haptics';
@@ -60,17 +62,35 @@ function timeLeft(expiresAt) {
   return h >= 1 ? `${h}h left` : `${Math.max(1, Math.round(ms / 60000))}m left`;
 }
 
+// A new message rises into place: up a touch, from just under full size,
+// settling on a soft spring as it fades in. Messages already there when
+// the thread opens don't animate.
+const RISE_SPRING = { damping: 16, stiffness: 220, mass: 0.7 };
+export function rise() {
+  'worklet';
+  return {
+    initialValues: { opacity: 0, transform: [{ translateY: 12 }, { scale: 0.92 }] },
+    animations: {
+      opacity: withTiming(1, { duration: 180 }),
+      transform: [{ translateY: withSpring(0, RISE_SPRING) }, { scale: withSpring(1, RISE_SPRING) }],
+    },
+  };
+}
+
 // Frosted glass: a translucent fill with a light sheen across the top and a
-// fine bright edge, over the ambient glow behind the thread. Yours are warm
-// gold glass; theirs are smoky.
-function Bubble({ message, mine, seen, onLongPress, onOpenMedia }) {
+// fine bright edge, over the ambient glow behind the thread. Yours are
+// champagne-to-amber gold glass with a warm glow; theirs are smoky.
+const MINE_GLASS = ['rgba(252,230,182,0.97)', 'rgba(232,180,96,0.94)', 'rgba(196,130,44,0.92)'];
+const THEIR_GLASS = ['rgba(255,255,255,0.14)', 'rgba(255,255,255,0.04)'];
+
+function Bubble({ message, mine, seen, fresh, onLongPress, onOpenMedia }) {
   const media = message.kind === 'image' || message.kind === 'video';
   const voice = message.kind === 'voice';
   const caption = message.body?.trim();
   const status = message.failed ? 'Not sent · hold to retry' : message.pending ? 'Sending…' : chatTime(message.created_at);
   const left = message.expires_at ? timeLeft(message.expires_at) : null;
   return (
-    <Animated.View entering={FadeIn.duration(180)} style={[styles.bubbleRow, mine && { justifyContent: 'flex-end' }]}>
+    <Animated.View entering={fresh ? rise : undefined} style={[styles.bubbleRow, mine && { justifyContent: 'flex-end' }]} testID={fresh ? `hub-message-fresh-${message.id}` : undefined}>
       <Pressable
         onLongPress={onLongPress}
         delayLongPress={350}
@@ -79,9 +99,9 @@ function Bubble({ message, mine, seen, onLongPress, onOpenMedia }) {
         testID={`hub-message-${message.id}`}
       >
         <LinearGradient
-          colors={mine ? ['rgba(246,206,132,0.96)', 'rgba(214,152,58,0.9)'] : ['rgba(255,255,255,0.13)', 'rgba(255,255,255,0.04)']}
+          colors={mine ? MINE_GLASS : THEIR_GLASS}
           start={{ x: 0, y: 0 }}
-          end={{ x: 0.4, y: 1 }}
+          end={{ x: 0.5, y: 1 }}
           style={StyleSheet.absoluteFill}
         />
         <View pointerEvents="none" style={[styles.sheen, mine && { backgroundColor: 'rgba(255,255,255,0.28)' }]} />
@@ -104,6 +124,36 @@ function Bubble({ message, mine, seen, onLongPress, onOpenMedia }) {
   );
 }
 
+/**
+ * The live line under their name, most telling first: typing, then what
+ * they're playing, then "Online in the Hub", then when they were last about.
+ */
+function HeaderStatus({ person, online, typing }) {
+  if (typing) {
+    return (
+      <View style={styles.status} testID="thread-status-typing">
+        <TypingDots size={4} />
+        <Text style={styles.statusText}>typing</Text>
+      </View>
+    );
+  }
+  if (statusLine(person)) return <NowPlaying person={person} style={{ marginTop: 2 }} />;
+  if (online) {
+    return (
+      <View style={styles.status} testID="thread-status-online">
+        <PulseDot color={colors.live} size={6} />
+        <Text style={[styles.statusText, { color: colors.text }]}>Online in the Hub</Text>
+      </View>
+    );
+  }
+  const seen = lastSeen(person?.last_seen_at, false);
+  return seen ? (
+    <Text style={[styles.statusText, styles.statusFaint]} testID="thread-status-seen">
+      {seen}
+    </Text>
+  ) : null;
+}
+
 /** One conversation: messages, photos, videos and voice notes, live in both directions, with read receipts. */
 function Thread({ navigation, route }) {
   const insets = useSafeAreaInsets();
@@ -117,8 +167,13 @@ function Thread({ navigation, route }) {
   const [reporting, setReporting] = useState(null);
   const [viewing, setViewing] = useState(null);
   const [keyboard, setKeyboard] = useState(false);
+  const [theyType, setTheyType] = useState(false);
   const alive = useRef(true);
   const list = useRef(null);
+  const typing = useRef(null);
+  // Messages already on screen; anything new gets the entrance.
+  const known = useRef(new Set());
+  const know = (rows) => rows.forEach((m) => m?.id && known.current.add(m.id));
 
   useEffect(() => {
     alive.current = true;
@@ -158,6 +213,7 @@ function Thread({ navigation, route }) {
       const [c, page] = await Promise.all([getConversation(id, userId), listMessages(id, null, PAGE)]);
       if (!alive.current) return;
       setConv(c);
+      know(page);
       setMessages(page);
       setOlder(page.length < PAGE ? 'done' : 'idle');
       setState('ready');
@@ -197,6 +253,7 @@ function Thread({ navigation, route }) {
     try {
       const page = await listMessages(id, oldest.created_at, PAGE);
       if (!alive.current) return;
+      know(page);
       setMessages((m) => merge(m, page));
       setOlder(page.length < PAGE ? 'done' : 'idle');
     } catch {
@@ -212,6 +269,7 @@ function Thread({ navigation, route }) {
         if (isExpired(m)) return;
         setMessages((l) => merge(l, [m]));
         if (m.sender_id !== userId) {
+          setTheyType(false);
           haptics.selection();
           markRead(id).catch(() => {});
         }
@@ -229,6 +287,23 @@ function Thread({ navigation, route }) {
     };
   }, [id, userId]);
 
+  // Their typing, live; yours goes out as you type.
+  useEffect(() => {
+    let timer = null;
+    const room = openTyping(id, userId, (on) => {
+      clearTimeout(timer);
+      if (!alive.current) return;
+      setTheyType(on);
+      if (on) timer = setTimeout(() => alive.current && setTheyType(false), TYPING_HOLD_MS);
+    });
+    typing.current = room;
+    return () => {
+      clearTimeout(timer);
+      room.close();
+      typing.current = null;
+    };
+  }, [id, userId]);
+
   // Every send shows straight away ("Sending…"), then swaps for the saved
   // message, or stays with "Not sent · hold to retry".
   const optimistic = (tempId, fields) =>
@@ -238,7 +313,12 @@ function Thread({ navigation, route }) {
         [{ id: tempId, body: '', kind: 'text', sender_id: userId, created_at: new Date().toISOString(), pending: true, ...fields }],
       ),
     );
-  const settle = (tempId, saved) => alive.current && setMessages((l) => merge(l.filter((m) => m.id !== tempId), [saved]));
+  const settle = (tempId, saved) => {
+    if (!alive.current) return;
+    // It made its entrance while sending; the saved copy just takes its place.
+    if (saved?.id) known.current.add(saved.id);
+    setMessages((l) => merge(l.filter((m) => m.id !== tempId), [saved]));
+  };
   const fail = (tempId, title, err) => {
     if (!alive.current) return;
     setMessages((l) => l.map((m) => (m.id === tempId ? { ...m, pending: false, failed: true } : m)));
@@ -343,9 +423,10 @@ function Thread({ navigation, route }) {
 
   const header = (
     <PageHeader
-      kicker={conv ? (online ? 'Online' : lastSeen(other?.last_seen_at, false) || 'Creative Hub') : 'Creative Hub'}
+      kicker="Creative Hub"
       title={name}
-      subtitle={other ? <NowPlaying person={other} style={{ marginTop: 2 }} /> : null}
+      badge={other?.is_boa_star ? <BoaStarBadge size={16} /> : null}
+      subtitle={other ? <HeaderStatus person={other} online={online} typing={theyType} /> : null}
       onBack={() => navigation.goBack()}
       right={
         conv && other ? (
@@ -395,6 +476,7 @@ function Thread({ navigation, route }) {
               message={item}
               mine={item.sender_id === userId}
               seen={item.id === seenId}
+              fresh={!known.current.has(item.id)}
               onLongPress={() => onLongPress(item)}
               onOpenMedia={setViewing}
             />
@@ -404,6 +486,7 @@ function Thread({ navigation, route }) {
           contentContainerStyle={{ paddingHorizontal: space.lg, paddingVertical: space.md, flexGrow: 1 }}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="interactive"
+          ListHeaderComponent={theyType ? <TypingIndicator name={name} /> : null}
           ListFooterComponent={older === 'loading' ? <ActivityIndicator color={colors.gold} style={{ margin: space.lg }} /> : null}
           ListEmptyComponent={
             <View style={styles.empty}>
@@ -417,7 +500,14 @@ function Thread({ navigation, route }) {
             <Button label="Unblock" variant="ghost" onPress={() => unblock(conv.otherId).catch((e) => Alert.alert('Unblock failed', e.message))} />
           </View>
         ) : (
-          <Composer onSend={(text) => send(text)} onAttach={attach} onVoice={sendVoice} bottomInset={bottom} onFocus={toNewest} />
+          <Composer
+            onSend={(text) => send(text)}
+            onAttach={attach}
+            onVoice={sendVoice}
+            onTyping={(on) => (on ? typing.current?.ping() : typing.current?.stop())}
+            bottomInset={bottom}
+            onFocus={toNewest}
+          />
         )}
       </KeyboardAvoidingView>
       <MediaViewer item={viewing} onClose={() => setViewing(null)} />
@@ -480,7 +570,9 @@ const styles = StyleSheet.create({
   mediaBubble: { padding: 4, paddingBottom: space.xs },
   mine: {
     borderBottomRightRadius: radius.sm,
-    borderColor: 'rgba(255,226,170,0.7)',
+    borderColor: 'rgba(255,236,196,0.85)',
+    // Gold glass gives off a little warm light of its own.
+    boxShadow: '0px 4px 18px rgba(226,168,75,0.28)',
   },
   theirs: {
     borderBottomLeftRadius: radius.sm,
@@ -490,6 +582,9 @@ const styles = StyleSheet.create({
   // The glass's top edge catching the light.
   sheen: { position: 'absolute', left: 10, right: 10, top: 0, height: StyleSheet.hairlineWidth * 2, backgroundColor: 'rgba(255,255,255,0.22)' },
   body: { fontFamily: fonts.medium, fontSize: 15, lineHeight: 21, color: colors.text },
+  status: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3 },
+  statusText: { fontFamily: fonts.medium, fontSize: 12, color: colors.gold },
+  statusFaint: { color: colors.textMuted, marginTop: 2 },
   meta: { fontFamily: fonts.mono, fontSize: 9.5, color: colors.textFaint, marginTop: 3, alignSelf: 'flex-end' },
   blocked: {
     flexDirection: 'row',

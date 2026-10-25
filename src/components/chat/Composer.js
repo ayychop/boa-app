@@ -2,12 +2,14 @@ import { useEffect, useRef, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
-import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
+import { LinearGradient } from 'expo-linear-gradient';
+import Animated, { cancelAnimation, Easing, FadeIn, FadeOut, useAnimatedStyle, useReducedMotion, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
 import { RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync, useAudioRecorder, useAudioRecorderState } from 'expo-audio';
 import { claim } from '../../audio/focus';
 import { haptics } from '../../utils/haptics';
 import { PulseDot } from '../ui';
 import { clock, downsample, level, Waveform } from './media';
+import { TYPING_EVERY_MS } from '../../chat/typing';
 import { colors, fonts, radius, space } from '../../theme';
 
 const MAX_LENGTH = 2000;
@@ -20,12 +22,51 @@ const RECORDING = { ...RecordingPresets.HIGH_QUALITY, isMeteringEnabled: true };
 const PLAYBACK_MODE = { allowsRecording: false, playsInSilentMode: true, shouldPlayInBackground: true, interruptionMode: 'doNotMix' };
 
 /**
+ * A gold ring of light around the mic or send button: a fine bright edge,
+ * and a halo behind it that slowly breathes out and fades.
+ */
+function GlowRing({ children, size = 42, testID }) {
+  const still = useReducedMotion();
+  const t = useSharedValue(0);
+  useEffect(() => {
+    if (still) return undefined;
+    t.value = withRepeat(withTiming(1, { duration: 2200, easing: Easing.out(Easing.quad) }), -1, false);
+    return () => cancelAnimation(t);
+  }, [still, t]);
+  const halo = useAnimatedStyle(() => ({ opacity: 0.55 * (1 - t.value), transform: [{ scale: 1 + t.value * 0.35 }] }));
+  return (
+    <View style={{ width: size, height: size }} testID={testID}>
+      <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.halo, { borderRadius: size }, halo]} />
+      <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.ring, { borderRadius: size }]} />
+      {children}
+    </View>
+  );
+}
+
+/**
  * The bar under a conversation: a message field, a + for photos and
  * videos, and a mic for voice notes (tap to record, then send or bin it).
- * onSend(text), onAttach(), onVoice({ uri, durationMs, waveform }).
+ * onSend(text), onAttach(), onVoice({ uri, durationMs, waveform }),
+ * onTyping(true) while you type (at most every few seconds), false on send
+ * or when the field empties.
  */
-export default function Composer({ onSend, onAttach, onVoice, bottomInset = 0, onFocus }) {
+export default function Composer({ onSend, onAttach, onVoice, onTyping, bottomInset = 0, onFocus }) {
   const [draft, setDraft] = useState('');
+  const lastPing = useRef(0);
+  const change = (text) => {
+    setDraft(text);
+    if (!onTyping) return;
+    if (!text.trim()) {
+      if (lastPing.current) onTyping(false);
+      lastPing.current = 0;
+      return;
+    }
+    const now = Date.now();
+    if (now - lastPing.current >= TYPING_EVERY_MS) {
+      lastPing.current = now;
+      onTyping(true);
+    }
+  };
   const [recording, setRecording] = useState(false);
   const recorder = useAudioRecorder(RECORDING);
   const state = useAudioRecorderState(recorder, 80);
@@ -80,6 +121,8 @@ export default function Composer({ onSend, onAttach, onVoice, bottomInset = 0, o
     const text = draft.trim();
     if (!text) return;
     setDraft('');
+    if (lastPing.current) onTyping?.(false);
+    lastPing.current = 0;
     onSend?.(text);
   };
 
@@ -107,12 +150,19 @@ export default function Composer({ onSend, onAttach, onVoice, bottomInset = 0, o
         </Animated.View>
       ) : (
         <View style={styles.row}>
-          <Pressable onPress={onAttach} accessibilityRole="button" accessibilityLabel="Send a photo or video" hitSlop={10} style={styles.side} testID="hub-attach">
-            <Ionicons name="add" size={26} color={colors.gold} />
+          <Pressable
+            onPress={onAttach}
+            accessibilityRole="button"
+            accessibilityLabel="Send a photo or video"
+            hitSlop={10}
+            style={({ pressed }) => [styles.attach, pressed && styles.pressed]}
+            testID="hub-attach"
+          >
+            <Ionicons name="add" size={24} color={colors.gold} />
           </Pressable>
           <TextInput
             value={draft}
-            onChangeText={setDraft}
+            onChangeText={change}
             onFocus={onFocus}
             placeholder="Message"
             placeholderTextColor={colors.textFaint}
@@ -124,13 +174,18 @@ export default function Composer({ onSend, onAttach, onVoice, bottomInset = 0, o
             testID="hub-composer"
           />
           {typing ? (
-            <Pressable onPress={submit} accessibilityRole="button" accessibilityLabel="Send" style={styles.send} testID="hub-send">
-              <Ionicons name="arrow-up" size={20} color={colors.bg} />
-            </Pressable>
+            <GlowRing testID="hub-send-glow">
+              <Pressable onPress={submit} accessibilityRole="button" accessibilityLabel="Send" style={({ pressed }) => [styles.send, pressed && styles.pressed]} testID="hub-send">
+                <LinearGradient colors={['#FBE3B0', colors.gold, '#C7862E']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+                <Ionicons name="arrow-up" size={20} color={colors.bg} />
+              </Pressable>
+            </GlowRing>
           ) : (
-            <Pressable onPress={start} accessibilityRole="button" accessibilityLabel="Record a voice note" style={styles.mic} testID="hub-mic">
-              <Ionicons name="mic" size={20} color={colors.gold} />
-            </Pressable>
+            <GlowRing testID="hub-mic-glow">
+              <Pressable onPress={start} accessibilityRole="button" accessibilityLabel="Record a voice note" style={({ pressed }) => [styles.mic, pressed && styles.pressed]} testID="hub-mic">
+                <Ionicons name="mic" size={20} color={colors.gold} />
+              </Pressable>
+            </GlowRing>
           )}
         </View>
       )}
@@ -149,6 +204,22 @@ const styles = StyleSheet.create({
   tint: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(11,11,13,0.55)' },
   row: { flexDirection: 'row', alignItems: 'flex-end', gap: space.sm },
   side: { width: 40, height: 42, alignItems: 'center', justifyContent: 'center' },
+  // The + is a small gold-rimmed coin, lit from within.
+  attach: {
+    width: 40,
+    height: 40,
+    marginBottom: 1,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(226,168,75,0.16)',
+    borderWidth: 1,
+    borderColor: 'rgba(226,168,75,0.7)',
+    boxShadow: '0px 0px 10px rgba(226,168,75,0.35)',
+  },
+  pressed: { transform: [{ scale: 0.92 }], opacity: 0.85 },
+  halo: { backgroundColor: 'rgba(226,168,75,0.35)' },
+  ring: { borderWidth: 1.5, borderColor: 'rgba(246,206,132,0.9)', boxShadow: '0px 0px 12px rgba(226,168,75,0.6)' },
   input: {
     flex: 1,
     maxHeight: 120,
@@ -164,16 +235,14 @@ const styles = StyleSheet.create({
     fontFamily: fonts.medium,
     fontSize: 15,
   },
-  send: { width: 42, height: 42, borderRadius: 21, backgroundColor: colors.gold, alignItems: 'center', justifyContent: 'center' },
+  send: { width: 42, height: 42, borderRadius: 21, overflow: 'hidden', backgroundColor: colors.gold, alignItems: 'center', justifyContent: 'center' },
   mic: {
     width: 42,
     height: 42,
     borderRadius: 21,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.goldSoft,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(226,168,75,0.4)',
+    backgroundColor: 'rgba(226,168,75,0.12)',
   },
   recording: {
     flex: 1,

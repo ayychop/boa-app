@@ -18,6 +18,53 @@ export const LIGHTS = [
   { id: 'cool', color: '#3B5B8C', size: 1.2, x: [0.95, 0.7], y: [0.36, 0.5], opacity: [0.22, 0.38], ms: 23000 },
 ];
 
+// A faint night sky over the lights: three sets of stars, each set
+// brightening and dimming on its own slow breath, so a few twinkle at a
+// time. Positions are fixed (a seeded scatter), as fractions of the screen.
+const STAR_SETS = 3;
+const STARS_PER_SET = 9;
+const STAR_MS = [5200, 7300, 9100];
+const seeded = (n) => {
+  const x = Math.sin(n * 127.1 + 311.7) * 43758.5453;
+  return x - Math.floor(x);
+};
+export const STARS = Array.from({ length: STAR_SETS * STARS_PER_SET }, (_, i) => ({
+  set: i % STAR_SETS,
+  x: seeded(i + 1),
+  y: seeded(i + 101),
+  size: 1 + Math.round(seeded(i + 201) * 1.5),
+  gold: seeded(i + 301) > 0.7,
+}));
+
+function StarSet({ set, width, height, still }) {
+  const t = useSharedValue(0.5);
+  useEffect(() => {
+    if (still) return undefined;
+    return startLoop(t, STAR_MS[set], Easing.inOut(Easing.sin), true);
+  }, [still, t, set]);
+  const style = useAnimatedStyle(() => ({ opacity: interpolate(t.value, [0, 1], [0.15, 0.6]) }));
+  return (
+    <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, style]} testID={`chat-stars-${set}`}>
+      {STARS.filter((s) => s.set === set).map((s, i) => (
+        <View
+          key={i}
+          style={[
+            styles.star,
+            {
+              left: s.x * width,
+              top: s.y * height,
+              width: s.size,
+              height: s.size,
+              borderRadius: s.size,
+              backgroundColor: s.gold ? '#F6D38A' : '#E8ECF5',
+            },
+          ]}
+        />
+      ))}
+    </Animated.View>
+  );
+}
+
 function Light({ light, width, height, still }) {
   const t = useSharedValue(0);
   useEffect(() => {
@@ -62,6 +109,9 @@ export default function AmbientGlow() {
       ))}
       {/* A dark veil keeps the lights behind the words, never over them. */}
       <View style={styles.veil} />
+      {Array.from({ length: STAR_SETS }, (_, set) => (
+        <StarSet key={set} set={set} width={width} height={height} still={still} />
+      ))}
       <Grain width={width} height={height} opacity={0.07} running={!still} />
     </View>
   );
@@ -70,5 +120,6 @@ export default function AmbientGlow() {
 const styles = StyleSheet.create({
   fill: { ...StyleSheet.absoluteFillObject, zIndex: 0, backgroundColor: colors.bg, overflow: 'hidden' },
   light: { position: 'absolute', left: 0, top: 0 },
+  star: { position: 'absolute' },
   veil: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(5,5,6,0.22)' },
 });
