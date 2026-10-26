@@ -69,8 +69,6 @@ import HubThreadScreen from './src/screens/hub/HubThreadScreen';
 import AdminDashboard from './src/screens/admin/AdminDashboard';
 import HubNewPostScreen from './src/screens/hub/HubNewPostScreen';
 import HubPostScreen from './src/screens/hub/HubPostScreen';
-import CipherScreen from './src/screens/hub/CipherScreen';
-import CipherRoomScreen from './src/screens/hub/CipherRoomScreen';
 import HubSplitsScreen from './src/screens/hub/HubSplitsScreen';
 import HubSplitSheetScreen from './src/screens/hub/HubSplitSheetScreen';
 import HubInvoiceScreen from './src/screens/hub/HubInvoiceScreen';
@@ -360,8 +358,6 @@ function MainTabs({ narrow }) {
         <Stack.Screen name="AdminDashboard" component={AdminDashboard} />
         <Stack.Screen name="HubNewPost" component={HubNewPostScreen} options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
         <Stack.Screen name="HubPost" component={HubPostScreen} />
-        <Stack.Screen name="Cipher" component={CipherScreen} />
-        <Stack.Screen name="CipherRoom" component={CipherRoomScreen} options={{ animation: 'slide_from_bottom', gestureEnabled: false }} />
         <Stack.Screen name="HubSplits" component={HubSplitsScreen} />
         <Stack.Screen name="HubSplitSheet" component={HubSplitSheetScreen} />
         <Stack.Screen name="HubInvoice" component={HubInvoiceScreen} />

@@ -9,11 +9,10 @@ import * as hub from '../../api/hub';
 import useConversations from '../../hooks/useConversations';
 import { talent as roster } from '../../data/boaContent';
 import { Avatar, IconButton, BoaStarBadge, DayOneBadge } from '../../components/kit';
-import { Button, PulseDot, Slate } from '../../components/ui';
+import { Button, Slate } from '../../components/ui';
 import DailySpark from '../../components/DailySpark';
 import Headshot from '../../components/Headshot';
 import { ThreadRow } from './HubChatsScreen';
-import { RoomCard, useLiveRooms } from './CipherScreen';
 import useDayOne from '../../hooks/useDayOne';
 import { placeLine } from '../../api/dayOne';
 import { colors, fonts, radius, space, type } from '../../theme';
@@ -108,13 +107,12 @@ function TalentCard({ person, onPress, index }) {
 }
 
 // A shortcut on dark glass: an icon in a gold ring, a name and a line.
-function Tool({ icon, title, detail, onPress, live, testID }) {
+function Tool({ icon, title, detail, onPress, testID }) {
   return (
     <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={`${title}. ${detail}`} style={({ pressed }) => [styles.tool, pressed && { transform: [{ scale: 0.97 }] }]} testID={testID}>
       <LinearGradient colors={['rgba(255,255,255,0.09)', 'rgba(255,255,255,0.02)']} style={StyleSheet.absoluteFill} />
       <View style={styles.toolIcon}>
         <Ionicons name={icon} size={20} color={colors.gold} />
-        {live ? <PulseDot color="#FF4D5E" size={7} style={styles.toolLive} /> : null}
       </View>
       <Text style={styles.toolTitle} numberOfLines={1}>
         {title}
@@ -145,7 +143,6 @@ function Row({ children }) {
 export default function ChatHome({ navigation, bottomPadding }) {
   const insets = useSafeAreaInsets();
   const { userId, profile, isOnline, blocked, dayOneNews, clearDayOneNews, heartsUnseen = 0 } = useHub();
-  const live = useLiveRooms(3);
   const { rows, state, error, reload } = useConversations(userId);
   const [pulse, setPulse] = useState({ featured: [], fresh: [], suggested: [], ready: false });
 
@@ -244,18 +241,8 @@ export default function ChatHome({ navigation, bottomPadding }) {
           </Animated.View>
         ) : null}
 
-        <SectionTitle kicker="Live on the Hub" title="The Cipher" action={live.rooms.length ? 'All rooms' : null} onAction={() => navigation.navigate('Cipher')} />
-        {live.rooms.length ? (
-          <Row>
-            {live.rooms.map((r, i) => (
-              <View key={r.id} style={{ width: 280 }}>
-                <RoomCard room={r} host={live.hosts[r.host_id]} count={live.counts[r.id]} index={i} onPress={() => navigation.navigate('CipherRoom', { id: r.id })} />
-              </View>
-            ))}
-          </Row>
-        ) : null}
+        <SectionTitle kicker="Your studio" title="Show your work, get paid" />
         <View style={styles.tools}>
-          <Tool icon="mic" title="The Cipher" detail={live.rooms.length ? `${live.rooms.length} live now` : 'Go live: play the new joint'} live={live.rooms.length > 0} onPress={() => navigation.navigate('Cipher')} testID="tool-cipher" />
           <Tool icon="pie-chart" title="Splits" detail="Split sheets and invoices" onPress={() => navigation.navigate('HubSplits')} testID="tool-splits" />
           <Tool icon="grid" title="Your profile" detail="Posts, reels and badges" onPress={() => navigation.navigate('HubProfile')} testID="tool-profile" />
         </View>
@@ -378,10 +365,9 @@ const styles = StyleSheet.create({
   },
   heartBadge: { position: 'absolute', top: -4, right: -4, minWidth: 18, height: 18, paddingHorizontal: 4, borderRadius: 9, alignItems: 'center', justifyContent: 'center', backgroundColor: '#FF3B5C', borderWidth: 2, borderColor: colors.bg },
   heartBadgeText: { fontFamily: fonts.bold, fontSize: 10, color: '#fff' },
-  tools: { flexDirection: 'row', gap: space.sm, paddingHorizontal: space.lg, marginTop: space.md },
+  tools: { flexDirection: 'row', gap: space.md, paddingHorizontal: space.lg },
   tool: { flex: 1, minWidth: 0, padding: space.md, borderRadius: radius.lg, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255,255,255,0.14)', backgroundColor: 'rgba(18,18,22,0.6)' },
   toolIcon: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.goldSoft, borderWidth: 1, borderColor: 'rgba(226,168,75,0.45)' },
-  toolLive: { position: 'absolute', top: 0, right: 0 },
   toolTitle: { fontFamily: fonts.semibold, fontSize: 14, color: colors.text, marginTop: space.md },
   toolDetail: { fontFamily: fonts.medium, fontSize: 11.5, lineHeight: 15, color: colors.textMuted, marginTop: 2 },
   dayOneNews: { flexDirection: 'row', alignItems: 'center', gap: space.md, marginHorizontal: space.lg, marginTop: space.xl, padding: space.md, borderRadius: radius.lg, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(246,211,138,0.55)', backgroundColor: 'rgba(18,18,22,0.7)', boxShadow: '0px 0px 24px rgba(246,211,138,0.2)' },

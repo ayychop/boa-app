@@ -77,4 +77,15 @@ describe('the Chat Hub home', () => {
     expect(screen.getAllByTestId('avatar-gold-ring').length).toBeGreaterThanOrEqual(2);
   });
 
+  test('the studio row is Splits and your profile, with no Cipher anywhere', async () => {
+    mockRows = [];
+    const navigation = await renderHome();
+    expect(screen.getByText('Show your work, get paid')).toBeOnTheScreen();
+    expect(screen.queryByText(/Cipher/)).toBeNull();
+    expect(screen.queryByTestId('tool-cipher')).toBeNull();
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTimeAsync });
+    await user.press(screen.getByTestId('tool-splits'));
+    expect(navigation.navigate).toHaveBeenCalledWith('HubSplits');
+  });
+
 });

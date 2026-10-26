@@ -62,7 +62,6 @@ jest.mock('../src/components/profile/Favourites', () => () => null);
 
 const splits = require('../src/api/splits');
 const posts = require('../src/api/posts');
-const cipher = require('../src/api/cipher');
 const dayOne = require('../src/api/dayOne');
 
 const flush = () => act(async () => {});
@@ -162,7 +161,7 @@ describe('invoices', () => {
   });
 });
 
-describe('posts, Day One and the Cipher, the rules', () => {
+describe('posts and Day One, the rules', () => {
   test('tags are usernames, each once', () => {
     expect(posts.parseTags('@Ama, kofi.beats @ama  x')).toEqual(['ama', 'kofi.beats']);
   });
@@ -187,20 +186,6 @@ describe('posts, Day One and the Cipher, the rules', () => {
     expect(dayOne.placeLine(12)).toBe('#12 of the first 1,000');
   });
 
-  test('the stage: host first, then speakers, then listeners; hands are listeners only', () => {
-    const at = (m) => new Date(Date.UTC(2026, 9, 26, 20, m)).toISOString();
-    const { stage, audience, hands } = cipher.arrange([
-      { user_id: 'c', role: 'listener', hand_raised: true, joined_at: at(3) },
-      { user_id: 'b', role: 'speaker', hand_raised: false, joined_at: at(2) },
-      { user_id: 'a', role: 'host', hand_raised: false, joined_at: at(5) },
-      { user_id: 'd', role: 'listener', hand_raised: false, joined_at: at(1) },
-    ]);
-    expect(stage.map((s) => s.user_id)).toEqual(['a', 'b']);
-    expect(audience.map((s) => s.user_id)).toEqual(['d', 'c']);
-    expect(hands.map((s) => s.user_id)).toEqual(['c']);
-    expect(cipher.roomProblem({ title: 'ok' })).toMatch(/3 characters/);
-    expect(cipher.liveFor(at(0), Date.parse(at(65)))).toBe('Live for 1 hr 5 min');
-  });
 });
 
 describe('the Hub profile', () => {
@@ -244,56 +229,6 @@ describe('the Hub profile', () => {
     await user.press(screen.getByTestId('profile-message'));
     await flush();
     expect(navigation.navigate).toHaveBeenCalledWith('HubThread', { id: 'conv-1' });
-  });
-});
-
-describe('The Cipher', () => {
-  const CipherScreen = require('../src/screens/hub/CipherScreen').default;
-  const CipherRoomScreen = require('../src/screens/hub/CipherRoomScreen').default;
-  const ROOM = { id: 'room-1', host_id: 'user-kofi', title: 'Late night listening', kind: 'listening_party', status: 'live', started_at: new Date().toISOString(), now_playing: 'Night Bus (demo)', description: '' };
-
-  test('the lobby lists live rooms with their host and headcount', async () => {
-    mockTables.live_sessions = { data: [ROOM], error: null };
-    mockTables.session_participants = { data: [{ session_id: 'room-1' }, { session_id: 'room-1' }], error: null };
-    const navigation = await show(CipherScreen);
-    expect(screen.getByText('Late night listening')).toBeOnTheScreen();
-    expect(screen.getByText('Night Bus (demo)')).toBeOnTheScreen();
-    expect(screen.getByText('Kofi Boateng')).toBeOnTheScreen();
-    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
-    await user.press(screen.getByTestId('cipher-room-room-1'));
-    expect(navigation.navigate).toHaveBeenCalledWith('CipherRoom', { id: 'room-1' });
-  });
-
-  test('a quiet lobby invites you to go live', async () => {
-    mockTables.live_sessions = { data: [], error: null };
-    await show(CipherScreen);
-    expect(screen.getByTestId('cipher-empty')).toBeOnTheScreen();
-  });
-
-  test('in a room as a listener: you take a seat, can raise a hand, and leave on the way out', async () => {
-    mockTables.live_sessions = { data: ROOM, error: null };
-    mockTables.session_participants = (calls) =>
-      calls.some((c) => c.key === 'is')
-        ? {
-            data: [
-              { session_id: 'room-1', user_id: 'user-kofi', role: 'host', muted: false, hand_raised: false, joined_at: '2026-10-26T20:00:00Z' },
-              { session_id: 'room-1', user_id: 'user-me', role: 'listener', muted: true, hand_raised: false, joined_at: '2026-10-26T20:01:00Z' },
-            ],
-            error: null,
-          }
-        : { data: null, error: null };
-    const { view } = await show(CipherRoomScreen, { id: 'room-1' });
-    await flush();
-    expect(screen.getByTestId('cipher-room')).toBeOnTheScreen();
-    expect(mockCalls.some((c) => c.table === 'session_participants' && c.key === 'upsert' && c.args[0].user_id === 'user-me')).toBe(true);
-    expect(screen.getByText('HOST')).toBeOnTheScreen();
-    expect(screen.queryByTestId('cipher-end')).toBeNull();
-    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
-    await user.press(screen.getByTestId('cipher-hand'));
-    await flush();
-    expect(mockCalls.some((c) => c.key === 'update' && c.args[0].hand_raised === true)).toBe(true);
-    await act(async () => view.unmount());
-    expect(mockCalls.some((c) => c.key === 'update' && c.args[0].left_at)).toBe(true);
   });
 });
 
