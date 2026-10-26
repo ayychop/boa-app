@@ -13,7 +13,6 @@
           "audio"
         ],
         "NSLocationWhenInUseUsageDescription": "BOA uses your approximate location to show local weather.",
-        "NSCameraUsageDescription": "BOA uses the camera for BOA video calls.",
         "NSMicrophoneUsageDescription": "BOA uses the microphone for voice notes and BOA video calls."
       }
     },
@@ -114,7 +113,7 @@
         "expo-image-picker",
         {
           "photosPermission": "Choose photos and videos for your Creative Hub avatar and chats.",
-          "cameraPermission": false
+          "cameraPermission": "BOA uses the camera for BOA video calls and to take photos for your Creative Hub."
         }
       ],
       [

@@ -153,7 +153,14 @@ export default function CallScreen({ me }) {
   const panelWidth = Math.min(width - space.lg * 2, 480);
   // Their picture fills the screen once it's flowing; until then, their photo.
   const theirs = phase === 'active' && video?.remoteUid != null && video.remoteVideo;
-  const note = phase === 'active' ? (video?.remoteUid == null && video?.status === 'connected' ? 'Waiting for their video' : VIDEO_NOTE[video?.status]) : null;
+  const note =
+    phase !== 'active'
+      ? null
+      : video?.status === 'failed' && video.error
+        ? `${VIDEO_NOTE.failed}: ${video.error}`
+        : video?.remoteUid == null && video?.status === 'connected'
+          ? 'Waiting for their video'
+          : VIDEO_NOTE[video?.status];
 
   return (
     <Modal visible transparent animationType="fade" statusBarTranslucent onRequestClose={incoming ? decline : hangUp}>

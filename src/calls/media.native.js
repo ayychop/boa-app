@@ -1,4 +1,4 @@
-import { PermissionsAndroid, Platform } from 'react-native';
+import { Alert, Linking, PermissionsAndroid, Platform } from 'react-native';
 import { createAgoraRtcEngine, RtcSurfaceView } from 'react-native-agora';
 import { fetchToken } from './token';
 import { toAgora } from './beauty';
@@ -28,12 +28,39 @@ const CONNECTION_RECONNECTING = 4;
 const CONNECTION_FAILED = 5;
 const CONNECTION_CONNECTED = 3;
 
+/** What a call can't do without, for the alert. */
+export function missingLabel({ camera, mic }) {
+  if (!camera && !mic) return 'camera and microphone';
+  if (!camera) return 'camera';
+  if (!mic) return 'microphone';
+  return null;
+}
+
+// Asked every call, before the engine starts (Android only asks once it's
+// been allowed). If either is refused the call still goes ahead with what
+// it has, and an alert says why they can't be seen or heard, with a way
+// into Settings when Android won't ask again.
 async function permissions() {
   if (Platform.OS !== 'android') return { camera: true, mic: true };
   const P = PermissionsAndroid.PERMISSIONS;
   const res = await PermissionsAndroid.requestMultiple([P.CAMERA, P.RECORD_AUDIO]);
   const ok = (p) => res?.[p] === PermissionsAndroid.RESULTS.GRANTED;
-  return { camera: ok(P.CAMERA), mic: ok(P.RECORD_AUDIO) };
+  const perm = { camera: ok(P.CAMERA), mic: ok(P.RECORD_AUDIO) };
+  const missing = missingLabel(perm);
+  if (missing) {
+    const blocked = [P.CAMERA, P.RECORD_AUDIO].some((p) => res?.[p] === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN);
+    Alert.alert(
+      `Allow your ${missing}`,
+      `BOA video calls need your ${missing}. Without it, the other person can't ${perm.mic ? 'see' : perm.camera ? 'hear' : 'see or hear'} you.`,
+      blocked
+        ? [
+            { text: 'Not now', style: 'cancel' },
+            { text: 'Open Settings', onPress: () => Linking.openSettings().catch(() => {}) },
+          ]
+        : [{ text: 'OK' }],
+    );
+  }
+  return perm;
 }
 
 function setup(appId) {
@@ -42,6 +69,8 @@ function setup(appId) {
   engine = createAgoraRtcEngine();
   engine.initialize({ appId, channelProfile: CHANNEL_COMMUNICATION, audioScenario: AUDIO.scenario });
   engineAppId = appId;
+  // Sound and picture both on before anything joins.
+  engine.enableAudio();
   engine.enableVideo();
   engine.setAudioProfile(AUDIO.profile, AUDIO.scenario);
   engine.setCameraCapturerConfiguration(CAPTURE);
@@ -108,11 +137,12 @@ export async function join(channel, { beauty, controls, onEvent }) {
     onUserOffline: (_c, remoteUid) => onEvent({ remoteUid: null, remoteVideo: false, gone: remoteUid }),
     onRemoteVideoStateChanged: (_c, remoteUid, state) =>
       onEvent({ remoteUid, remoteVideo: state !== REMOTE_STOPPED && state !== REMOTE_FAILED }),
-    onConnectionStateChanged: (_c, state) => {
+    onConnectionStateChanged: (_c, state, reason) => {
       if (state === CONNECTION_RECONNECTING) onEvent({ status: 'reconnecting' });
-      else if (state === CONNECTION_FAILED) onEvent({ status: 'failed' });
+      else if (state === CONNECTION_FAILED) onEvent({ status: 'failed', error: `connection ${reason}` });
       else if (state === CONNECTION_CONNECTED) onEvent({ status: 'connected' });
     },
+    onError: (code, msg) => console.warn('[call] agora error', code, msg),
     onTokenPrivilegeWillExpire: async () => {
       try {
         const pass = await fetchToken(channel);
@@ -123,7 +153,7 @@ export async function join(channel, { beauty, controls, onEvent }) {
     },
   };
   engine.registerEventHandler(s.handler);
-  engine.joinChannel(s.token, channel, s.uid, {
+  const code = engine.joinChannel(s.token, channel, s.uid, {
     channelProfile: CHANNEL_COMMUNICATION,
     clientRoleType: ROLE_BROADCASTER,
     publishCameraTrack: s.camera,
@@ -131,6 +161,13 @@ export async function join(channel, { beauty, controls, onEvent }) {
     autoSubscribeAudio: true,
     autoSubscribeVideo: true,
   });
+  if (code < 0) {
+    // Say so on the call screen, with Agora's code, instead of a black screen.
+    engine.unregisterEventHandler(s.handler);
+    s.handler = null;
+    onEvent({ status: 'failed', error: `Agora error ${-code}` });
+    return;
+  }
   s.joined = true;
   setMuted(!!controls?.muted);
   setCameraOff(!!controls?.cameraOff);

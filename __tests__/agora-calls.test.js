@@ -149,7 +149,7 @@ describe('Agora video calls', () => {
     await user.press(screen.getByTestId('call-accept'));
     await act(async () => {});
     expect(engine.joinChannel).not.toHaveBeenCalled();
-    expect(screen.getByTestId('call-video-note')).toHaveTextContent("Video couldn't connect");
+    expect(screen.getByTestId('call-video-note')).toHaveTextContent("Video couldn't connect: Video calls are not set up yet.");
     await user.press(screen.getByTestId('call-end'));
     await act(async () => jest.advanceTimersByTime(2000));
 
@@ -172,5 +172,76 @@ describe('agora-token Edge Function', () => {
   test('the certificate never appears in the app', () => {
     const src = fs.readFileSync(path.join(__dirname, '../src/calls/media.native.js'), 'utf8') + fs.readFileSync(path.join(__dirname, '../src/calls/token.js'), 'utf8');
     expect(src).not.toMatch(/AGORA_APP_CERTIFICATE|appCertificate|buildToken/);
+  });
+});
+
+describe('Android camera and microphone', () => {
+  const { Alert, PermissionsAndroid, Platform } = require('react-native');
+  const app = require('../app.json').expo;
+  const GRANTED = PermissionsAndroid.RESULTS.GRANTED;
+
+  test('nothing in the config strips the camera: the image picker no longer blocks it', () => {
+    const picker = app.plugins.find((p) => Array.isArray(p) && p[0] === 'expo-image-picker');
+    expect(picker[1].cameraPermission).toEqual(expect.any(String));
+    expect(app.android.blockedPermissions ?? []).not.toContain('android.permission.CAMERA');
+    for (const p of ['android.permission.CAMERA', 'android.permission.RECORD_AUDIO', 'android.permission.MODIFY_AUDIO_SETTINGS']) expect(app.android.permissions).toContain(p);
+  });
+
+  describe('on an Android phone', () => {
+    const os = Platform.OS;
+    beforeEach(() => {
+      Platform.OS = 'android';
+    });
+    afterEach(() => {
+      Platform.OS = os;
+      jest.restoreAllMocks();
+    });
+
+    async function answer(callId) {
+      const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+      await mount();
+      await act(async () => mockSignal('ring', { callId, from: { id: 'user-kofi', name: 'Kofi Boateng' } }));
+      await user.press(screen.getByTestId('call-accept'));
+      await act(async () => {});
+      return user;
+    }
+
+    test('asks for both before the engine starts, then joins with audio and video on', async () => {
+      const ask = jest.spyOn(PermissionsAndroid, 'requestMultiple').mockResolvedValue({ 'android.permission.CAMERA': GRANTED, 'android.permission.RECORD_AUDIO': GRANTED });
+      const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+      engine.joinChannel.mockClear();
+      const user = await answer('b1c3e1f0-0000-4000-8000-000000000001');
+      expect(ask).toHaveBeenCalledWith(['android.permission.CAMERA', 'android.permission.RECORD_AUDIO']);
+      expect(alert).not.toHaveBeenCalled();
+      // The engine is set up once per app session, with sound and picture on before any join.
+      expect(engine.enableAudio).toHaveBeenCalled();
+      expect(engine.enableAudio.mock.invocationCallOrder[0]).toBeLessThan(engine.joinChannel.mock.invocationCallOrder.at(-1));
+      expect(engine.enableVideo.mock.invocationCallOrder[0]).toBeLessThan(engine.joinChannel.mock.invocationCallOrder.at(-1));
+      expect(engine.joinChannel).toHaveBeenLastCalledWith('tok-1', 'b1c3e1f0-0000-4000-8000-000000000001', 4242, expect.objectContaining({ publishCameraTrack: true, publishMicrophoneTrack: true }));
+      await user.press(screen.getByTestId('call-end'));
+      await act(async () => jest.advanceTimersByTime(2000));
+    });
+
+    test('a refused camera shows an alert (with Settings if Android stopped asking) and the call goes on with sound', async () => {
+      jest.spyOn(PermissionsAndroid, 'requestMultiple').mockResolvedValue({
+        'android.permission.CAMERA': PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN,
+        'android.permission.RECORD_AUDIO': GRANTED,
+      });
+      const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+      const user = await answer('b1c3e1f0-0000-4000-8000-000000000002');
+      expect(alert).toHaveBeenCalledWith('Allow your camera', expect.stringMatching(/can't see you/), expect.arrayContaining([expect.objectContaining({ text: 'Open Settings' })]));
+      expect(engine.joinChannel).toHaveBeenLastCalledWith('tok-1', 'b1c3e1f0-0000-4000-8000-000000000002', 4242, expect.objectContaining({ publishCameraTrack: false, publishMicrophoneTrack: true }));
+      await user.press(screen.getByTestId('call-end'));
+      await act(async () => jest.advanceTimersByTime(2000));
+    });
+
+    test('if Agora refuses the join, the screen says so with the code, not a black screen', async () => {
+      jest.spyOn(PermissionsAndroid, 'requestMultiple').mockResolvedValue({ 'android.permission.CAMERA': GRANTED, 'android.permission.RECORD_AUDIO': GRANTED });
+      engine.joinChannel.mockReturnValueOnce(-17);
+      const user = await answer('b1c3e1f0-0000-4000-8000-000000000003');
+      expect(screen.getByTestId('call-video-note')).toHaveTextContent("Video couldn't connect: Agora error 17");
+      await user.press(screen.getByTestId('call-end'));
+      await act(async () => jest.advanceTimersByTime(2000));
+    });
   });
 });
