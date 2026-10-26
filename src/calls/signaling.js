@@ -3,20 +3,39 @@ import { supabase } from '../lib/supabase';
 // Ringing for BOA video calls, over Supabase Realtime broadcast: each
 // signed-in phone listens on its own inbox topic (boa-call:<user id>); a
 // call sends 'ring' to the other person's inbox, and answers come back to
-// the caller's. Only call control travels here (ring, accept, decline, end,
+// the caller's.
+//
+// The inboxes are PRIVATE channels. Row level security on realtime.messages
+// (supabase/migrations/20261027120000_private_call_ringing.sql) lets only
+// you listen to your own inbox, and only signed-in, unbanned members who
+// you haven't blocked (and who haven't blocked you) send to it. Nobody else
+// can see who is calling whom or learn a call's id, which is also its
+// Agora channel. Only call control travels here (ring, accept, decline, end,
 // busy). Audio and video go over Agora (src/calls/media), on a channel
 // named by the call's id.
 
 export const EVENTS = ['ring', 'accept', 'decline', 'end', 'busy'];
 const topic = (userId) => `boa-call:${userId}`;
+const PRIVATE = { private: true };
+
+// Private channels are checked against the signed-in session, so Realtime
+// needs the current access token before joining or sending.
+const authed = () => supabase.realtime.setAuth().catch(() => {});
 
 /** Listens for call signals sent to you. Returns a stop function. */
 export function listen(myId, onSignal) {
   if (!supabase || !myId) return () => {};
-  const channel = supabase.channel(topic(myId), { config: { broadcast: { self: false } } });
+  const channel = supabase.channel(topic(myId), { config: { ...PRIVATE, broadcast: { self: false } } });
   EVENTS.forEach((event) => channel.on('broadcast', { event }, ({ payload }) => onSignal(event, payload ?? {})));
-  channel.subscribe();
+  let stopped = false;
+  authed().then(() => {
+    if (stopped) return;
+    channel.subscribe((status, err) => {
+      if (status === 'CHANNEL_ERROR') console.warn('[call] inbox refused', err?.message ?? err);
+    });
+  });
   return () => {
+    stopped = true;
     supabase.removeChannel(channel);
   };
 }
@@ -30,8 +49,9 @@ export async function send(toId, event, payload) {
   if (!supabase || !toId) return false;
   const name = topic(toId);
   const existed = supabase.getChannels().some((c) => c.topic === `realtime:${name}`);
-  const channel = supabase.channel(name);
+  const channel = supabase.channel(name, { config: PRIVATE });
   try {
+    await authed();
     const res = await channel.httpSend(event, payload ?? {}, { timeout: 8000 });
     return !!res?.success;
   } catch (err) {
