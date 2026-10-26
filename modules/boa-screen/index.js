@@ -56,3 +56,18 @@ export async function clearOverLock() {
     await native?.clearOverLock?.();
   } catch {}
 }
+
+/**
+ * Android's FLAG_SECURE: while on, screenshots and screen recordings of
+ * the app come out black, and it's blanked in the recent-apps view. On for
+ * as long as a view-once photo or video is open. False where it isn't
+ * available (iOS, the web, builds without the native module).
+ */
+export async function setSecure(on) {
+  if (!native?.setSecure) return false;
+  try {
+    return await native.setSecure(!!on);
+  } catch {
+    return false;
+  }
+}

@@ -148,9 +148,11 @@ const badgeStyles = StyleSheet.create({
   badge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
-    paddingHorizontal: 7,
-    paddingVertical: 2.5,
+    gap: 5,
+    paddingLeft: 10,
+    // The letter spacing trails the last letter; this evens the sides.
+    paddingRight: 8.7,
+    paddingVertical: 4,
     borderRadius: radius.pill,
     backgroundColor: colors.gold,
     boxShadow: '0px 2px 10px rgba(226,168,75,0.45)',

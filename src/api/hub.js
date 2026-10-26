@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { assertCloudUrl, isCloudUrl, readFileBytes } from './upload';
 
 // The Creative Hub's calls to the BOA HUB Supabase project. Access rules
 // live in the database (supabase/migrations); these are thin wrappers that
@@ -160,6 +161,12 @@ export async function getProfile(id) {
   return check(await need().from('profiles').select(PROFILE_FIELDS).eq('id', id).maybeSingle());
 }
 
+/** The id of the Hub member with this username, or null (also null if they've blocked you). */
+export async function profileIdByUsername(username) {
+  const rows = check(await need().from('profiles').select('id').eq('username', String(username).toLowerCase()).limit(1));
+  return rows?.[0]?.id ?? null;
+}
+
 export async function isUsernameFree(username, myId) {
   const rows = check(await need().from('profiles').select('id').eq('username', username.toLowerCase()).limit(1));
   return !rows.length || rows[0].id === myId;
@@ -174,6 +181,7 @@ export async function createProfile(userId, fields, { adultConfirmedAt } = {}) {
   if (!adultConfirmedAt || Number.isNaN(Date.parse(adultConfirmedAt))) {
     throw new Error('Please confirm you are 18 or over.');
   }
+  assertCloudUrl(fields.avatar_url);
   const row = {
     id: userId,
     ...fields,
@@ -207,6 +215,7 @@ export async function createProfile(userId, fields, { adultConfirmedAt } = {}) {
 
 export async function updateProfile(userId, patch) {
   const fields = { ...patch };
+  if ('avatar_url' in fields) assertCloudUrl(fields.avatar_url);
   if (fields.username) fields.username = fields.username.toLowerCase();
   return check(await need().from('profiles').update(fields).eq('id', userId).select(PROFILE_FIELDS).single());
 }
@@ -238,7 +247,7 @@ export async function uploadAvatar(userId, asset) {
   const path = `${userId}/avatar-${Date.now()}.${ext}`;
   let body;
   try {
-    body = await (await fetch(asset.uri)).arrayBuffer();
+    body = await readFileBytes(asset.uri);
   } catch {
     throw new Error('That photo could not be read from your phone.');
   }
@@ -268,7 +277,9 @@ export async function uploadAvatar(userId, asset) {
     const old = listed.map((f) => `${userId}/${f.name}`).filter((p) => p !== path);
     if (old.length) await sb.storage.from('avatars').remove(old);
   } catch {}
-  return sb.storage.from('avatars').getPublicUrl(path).data.publicUrl;
+  const url = sb.storage.from('avatars').getPublicUrl(path).data.publicUrl;
+  if (!isCloudUrl(url)) throw new Error("Couldn't upload the photo. Try again in a moment.");
+  return url;
 }
 
 /**
@@ -493,7 +504,7 @@ export async function uploadChatMedia(conversationId, userId, { uri, mimeType, k
   const path = `${conversationId}/${userId}/${kind}-${Date.now()}.${EXT[type] ?? 'bin'}`;
   let body;
   try {
-    body = await (await fetch(uri)).arrayBuffer();
+    body = await readFileBytes(uri);
   } catch {
     throw new Error('That file could not be read from your phone.');
   }
@@ -519,11 +530,17 @@ export async function uploadChatMedia(conversationId, userId, { uri, mimeType, k
   return { path, size: body.byteLength, mime: type };
 }
 
-/** Saves a media message (after uploadChatMedia). */
-export async function sendMedia(conversationId, { kind, path, mime, size, width = null, height = null, durationMs = null, waveform = null, caption = '' }) {
+/**
+ * Saves a media message (after uploadChatMedia). `viewOnce` photos and
+ * videos can be opened once, by the person they're sent to.
+ */
+export async function sendMedia(conversationId, { kind, path, mime, size, width = null, height = null, durationMs = null, waveform = null, caption = '', viewOnce = false }) {
   const res = await need()
     .from('messages')
     .insert({
+      // Only sent when on, so ordinary media still sends to a database
+      // that doesn't have the column yet.
+      ...(viewOnce && (kind === 'image' || kind === 'video') ? { view_once: true } : {}),
       conversation_id: conversationId,
       kind,
       body: caption.trim(),
@@ -552,6 +569,39 @@ export async function mediaUrl(path) {
   if (error || !data?.signedUrl) throw new Error(error?.message || "Couldn't load that file");
   signed.set(path, { url: data.signedUrl, until: Date.now() + (SIGNED_URL_SECONDS - 600) * 1000 });
   return data.signedUrl;
+}
+
+// ------------------------------------------------------------- view once
+
+// Long enough to load a video; the database only lets the file be read
+// for two minutes after it's opened, and the app deletes it on close.
+const VIEW_ONCE_URL_SECONDS = 120;
+const OUT_OF_DATE_VIEW_ONCE = "The Hub's database isn't up to date yet, so view-once media can't be opened.";
+
+/**
+ * Opens a view-once photo or video you were sent: the database marks it
+ * opened (so it can't be opened again, here or on another phone) and a
+ * short-lived link to the file comes back. Throws a readable Error if it
+ * was already opened or is gone.
+ */
+export async function openViewOnce(message) {
+  const sb = need();
+  const { data: path, error } = await sb.rpc('open_view_once', { msg: message.id });
+  // PGRST202 / 42883: the function isn't there (the migration hasn't run).
+  const missing = error && ['PGRST202', '42883'].includes(error.code);
+  if (error) throw new Error(missing ? OUT_OF_DATE_VIEW_ONCE : error.message || "Couldn't open that");
+  const res = await sb.storage.from(CHAT_BUCKET).createSignedUrl(path, VIEW_ONCE_URL_SECONDS);
+  if (res.error || !res.data?.signedUrl) throw new Error('This has already been opened.');
+  return res.data.signedUrl;
+}
+
+/** Deletes an opened view-once file from Storage. Best effort: the database already stops it being read again. */
+export async function discardViewOnce(path) {
+  if (!path) return;
+  signed.delete(path);
+  try {
+    await need().storage.from(CHAT_BUCKET).remove([path]);
+  } catch {}
 }
 
 /** Whether your messages disappear after 24 hours (false if the database doesn't have the setting yet). */
@@ -585,6 +635,20 @@ export async function getMessagePrivacy(userId) {
 
 export async function setMessagePrivacy(userId, value) {
   const { error } = await need().from('profiles').update({ messages_from: value }).eq('id', userId);
+  if (error) {
+    if (error.code === 'PGRST204' || error.code === '42703') throw new Error("The Hub's database isn't up to date yet, so this can't be changed.");
+    throw new Error(error.message || "Couldn't save");
+  }
+}
+
+/** Whether your profile link may be listed by search engines (true if the database doesn't have the setting yet). */
+export async function getSearchable(userId) {
+  const { data, error } = await need().from('profiles').select('searchable').eq('id', userId).maybeSingle();
+  return error ? true : data?.searchable !== false;
+}
+
+export async function setSearchable(userId, on) {
+  const { error } = await need().from('profiles').update({ searchable: !!on }).eq('id', userId);
   if (error) {
     if (error.code === 'PGRST204' || error.code === '42703') throw new Error("The Hub's database isn't up to date yet, so this can't be changed.");
     throw new Error(error.message || "Couldn't save");

@@ -33,6 +33,8 @@ jest.mock('../src/api/hub', () => ({
   uploadChatMedia: jest.fn(),
   sendMedia: jest.fn(),
   mediaUrl: jest.fn((p) => Promise.resolve(`https://cdn.example/${p}`)),
+  openViewOnce: jest.fn(),
+  discardViewOnce: jest.fn(() => Promise.resolve()),
   getProfile: jest.fn(() => Promise.resolve(null)),
 }));
 
@@ -91,12 +93,64 @@ describe('the thread', () => {
     await user.press(screen.getByTestId('hub-attach'));
     await flush();
     expect(ImagePicker.launchImageLibraryAsync).toHaveBeenCalledWith(expect.objectContaining({ mediaTypes: ['images', 'videos'], quality: 0.8 }));
+    // A look at it first, View once off, then Send.
+    expect(screen.getByTestId('send-media-sheet')).toBeOnTheScreen();
+    expect(screen.getByTestId('send-view-once').props.accessibilityState.checked).toBe(false);
+    expect(hub.uploadChatMedia).not.toHaveBeenCalled();
+    await user.press(screen.getByTestId('send-media'));
+    await flush();
     expect(hub.uploadChatMedia).toHaveBeenCalledWith('conv-1', ME, expect.objectContaining({ kind: 'image', uri: 'file:///pic.jpg', mimeType: 'image/jpeg' }));
     expect(screen.getByText(/Sending…/)).toBeOnTheScreen();
     await act(async () => finishUpload({ path: 'conv-1/user-me/image-1.jpg', size: 2_000_000, mime: 'image/jpeg' }));
     expect(hub.sendMedia).toHaveBeenCalledWith('conv-1', expect.objectContaining({ kind: 'image', path: 'conv-1/user-me/image-1.jpg', width: 1200, height: 900 }));
     expect(screen.getByTestId('media-m9')).toBeOnTheScreen();
     expect(screen.queryByText(/Sending…/)).toBeNull();
+  });
+
+  test('a view-once photo: sent with the switch on, shown as "View once" and never previewed', async () => {
+    const user = userEvent.setup();
+    ImagePicker.launchImageLibraryAsync.mockResolvedValue({
+      canceled: false,
+      assets: [{ uri: 'file:///secret.jpg', type: 'image', mimeType: 'image/jpeg', width: 1000, height: 1000, fileSize: 1_000_000 }],
+    });
+    hub.uploadChatMedia.mockResolvedValue({ path: 'conv-1/user-me/image-2.jpg', size: 1_000_000, mime: 'image/jpeg' });
+    hub.sendMedia.mockImplementation(async (_c, f) => ({
+      id: 'm11', conversation_id: 'conv-1', sender_id: ME, kind: 'image', body: '', media_path: f.path, view_once: f.viewOnce, viewed_at: null, created_at: at(11),
+    }));
+    await openThread();
+    await user.press(screen.getByTestId('hub-attach'));
+    await flush();
+    await user.press(screen.getByTestId('send-view-once'));
+    await user.press(screen.getByTestId('send-media'));
+    await flush();
+    expect(hub.sendMedia).toHaveBeenCalledWith('conv-1', expect.objectContaining({ kind: 'image', viewOnce: true }));
+    expect(screen.getByTestId('view-once-m11')).toBeOnTheScreen();
+    expect(screen.getByText('View once · not opened yet')).toBeOnTheScreen();
+    expect(screen.queryByTestId('media-m11')).toBeNull();
+    expect(hub.mediaUrl).not.toHaveBeenCalledWith('conv-1/user-me/image-2.jpg');
+  });
+
+  test('a view-once photo you were sent opens once, securely, and is deleted when closed', async () => {
+    const user = userEvent.setup();
+    const screenModule = require('../modules/boa-screen');
+    hub.listMessages.mockResolvedValue([
+      { id: 'm12', conversation_id: 'conv-1', sender_id: AMA.id, kind: 'image', body: '', media_path: 'conv-1/user-ama/image-9.jpg', view_once: true, viewed_at: null, created_at: at(12) },
+    ]);
+    hub.openViewOnce.mockResolvedValue('https://signed.example/once.jpg');
+    await openThread();
+    expect(screen.getByText('Tap to open')).toBeOnTheScreen();
+    await user.press(screen.getByTestId('view-once-m12'));
+    await flush();
+    expect(hub.openViewOnce).toHaveBeenCalledWith(expect.objectContaining({ id: 'm12' }));
+    expect(screen.getByTestId('view-once-viewer')).toBeOnTheScreen();
+    expect(screenModule.setSecure).toHaveBeenLastCalledWith(true);
+    await user.press(screen.getByTestId('view-once-close'));
+    await flush();
+    expect(screen.queryByTestId('view-once-viewer')).toBeNull();
+    expect(screenModule.setSecure).toHaveBeenLastCalledWith(false);
+    expect(hub.discardViewOnce).toHaveBeenCalledWith('conv-1/user-ama/image-9.jpg');
+    expect(screen.getByText('Opened')).toBeOnTheScreen();
+    expect(screen.getByText('No longer available')).toBeOnTheScreen();
   });
 
   test('a video over 64 MB is refused before uploading', async () => {

@@ -284,6 +284,8 @@ jest.mock('./modules/boa-screen', () => {
     showOverLock: jest.fn(async () => true),
     unlock: jest.fn(async () => true),
     clearOverLock: jest.fn(async () => {}),
+    // FLAG_SECURE (screenshots blocked) for view-once media.
+    setSecure: jest.fn(async () => true),
     __emit: (state) => listeners.forEach((fn) => fn(state)),
   };
 });

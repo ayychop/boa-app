@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
+import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
 import { useHub } from '../../context/HubContext';
 import { canMessage, getProfile, MESSAGES_CLOSED, roleLabel, startConversation } from '../../api/hub';
 import { compactCount, listPosts, postCounts } from '../../api/posts';
@@ -15,6 +16,7 @@ import { lastSeen, statusLine } from '../../components/hub/hubNav';
 import NowPlaying from '../../components/hub/NowPlaying';
 import useProfileUpdates from '../../hooks/useProfileUpdates';
 import ReportSheet from '../../components/hub/ReportSheet';
+import BoaCodeSheet from '../../components/hub/BoaCode';
 import { GridEmpty, PostGrid, ProfileTabs } from '../../components/profile/PostGrid';
 import Favourites from '../../components/profile/Favourites';
 import { GoldBadge, Tappable } from '../../components/ui';
@@ -23,9 +25,41 @@ import { colors, fonts, radius, space, type } from '../../theme';
 // Unfolded and on tablets the profile is a centred column, like a phone's.
 const MAX_WIDTH = 720;
 
-function Stat({ value, label, onPress, testID }) {
+/**
+ * The stage light behind the header: warm gold from the top right, violet
+ * from the left, both soft radial glows that fade to nothing (a solid
+ * circle read as a brown blot behind the stats).
+ */
+function StageLight({ width, height, star }) {
   return (
-    <Pressable onPress={onPress} disabled={!onPress} accessibilityRole={onPress ? 'button' : undefined} accessibilityLabel={`${value} ${label}`} style={styles.stat} testID={testID}>
+    <Svg width={width} height={height} style={StyleSheet.absoluteFill} pointerEvents="none">
+      <Defs>
+        <RadialGradient id="profile-gold" cx="88%" cy="0%" rx="62%" ry="58%" fx="88%" fy="0%">
+          <Stop offset="0" stopColor="#E2A84B" stopOpacity={star ? 0.3 : 0.18} />
+          <Stop offset="0.55" stopColor="#E2A84B" stopOpacity={star ? 0.08 : 0.05} />
+          <Stop offset="1" stopColor="#E2A84B" stopOpacity={0} />
+        </RadialGradient>
+        <RadialGradient id="profile-violet" cx="0%" cy="18%" rx="55%" ry="45%" fx="0%" fy="18%">
+          <Stop offset="0" stopColor="#7850C8" stopOpacity={0.16} />
+          <Stop offset="1" stopColor="#7850C8" stopOpacity={0} />
+        </RadialGradient>
+      </Defs>
+      <Rect width={width} height={height} fill="url(#profile-violet)" />
+      <Rect width={width} height={height} fill="url(#profile-gold)" />
+    </Svg>
+  );
+}
+
+function Stat({ value, label, onPress, testID, last }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={!onPress}
+      accessibilityRole={onPress ? 'button' : undefined}
+      accessibilityLabel={`${value} ${label}`}
+      style={({ pressed }) => [styles.stat, !last && styles.statDivider, pressed && { opacity: 0.7 }]}
+      testID={testID}
+    >
       <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
         {value}
       </Text>
@@ -79,6 +113,8 @@ export default function HubProfileScreen({ navigation, route }) {
   const [dayOnes, setDayOnes] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
   const [open, setOpen] = useState(true);
+  const [heroH, setHeroH] = useState(420);
+  const [codeOpen, setCodeOpen] = useState(false);
 
   // Whether they take messages from you (their privacy setting): asked of
   // the database, which never says why.
@@ -209,6 +245,7 @@ export default function HubProfileScreen({ navigation, route }) {
         right={
           mine ? (
             <View style={styles.headerActions}>
+              <IconButton icon="qr-code-outline" label="Your BOA Code" onPress={() => setCodeOpen(true)} testID="profile-boa-code" />
               <IconButton icon="add" label="New post" onPress={newPost} testID="profile-new-post" />
               <IconButton icon="settings-outline" label="Hub settings" onPress={() => navigation.navigate('HubSettings')} />
             </View>
@@ -223,22 +260,17 @@ export default function HubProfileScreen({ navigation, route }) {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={colors.gold} />}
       >
         <View style={{ width }}>
-          <Animated.View entering={FadeInDown.springify().damping(18)} style={styles.hero}>
-            {/* The stage light: warm gold from above, violet from the side. */}
-            <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-              <View style={[styles.orb, { top: -150, right: -80, backgroundColor: star ? 'rgba(226,168,75,0.34)' : 'rgba(226,168,75,0.2)' }]} />
-              <View style={[styles.orb, { top: -60, left: -140, backgroundColor: 'rgba(120,80,200,0.16)' }]} />
-              <LinearGradient colors={['rgba(5,5,6,0)', colors.bg]} locations={[0.3, 1]} style={StyleSheet.absoluteFill} />
-            </View>
+          <Animated.View entering={FadeInDown.springify().damping(18)} style={styles.hero} onLayout={(e) => setHeroH(Math.round(e.nativeEvent.layout.height))}>
+            <StageLight width={width} height={heroH} star={star} />
 
             <View style={styles.topRow}>
               <View style={[styles.avatarWrap, star && styles.avatarGlow]} testID={star ? 'profile-star-ring' : undefined}>
                 <Avatar uri={person.avatar_url} name={name} size={width < 380 ? 92 : 104} online={online} ring={star} />
               </View>
-              <View style={styles.stats}>
+              <View style={styles.stats} testID="profile-stats">
                 <Stat value={compactCount(counts.posts)} label="Posts" onPress={() => setTab('posts')} testID="stat-posts" />
                 <Stat value={compactCount(counts.reels)} label="Reels" onPress={() => setTab('reels')} testID="stat-reels" />
-                <Stat value={compactCount(dayOnes.length)} label="Day One" testID="stat-day-one" />
+                <Stat value={compactCount(dayOnes.length)} label="Day One" testID="stat-day-one" last />
               </View>
             </View>
 
@@ -249,8 +281,8 @@ export default function HubProfileScreen({ navigation, route }) {
             </View>
             {star || dayOnes.length ? (
               <View style={styles.badges}>
-                {star ? <BoaStarBadge size={20} /> : null}
-                {dayOnes.length ? <DayOneBadge size={20} /> : null}
+                {star ? <BoaStarBadge size={22} /> : null}
+                {dayOnes.length ? <DayOneBadge size={22} /> : null}
               </View>
             ) : null}
             <Text style={styles.handle} numberOfLines={1}>
@@ -302,11 +334,13 @@ export default function HubProfileScreen({ navigation, route }) {
           {dayOnes.length ? (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dayOnes} testID="profile-day-ones">
               {dayOnes.map((d) => (
-                <View key={`${d.kind}:${d.item_id}`} style={styles.dayOne}>
+                <View key={`${d.kind}:${d.item_id}`} style={[styles.dayOne, { maxWidth: Math.min(300, width - space.lg * 2) }]}>
                   <LinearGradient colors={['rgba(246,211,138,0.16)', 'rgba(255,255,255,0.02)']} style={StyleSheet.absoluteFill} />
-                  <Ionicons name={d.kind === 'original' ? 'film' : 'radio'} size={16} color={colors.gold} />
+                  <View style={styles.dayOneIcon}>
+                    <Ionicons name={d.kind === 'original' ? 'film' : 'radio'} size={15} color={colors.gold} />
+                  </View>
                   <View style={{ flexShrink: 1 }}>
-                    <Text style={styles.dayOneTitle} numberOfLines={1}>
+                    <Text style={styles.dayOneTitle} numberOfLines={2}>
                       {d.item_label || (d.kind === 'original' ? 'BOA Original' : 'Station')}
                     </Text>
                     <Text style={styles.dayOneRank} numberOfLines={1}>
@@ -332,6 +366,7 @@ export default function HubProfileScreen({ navigation, route }) {
           )}
         </View>
       </ScrollView>
+      {mine ? <BoaCodeSheet open={codeOpen} onClose={() => setCodeOpen(false)} profile={person} /> : null}
       <ReportSheet target={reporting} onClose={(didBlock) => (setReporting(null), didBlock && navigation.goBack())} />
     </View>
   );
@@ -341,17 +376,29 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   headerActions: { flexDirection: 'row', gap: space.sm },
   hero: { paddingHorizontal: space.lg, paddingTop: space.sm, overflow: 'hidden' },
-  orb: { position: 'absolute', width: 340, height: 340, borderRadius: 170 },
   topRow: { flexDirection: 'row', alignItems: 'center', gap: space.lg },
   avatarWrap: { borderRadius: 999 },
   avatarGlow: { boxShadow: '0px 0px 28px rgba(226,168,75,0.7)' },
-  stats: { flex: 1, flexDirection: 'row', justifyContent: 'space-around', minWidth: 0 },
-  stat: { alignItems: 'center', minWidth: 56, paddingVertical: space.xs, flexShrink: 1 },
-  statValue: { fontFamily: fonts.bold, fontSize: 20, letterSpacing: -0.5, color: colors.text },
-  statLabel: { fontFamily: fonts.medium, fontSize: 12.5, color: colors.textMuted, marginTop: 2 },
+  // Three equal columns on a dark glass strip, split by hairlines, so the
+  // numbers line up however wide they are.
+  stats: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    paddingVertical: space.md,
+    borderRadius: radius.lg,
+    backgroundColor: 'rgba(18,18,22,0.55)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+  },
+  stat: { flex: 1, minWidth: 0, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 2 },
+  statDivider: { borderRightWidth: StyleSheet.hairlineWidth, borderRightColor: colors.border },
+  statValue: { fontFamily: fonts.bold, fontSize: 20, lineHeight: 24, letterSpacing: -0.5, color: colors.text },
+  statLabel: { fontFamily: fonts.medium, fontSize: 12, color: colors.textMuted, marginTop: 2 },
   nameRow: { marginTop: space.lg },
   name: { fontFamily: fonts.semibold, fontSize: 24, lineHeight: 29, letterSpacing: -0.8, color: colors.text },
-  badges: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, marginTop: space.sm },
+  badges: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: space.sm, marginTop: space.sm },
   handle: { fontFamily: fonts.semibold, fontSize: 13.5, color: colors.textMuted, marginTop: space.sm },
   seen: { fontFamily: fonts.medium, color: colors.textFaint },
   roles: { fontFamily: fonts.mono, fontSize: 10.5, letterSpacing: 1.6, textTransform: 'uppercase', color: colors.gold, marginTop: space.md, lineHeight: 16 },
@@ -367,8 +414,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.sm,
-    maxWidth: 230,
-    paddingHorizontal: space.md,
+    paddingLeft: space.sm,
+    paddingRight: space.lg,
     paddingVertical: 10,
     borderRadius: radius.lg,
     overflow: 'hidden',
@@ -376,7 +423,8 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(246,211,138,0.45)',
     backgroundColor: 'rgba(18,18,22,0.6)',
   },
-  dayOneTitle: { fontFamily: fonts.semibold, fontSize: 13, color: colors.text },
+  dayOneIcon: { width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(226,168,75,0.14)' },
+  dayOneTitle: { fontFamily: fonts.semibold, fontSize: 13, lineHeight: 17, color: colors.text },
   dayOneRank: { fontFamily: fonts.mono, fontSize: 9.5, letterSpacing: 1, color: '#F6D38A', marginTop: 2 },
   gridError: { textAlign: 'center', marginTop: space.xxl, paddingHorizontal: space.lg },
 });

@@ -180,6 +180,17 @@ class BoaScreenModule : Module() {
       clearOverLock()
     }.runOnQueue(Queues.MAIN)
 
+    /**
+     * FLAG_SECURE on or off. While on, screenshots and screen recordings
+     * of the window come out black (view-once photos and videos).
+     */
+    AsyncFunction("setSecure") { on: Boolean ->
+      val a = hostActivity ?: return@AsyncFunction false
+      if (on) a.window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+      else a.window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+      true
+    }.runOnQueue(Queues.MAIN)
+
     // Never leave the cover up if the screen-on broadcast went missing.
     OnActivityEntersForeground {
       if (cover != null) hostActivity?.runOnUiThread { revealCover() }

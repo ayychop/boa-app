@@ -13,6 +13,7 @@ import { ownChannel } from '../../lib/realtime';
 import {
   canMessage,
   deleteMessage,
+  discardViewOnce,
   getConversation,
   isExpired,
   listMessages,
@@ -20,6 +21,7 @@ import {
   MEDIA_QUALITY,
   mediaKind,
   mediaProblem,
+  openViewOnce,
   sendMedia,
   sendMessage,
   uploadChatMedia,
@@ -40,6 +42,7 @@ import VibePicker from '../../components/chat/VibePicker';
 import BottomSheet from '../../components/BottomSheet';
 import useChatVibe, { vibeById } from '../../chat/vibes';
 import { MediaTile, MediaViewer, VoiceNote } from '../../components/chat/media';
+import { SendMediaSheet, ViewOnceTile, ViewOnceViewer } from '../../components/chat/ViewOnce';
 import { Button, PulseDot } from '../../components/ui';
 import ErrorBoundary from '../../components/ErrorBoundary';
 import { chatTime } from './HubChatsScreen';
@@ -91,8 +94,12 @@ export const riseTheirs = slideIn(-28);
 // across the top and a fine bright edge, over the backdrop. Yours are the
 // vibe's gradient glass; theirs are smoky glass with a solid tint under the
 // gradient, so they read on any backdrop, blur or no blur.
-function Bubble({ message, mine, seen, fresh, vibe, onLongPress, onOpenMedia }) {
-  const media = message.kind === 'image' || message.kind === 'video';
+// View-once files this phone has already cleared from Storage.
+const discarded = new Set();
+
+function Bubble({ message, mine, seen, fresh, vibe, onLongPress, onOpenMedia, onOpenOnce, opening }) {
+  const once = !!message.view_once && (message.kind === 'image' || message.kind === 'video');
+  const media = !once && (message.kind === 'image' || message.kind === 'video');
   const voice = message.kind === 'voice';
   const caption = message.body?.trim();
   const status = message.failed ? 'Not sent · hold to retry' : message.pending ? 'Sending…' : chatTime(message.created_at);
@@ -119,8 +126,9 @@ function Bubble({ message, mine, seen, fresh, vibe, onLongPress, onOpenMedia }) 
         />
         <View pointerEvents="none" style={[styles.sheen, mine && { backgroundColor: 'rgba(255,255,255,0.28)' }]} />
         {media ? <MediaTile message={message} onOpen={onOpenMedia} /> : null}
+        {once ? <ViewOnceTile message={message} mine={mine} onOpen={onOpenOnce} opening={opening} accent={mine ? vibe.mineText : vibe.accent} textColor={mine ? vibe.mineText : colors.text} /> : null}
         {voice ? <VoiceNote message={message} mine={mine} /> : null}
-        {(!media && !voice) || caption ? (
+        {(!media && !voice && !once) || (caption && !once) ? (
           <Text style={[styles.body, mine && { color: vibe.mineText }, media && { marginTop: space.sm, paddingHorizontal: space.xs }]}>{message.body}</Text>
         ) : null}
         <Text style={[styles.meta, mine && { color: vibe.mineMeta }, media && { paddingHorizontal: space.xs }]}>
@@ -179,6 +187,12 @@ function Thread({ navigation, route }) {
   const [older, setOlder] = useState('idle'); // idle | loading | done
   const [reporting, setReporting] = useState(null);
   const [viewing, setViewing] = useState(null);
+  // A picked photo or video waiting on the send sheet, and its View once switch.
+  const [picked, setPicked] = useState(null);
+  const [viewOnce, setViewOnce] = useState(false);
+  // The view-once message being opened, and the one open full screen.
+  const [openingId, setOpeningId] = useState(null);
+  const [once, setOnce] = useState(null);
   const [keyboard, setKeyboard] = useState(false);
   const [theyType, setTheyType] = useState(false);
   const [picking, setPicking] = useState(false);
@@ -295,6 +309,10 @@ function Thread({ navigation, route }) {
           markRead(id).catch(() => {});
         }
       })
+      // A view-once photo being opened (the sender sees "Opened").
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages', filter: `conversation_id=eq.${id}` }, ({ new: m }) => {
+        if (m?.id) setMessages((l) => (l.some((x) => x.id === m.id) ? merge(l, [m]) : l));
+      })
       // Deletes can't be filtered by thread; only the id comes through.
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'messages' }, ({ old }) => {
         if (old?.id) setMessages((l) => l.filter((m) => m.id !== old.id));
@@ -365,6 +383,7 @@ function Thread({ navigation, route }) {
     const tempId = retryId ?? `pending-${Date.now()}`;
     optimistic(tempId, {
       kind: file.kind,
+      view_once: !!file.viewOnce,
       localUri: file.uri,
       upload: file,
       media_width: file.width,
@@ -394,7 +413,9 @@ function Thread({ navigation, route }) {
     const problem = mediaProblem(asset);
     if (problem) return Alert.alert("Can't send that", problem);
     const kind = mediaKind(asset);
-    sendFile({
+    // A look at it first, with the View once switch (off each time).
+    setViewOnce(false);
+    setPicked({
       kind,
       uri: asset.uri,
       mimeType: asset.mimeType ?? (kind === 'video' ? 'video/mp4' : 'image/jpeg'),
@@ -403,6 +424,54 @@ function Thread({ navigation, route }) {
       durationMs: kind === 'video' ? asset.duration ?? null : null,
     });
   };
+
+  const sendPicked = () => {
+    if (!picked) return;
+    const file = { ...picked, viewOnce };
+    setPicked(null);
+    sendFile(file);
+  };
+
+  // A view-once photo or video: the database marks it opened as it hands
+  // the file over, so it opens once, on one phone.
+  const openOnce = async (message) => {
+    if (openingId) return;
+    setOpeningId(message.id);
+    try {
+      const url = await openViewOnce(message);
+      if (!alive.current) return;
+      const opened = { ...message, viewed_at: new Date().toISOString() };
+      setMessages((l) => merge(l, [opened]));
+      setOnce({ ...opened, url });
+    } catch (err) {
+      if (alive.current) {
+        if (/already/i.test(err.message)) setMessages((l) => merge(l, [{ ...message, viewed_at: message.viewed_at ?? new Date().toISOString() }]));
+        Alert.alert("Can't open this", err.message);
+      }
+    } finally {
+      if (alive.current) setOpeningId(null);
+    }
+  };
+  const closeOnce = useCallback(() => {
+    setOnce((item) => {
+      if (item?.media_path) {
+        discarded.add(item.media_path);
+        discardViewOnce(item.media_path);
+      }
+      return null;
+    });
+  }, []);
+
+  // Opened view-once files sent to you are deleted from Storage; this
+  // catches any left behind (the app closed while one was open).
+  useEffect(() => {
+    messages.forEach((m) => {
+      if (m.view_once && m.viewed_at && m.media_path && m.sender_id !== userId && !discarded.has(m.media_path)) {
+        discarded.add(m.media_path);
+        discardViewOnce(m.media_path);
+      }
+    });
+  }, [messages, userId]);
 
   const sendVoice = ({ uri, durationMs, waveform }) => sendFile({ kind: 'voice', uri, mimeType: 'audio/mp4', durationMs, waveform });
 
@@ -541,6 +610,8 @@ function Thread({ navigation, route }) {
                   vibe={vibe}
                   onLongPress={() => onLongPress(item)}
                   onOpenMedia={setViewing}
+                  onOpenOnce={openOnce}
+                  opening={openingId === item.id}
                 />
               )}
               onEndReachedThreshold={0.4}
@@ -588,8 +659,10 @@ function Thread({ navigation, route }) {
         </View>
       </KeyboardAvoidingView>
       <MediaViewer item={viewing} onClose={() => setViewing(null)} />
+      <SendMediaSheet file={picked} viewOnce={viewOnce} onViewOnce={setViewOnce} onCancel={() => setPicked(null)} onSend={sendPicked} />
       <ReportSheet target={reporting} onClose={(didBlock) => (setReporting(null), didBlock && navigation.goBack())} />
       {picker}
+      <ViewOnceViewer item={once} onClose={closeOnce} />
     </View>
   );
 }

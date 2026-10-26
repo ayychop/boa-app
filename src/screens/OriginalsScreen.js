@@ -12,8 +12,12 @@ import useLayout, { WIDE } from '../hooks/useLayout';
 import { colors, fonts, space, type } from '../theme';
 
 const GAP = 14;
+// About how tall the copy under the art is (the slate line, title, logline
+// and buttons): the art leaves this much room above the tab bar and mini
+// player, so Play and Watch Trailer are in view before you scroll.
+const BODY_HEIGHT = 250;
 
-function Featured({ production, width }) {
+function Featured({ production, width, clear = 0 }) {
   const insets = useSafeAreaInsets();
   const window = useWindowDimensions();
   const media = useMedia();
@@ -25,9 +29,10 @@ function Featured({ production, width }) {
   // the backdrop's baked-in title so it never shows half cut off.
   const stacked = width < WIDE;
   const natural = wide ? Math.round(width / 2.39) + insets.top : Math.round(width * 1.68) + insets.top;
+  const room = Math.max(window.height * 0.3, window.height - clear - BODY_HEIGHT);
   const height = stacked
-    ? Math.round(Math.min((width * 16) / 9, window.height * 0.56))
-    : Math.round(Math.min(natural, window.height * 0.5, BACKDROP_TITLE_TOP * width - space.md));
+    ? Math.round(Math.min((width * 16) / 9, window.height * 0.56, room))
+    : Math.round(Math.min(natural, window.height * 0.5, BACKDROP_TITLE_TOP * width - space.md, room));
   const poster = production.poster ?? production.backdrop;
   const { node: art, titleInFrame } = stacked && poster
     ? {
@@ -101,7 +106,9 @@ function EpisodeCard({ production, episode, width }) {
 export default function OriginalsScreen() {
   const { width } = useLayout();
   const media = useMedia();
-  const bottom = useBottomSpace(space.xxl);
+  // Extra room under the casting card too, so the last of the page scrolls
+  // well clear of the mini player.
+  const bottom = useBottomSpace(space.xxxl);
   const contentWidth = Math.min(width, 1200);
   const columns = contentWidth < 640 ? 2 : contentWidth < 1000 ? 3 : 4;
   const posterWidth = Math.floor((contentWidth - space.xl * 2 - GAP * (columns - 1)) / columns);
@@ -110,7 +117,7 @@ export default function OriginalsScreen() {
   return (
     <Animated.View key="full" entering={FadeIn.duration(360)} style={styles.screen}>
       <ScrollView testID="originals-scroll" contentContainerStyle={{ paddingBottom: bottom }} showsVerticalScrollIndicator={false}>
-        <Featured production={featured} width={width} />
+        <Featured production={featured} width={width} clear={bottom} />
 
         <View style={[styles.block, { width: contentWidth }]}>
           <SectionHeader index="01" kicker={featured.title} title="Episodes" />

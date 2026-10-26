@@ -48,6 +48,7 @@ export default function HubSettingsScreen({ navigation }) {
   const [busy, setBusy] = useState(null);
   const [blockedPeople, setBlockedPeople] = useState([]);
   const [privacy, setPrivacy] = useState('everyone');
+  const [searchable, setSearchableState] = useState(true);
 
   useEffect(() => {
     let alive = true;
@@ -55,10 +56,24 @@ export default function HubSettingsScreen({ navigation }) {
       .getMessagePrivacy(userId)
       .then((v) => alive && setPrivacy(v))
       .catch(() => {});
+    hub
+      .getSearchable(userId)
+      .then((v) => alive && setSearchableState(v))
+      .catch(() => {});
     return () => {
       alive = false;
     };
   }, [userId]);
+
+  const chooseSearchable = async (value) => {
+    setSearchableState(value);
+    try {
+      await hub.setSearchable(userId, value);
+    } catch (err) {
+      setSearchableState(!value);
+      Alert.alert("Couldn't save", err.message);
+    }
+  };
 
   const choosePrivacy = async (value) => {
     const before = privacy;
@@ -227,8 +242,16 @@ export default function HubSettingsScreen({ navigation }) {
             <SettingRow icon="briefcase-outline" title="Open for work" detail="A gold badge on your profile, and you're listed first.">
               <Toggle value={profile.open_for_work} onChange={flip('open_for_work')} label="Open for work" testID="hub-open-for-work" />
             </SettingRow>
-            <SettingRow icon="musical-notes-outline" title="Show what I'm playing" detail="'Listening to' a station or 'Watching' a BOA Original, on your profile." last>
+            <SettingRow icon="musical-notes-outline" title="Show what I'm playing" detail="'Listening to' a station or 'Watching' a BOA Original, on your profile.">
               <Toggle value={shareStatus} onChange={setShareStatus} label="Show what I'm playing" testID="hub-share-status" />
+            </SettingRow>
+            <SettingRow
+              icon="globe-outline"
+              title="Show my profile in search"
+              detail="Google can list your name and picture. Your posts and reels are only ever shown to people with an account."
+              last
+            >
+              <Toggle value={searchable && profile.visible_on_hub} onChange={chooseSearchable} label="Show my profile in search" testID="hub-searchable" />
             </SettingRow>
           </View>
 

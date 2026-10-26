@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /u/
+Sitemap: https://www.boanetworks.com/sitemap.xml

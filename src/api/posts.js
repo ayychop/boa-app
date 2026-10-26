@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase';
 import { MEDIA_LIMITS, mediaKind } from './hub';
+import { assertCloudUrl, readFileBytes } from './upload';
 
 // Photos and videos on Hub profiles (supabase/migrations: posts). Posts
 // live in the public posts bucket, under the author's own folder; who can
@@ -66,7 +67,7 @@ export async function createPost(userId, asset, { caption = '', tagged = [] } = 
   const path = `${userId}/${kind}-${Date.now()}.${EXT[type] ?? (kind === 'video' ? 'mp4' : 'jpg')}`;
   let body;
   try {
-    body = await (await fetch(asset.uri)).arrayBuffer();
+    body = await readFileBytes(asset.uri);
   } catch {
     throw new Error('That file could not be read from your phone.');
   }
@@ -90,6 +91,7 @@ export async function createPost(userId, asset, { caption = '', tagged = [] } = 
     clearTimeout(timer);
   }
   const url = sb.storage.from(POSTS_BUCKET).getPublicUrl(path).data.publicUrl;
+  assertCloudUrl(url, 'That post');
   return check(
     await sb
       .from('posts')

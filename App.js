@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import * as Linking from 'expo-linking';
 import { StatusBar } from 'expo-status-bar';
-import { Alert, Platform, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Alert, Platform, StyleSheet, Text, View } from 'react-native';
 import { DarkTheme, NavigationContainer, useIsFocused } from '@react-navigation/native';
 import { BottomTabBar, createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -45,7 +45,7 @@ import { WeatherProvider } from './src/context/WeatherContext';
 import { AlarmProvider, useAlarms } from './src/context/AlarmContext';
 import { HubProvider } from './src/context/HubContext';
 import { currentTab, goToTab, navigationRef, openPage } from './src/navigation/ref';
-import { completeAuthLink } from './src/api/hub';
+import { completeAuthLink, profileIdByUsername } from './src/api/hub';
 import OnboardingScreen from './src/screens/OnboardingScreen';
 import Intro from './src/components/Intro';
 import MiniPlayer from './src/components/MiniPlayer';
@@ -73,11 +73,14 @@ import HubSplitsScreen from './src/screens/hub/HubSplitsScreen';
 import HubSplitSheetScreen from './src/screens/hub/HubSplitSheetScreen';
 import HubInvoiceScreen from './src/screens/hub/HubInvoiceScreen';
 import HubHeartsScreen from './src/screens/hub/HubHeartsScreen';
+import PublicProfileScreen from './src/screens/PublicProfileScreen';
+import { profileHandleFromPath } from './src/web/seo';
 import { colors, fonts } from './src/theme';
 import ErrorBoundary from './src/components/ErrorBoundary';
 import { installCrashGuard } from './src/utils/crashGuard';
 import { haptics } from './src/utils/haptics';
 import useLayout from './src/hooks/useLayout';
+import SafeBottomFloor, { ANDROID_MIN_BOTTOM_INSET } from './src/components/SafeBottomFloor';
 
 // The native splash stays up until the intro is on screen, then dissolves
 // into it.
@@ -199,27 +202,41 @@ function TabBarBackground() {
   );
 }
 
-// Android's gesture bar needs at least this much clear space, even on a
-// device that reports no bottom inset in edge-to-edge mode, plus some
-// breathing room so the labels never sit right on the bar.
-const ANDROID_MIN_BOTTOM_INSET = 20;
+// Breathing room above the gesture bar or navigation buttons, so the
+// labels never sit right on it. The inset itself is floored for Android
+// (SafeBottomFloor).
 const ANDROID_BOTTOM_COMFORT = 10;
 
-// Seven tabs share the bar, so the icons and labels are sized from each
-// tab's slot: never under 24pt icons and 11pt labels, up to 28pt and 13pt
-// on tablets and unfolded phones, in a taller bar that's easy to hit.
+// Seven tabs share the bar. Phones (the S26 Ultra, the Fold's cover screen)
+// get big, easy-to-hit icons and labels in a taller bar: 26 to 30pt icons
+// and 11.5 to 13pt labels. Tablets and unfolded phones have room to spare,
+// so they keep a slimmer bar.
 const TAB_COUNT = 7;
 export const TAB_BAR_HEIGHT = 66;
-export const tabSizing = (slot) => ({
-  icon: Math.round(Math.min(28, Math.max(24, slot * 0.44))),
-  label: slot < 54 ? 11 : slot < 70 ? 11.5 : 13,
-});
+export const TAB_BAR_HEIGHT_PHONE = 74;
+export const tabSizing = (slot, phone = false) =>
+  phone
+    ? {
+        icon: Math.round(Math.min(30, Math.max(26, slot * 0.5))),
+        label: slot < 54 ? 11.5 : slot < 62 ? 12.5 : 13,
+        height: TAB_BAR_HEIGHT_PHONE,
+      }
+    : {
+        icon: Math.round(Math.min(28, Math.max(24, slot * 0.44))),
+        label: slot < 54 ? 11 : slot < 70 ? 11.5 : 13,
+        height: TAB_BAR_HEIGHT,
+      };
 
-function Tabs({ narrow }) {
+// "BOA Originals" can't fit a phone's tab slot at a readable size, so
+// phones say "Originals" (screen readers still hear "BOA Originals").
+export const tabLabel = (name, phone) => (name === 'Originals' && phone ? 'Originals' : TAB_TITLES[name] ?? name);
+
+function Tabs() {
   const insets = useSafeAreaInsets();
-  const { side, short, width } = useLayout();
+  const { side, short, width, wide } = useLayout();
+  const phone = !wide;
   // useLayout's width is already inside the side gutters the bar pads by.
-  const sizing = tabSizing(width / TAB_COUNT);
+  const sizing = tabSizing(width / TAB_COUNT, phone);
   // The tab bar pads itself by this, so its icons and labels always sit
   // above the system gesture bar or navigation buttons.
   const bottomInset =
@@ -245,25 +262,25 @@ function Tabs({ narrow }) {
           paddingRight: side,
           // Landscape phones: a slim bar (labels sit beside the icons) so
           // it takes as little of the short screen as it can.
-          height: (short ? 44 : TAB_BAR_HEIGHT) + bottomInset,
+          height: (short ? 44 : sizing.height) + bottomInset,
         },
         tabBarItemStyle: { paddingHorizontal: 0, paddingTop: short ? 0 : 8 },
         tabBarBackground: () => <TabBarBackground />,
         // Seven tabs: each label stays on one line and shrinks to fit its
         // slot (down to 65%) rather than wrapping into the icon or
-        // clipping, so "BOA Originals" fits on the narrowest phones.
+        // clipping.
         // Spelled out for screen readers: a custom label means React
         // Navigation no longer builds one.
         tabBarAccessibilityLabel: `${TAB_TITLES[route.name] ?? route.name}, tab`,
-        tabBarLabel: ({ color, children }) => (
+        tabBarLabel: ({ color }) => (
           <Text
             numberOfLines={1}
             adjustsFontSizeToFit
             minimumFontScale={0.65}
             allowFontScaling={false}
-            style={[styles.tabLabel, { color, fontSize: narrow ? Math.min(10.5, sizing.label) : sizing.label }]}
+            style={[styles.tabLabel, { color, fontSize: sizing.label }]}
           >
-            {children}
+            {tabLabel(route.name, phone)}
           </Text>
         ),
         tabBarIcon: ({ focused, color }) => (
@@ -298,14 +315,27 @@ function AlarmRinger({ navReady }) {
  * Where a network.boa:// link goes: `weather` (the widget's weather) to the
  * forecast, `now-playing` (the rest of the widget) to the Radio tab, and
  * `auth-callback` (the confirmation email) signs you in, then opens the
- * Chat tab to set up your Hub profile. Anything else just opens the app.
+ * Chat tab to set up your Hub profile, and `u/<username>` (a BOA Code)
+ * opens that person's Hub profile. Anything else just opens the app.
  * Exported for the tests.
  */
 export function routeLink(url) {
+  // The web app, from a public profile's Sign up / Sign in buttons.
+  if (/^https?:\/\/[^?#]*\?(?:[^#]*&)?hub=(join|signin)\b/i.test(url || '')) return openPage('HubWelcome', { next: 'back' });
   const m = /^network\.boa:\/\/+([^/?#]+)/i.exec(url || '');
   const target = m?.[1]?.toLowerCase();
   if (target === 'weather') return openPage('Forecast');
   if (target === 'now-playing') return goToTab('Radio');
+  // A BOA Code (the QR on someone's Hub profile), scanned with the
+  // camera: their profile, one tap from a chat.
+  if (target === 'u') {
+    const handle = /^network\.boa:\/\/+u\/([a-z0-9_.]{3,24})/i.exec(url)?.[1];
+    if (!handle) return false;
+    profileIdByUsername(handle)
+      .then((id) => (id ? openPage('HubProfile', { id }) : Alert.alert('Profile not found', `There's no one on the Hub called @${handle.toLowerCase()}.`)))
+      .catch(() => openPage('HubWelcome', { next: 'back' }));
+    return true;
+  }
   if (target === 'auth-callback') {
     completeAuthLink(url)
       .then(() => goToTab('Chat'))
@@ -335,13 +365,13 @@ const PAGE_OPTIONS = { headerShown: false, animation: 'slide_from_right', conten
 
 // The tabs, with the full-screen pages (the forecast, alarms, the Creative
 // Hub) stacked over them.
-function MainTabs({ narrow }) {
+function MainTabs() {
   const [navReady, setNavReady] = useState(false);
   return (
     <NavigationContainer ref={navigationRef} theme={navTheme} onReady={() => setNavReady(true)}>
       <StatusBar style="light" />
       <Stack.Navigator screenOptions={PAGE_OPTIONS}>
-        <Stack.Screen name="Tabs">{() => <Tabs narrow={narrow} />}</Stack.Screen>
+        <Stack.Screen name="Tabs">{() => <Tabs />}</Stack.Screen>
         <Stack.Screen name="Forecast" component={ForecastScreen} />
         <Stack.Screen name="AlarmSettings" component={AlarmSettingsScreen} />
         <Stack.Screen
@@ -373,14 +403,14 @@ function MainTabs({ narrow }) {
 
 // One screen at a time: each one unmounts before the next mounts, and the
 // next fades in on its own. Returning listeners go straight to the app.
-function Gate({ narrow }) {
+function Gate() {
   const { ready, onboarded } = useUser();
   // The profile almost always loads during the boot loader; if not, this
   // holds on the stage colour for the moment it takes.
   if (!ready) return <View style={{ flex: 1, backgroundColor: colors.bg }} />;
   return onboarded ? (
     <Animated.View key="app" entering={FadeIn.duration(450)} style={{ flex: 1 }}>
-      <MainTabs narrow={narrow} />
+      <MainTabs />
     </Animated.View>
   ) : (
     <Animated.View key="onboarding" entering={FadeIn.duration(450)} style={{ flex: 1 }}>
@@ -408,8 +438,11 @@ function AppFallback({ error, retry }) {
   );
 }
 
+// On the web, /u/<username> is a public profile: it opens on its own,
+// without the boot loader or the vibe check.
+const publicHandle = Platform.OS === 'web' && typeof window !== 'undefined' ? profileHandleFromPath(window.location.pathname) : null;
+
 export default function App() {
-  const narrow = useWindowDimensions().width < 380;
   const [fontsLoaded, fontError] = useFonts({
     Manrope_200ExtraLight,
     Manrope_300Light,
@@ -436,14 +469,20 @@ export default function App() {
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
       {(fontsLoaded || fontError) && (
         <ErrorBoundary name="app" fallback={(f) => <AppFallback {...f} />}>
-          <Root narrow={narrow} />
+          {publicHandle ? (
+            <SafeAreaProvider>
+              <PublicProfileScreen username={publicHandle} />
+            </SafeAreaProvider>
+          ) : (
+            <Root />
+          )}
         </ErrorBoundary>
       )}
     </View>
   );
 }
 
-function Root({ narrow }) {
+function Root() {
   // The boot loader plays first, on its own; the app (the vibe check on a
   // first run) mounts once it has gone. The providers mount straight away,
   // so the stored profile loads while the boot loader plays.
@@ -452,27 +491,29 @@ function Root({ narrow }) {
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.bg }}>
       <SafeAreaProvider>
-        <UserProvider>
-          <PlayerProvider>
-            <SleepTimerProvider>
-              <ZenProvider>
-                <MediaProvider>
-                  <WeatherProvider>
-                    <AlarmProvider>
-                      <HubProvider>
-                        <PremiumProvider>
-                          <FormsProvider>
-                            {booted ? <Gate narrow={narrow} /> : <Intro onDone={finishBoot} />}
-                          </FormsProvider>
-                        </PremiumProvider>
-                      </HubProvider>
-                    </AlarmProvider>
-                  </WeatherProvider>
-                </MediaProvider>
-              </ZenProvider>
-            </SleepTimerProvider>
-          </PlayerProvider>
-        </UserProvider>
+        <SafeBottomFloor>
+          <UserProvider>
+            <PlayerProvider>
+              <SleepTimerProvider>
+                <ZenProvider>
+                  <MediaProvider>
+                    <WeatherProvider>
+                      <AlarmProvider>
+                        <HubProvider>
+                          <PremiumProvider>
+                            <FormsProvider>
+                              {booted ? <Gate /> : <Intro onDone={finishBoot} />}
+                            </FormsProvider>
+                          </PremiumProvider>
+                        </HubProvider>
+                      </AlarmProvider>
+                    </WeatherProvider>
+                  </MediaProvider>
+                </ZenProvider>
+              </SleepTimerProvider>
+            </PlayerProvider>
+          </UserProvider>
+        </SafeBottomFloor>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

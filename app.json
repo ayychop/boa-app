@@ -34,7 +34,14 @@
     },
     "web": {
       "favicon": "./assets/favicon.png",
-      "backgroundColor": "#050506"
+      "backgroundColor": "#050506",
+      "bundler": "metro",
+      "output": "single",
+      "name": "BOA HUB",
+      "shortName": "BOA HUB",
+      "description": "BOA HUB by BOA Network: radio, BOA Originals and the Creative Hub, where creatives get discovered and get paid.",
+      "themeColor": "#050506",
+      "lang": "en"
     },
     "backgroundColor": "#050506",
     "plugins": [

@@ -271,7 +271,9 @@ describe('nothing sits under the tab bar, with real phone insets', () => {
     await bootIntoTabs(user);
     for (const name of ['Home', 'Radio', 'Zen', 'BOA Originals', 'Talent', 'Profile']) {
       expect(tabButton(name)).toBeOnTheScreen();
-      const label = screen.getAllByText(name).find((t) => t.props.adjustsFontSizeToFit);
+      // Phones read "Originals" under the icon (screen readers still hear "BOA Originals").
+      const text = name === 'BOA Originals' ? /^(BOA )?Originals$/ : name;
+      const label = screen.getAllByText(text).find((t) => t.props.adjustsFontSizeToFit);
       expect(label.props.numberOfLines).toBe(1);
     }
   });
