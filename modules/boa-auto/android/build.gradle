@@ -1,0 +1,22 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'com.boanetworks'
+version = '1.0.0'
+
+android {
+  namespace "expo.modules.boaauto"
+  defaultConfig {
+    versionCode 1
+    versionName "1.0.0"
+  }
+}
+
+dependencies {
+  // MediaBrowserServiceCompat and MediaSessionCompat, what Android Auto talks to.
+  implementation 'androidx.media:media:1.7.0'
+  // ReactApplication, to wake the JS engine when the car asks for a station.
+  implementation 'com.facebook.react:react-android'
+}

@@ -283,14 +283,18 @@ function refreshLockScreen() {
 export function setNowPlaying(id, text) {
   if (nowPlaying?.id === id && nowPlaying?.text === text) return;
   nowPlaying = { id, text: text || null };
-  if (current?.id === id) refreshLockScreen();
+  if (current?.id !== id) return;
+  refreshLockScreen();
+  emit({}); // the car's now playing screen follows (audio/car.js)
 }
 
 /** A rendered record image (file:// uri) to show on the lock screen. */
 export function setArtwork(id, uri) {
   if (!uri || artworkById.get(id) === uri) return;
   artworkById.set(id, uri);
-  if (current?.id === id) refreshLockScreen();
+  if (current?.id !== id) return;
+  refreshLockScreen();
+  emit({});
 }
 
 function showOnLockScreen(item) {
@@ -377,6 +381,11 @@ export function skip(delta) {
 export async function setRate(rate) {
   emit({ rate });
   if (player && !isLive(current)) player.setPlaybackRate(rate);
+}
+
+/** What's loaded (a station or an episode), or null. */
+export function getCurrent() {
+  return current;
 }
 
 export function subscribe(fn) {

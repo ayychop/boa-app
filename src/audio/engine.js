@@ -217,6 +217,11 @@ export function setRemoteControls(handlers) {
   remote = handlers;
 }
 
+/** What's loaded (a station or an episode), or null. */
+export function getCurrent() {
+  return current;
+}
+
 export function subscribe(fn) {
   listeners.add(fn);
   fn(state);

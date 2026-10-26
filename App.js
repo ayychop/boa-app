@@ -51,6 +51,7 @@ import OnboardingScreen from './src/screens/OnboardingScreen';
 import Intro from './src/components/Intro';
 import MiniPlayer from './src/components/MiniPlayer';
 import RecordArtwork from './src/components/RecordArtwork';
+import FirstRun from './src/components/FirstRun';
 import HomeScreen from './src/screens/HomeScreen';
 import RadioScreen from './src/screens/RadioScreen';
 import ZenScreen from './src/screens/ZenScreen';
@@ -369,7 +370,7 @@ const PAGE_OPTIONS = { headerShown: false, animation: 'slide_from_right', conten
 
 // The tabs, with the full-screen pages (the forecast, alarms, the Creative
 // Hub) stacked over them.
-function MainTabs() {
+function MainTabs({ freshInstall = false }) {
   const [navReady, setNavReady] = useState(false);
   return (
     <NavigationContainer ref={navigationRef} theme={navTheme} onReady={() => setNavReady(true)}>
@@ -401,6 +402,8 @@ function MainTabs() {
       <DeepLinks navReady={navReady} />
       {/* Draws the lock screen's record artwork for the station playing. */}
       <RecordArtwork />
+      {/* The welcome tour and "What's New", each once. */}
+      <FirstRun freshInstall={freshInstall} />
     </NavigationContainer>
   );
 }
@@ -409,12 +412,18 @@ function MainTabs() {
 // next fades in on its own. Returning listeners go straight to the app.
 function Gate() {
   const { ready, onboarded } = useUser();
+  // Whether this launch started with the vibe check (a fresh install), as
+  // it was when the profile loaded: "What's New" skips fresh installs.
+  const [freshInstall, setFreshInstall] = useState(null);
+  useEffect(() => {
+    if (ready && freshInstall === null) setFreshInstall(!onboarded);
+  }, [ready, onboarded, freshInstall]);
   // The profile almost always loads during the boot loader; if not, this
   // holds on the stage colour for the moment it takes.
   if (!ready) return <View style={{ flex: 1, backgroundColor: colors.bg }} />;
   return onboarded ? (
     <Animated.View key="app" entering={FadeIn.duration(450)} style={{ flex: 1 }}>
-      <MainTabs />
+      <MainTabs freshInstall={!!freshInstall} />
     </Animated.View>
   ) : (
     <Animated.View key="onboarding" entering={FadeIn.duration(450)} style={{ flex: 1 }}>

@@ -1,0 +1,24 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <application>
+    <!-- Android Auto lists BOA HUB as a media app. -->
+    <meta-data
+      android:name="com.google.android.gms.car.application"
+      android:resource="@xml/automotive_app_desc" />
+
+    <!-- The station browser and controls the car connects to. -->
+    <service
+      android:name="expo.modules.boaauto.BoaAutoService"
+      android:exported="true"
+      android:label="BOA Radio">
+      <intent-filter>
+        <action android:name="android.media.browse.MediaBrowserService" />
+      </intent-filter>
+    </service>
+
+    <!-- Station logos for the car screen, which can only load content:// art. -->
+    <provider
+      android:name="expo.modules.boaauto.BoaAutoArtProvider"
+      android:authorities="${applicationId}.boaauto.art"
+      android:exported="true" />
+  </application>
+</manifest>

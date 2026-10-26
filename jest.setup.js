@@ -45,6 +45,7 @@ jest.mock('./src/audio/engine', () => {
       return () => subs.delete(fn);
     },
     setRemoteControls: jest.fn(),
+    getCurrent: jest.fn(() => null),
     fadeOut: jest.fn(async () => emit({ status: 'paused' })),
     setNowPlaying: jest.fn(),
     setArtwork: jest.fn(),
@@ -327,3 +328,7 @@ jest.mock('expo-location', () => ({
 jest.mock('./src/lib/supabase', () => ({ supabase: null, isConfigured: false, projectHost: null }));
 
 global.fetch = jest.fn(() => Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve([]), text: () => Promise.resolve('') }));
+
+// The welcome tour and "What's New" open as modals over the app once each;
+// the app's render tests run without them (first-run.test.js covers them).
+jest.mock('./src/components/FirstRun', () => () => null);

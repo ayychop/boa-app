@@ -1,0 +1,7 @@
+{
+  "name": "boa-auto",
+  "version": "1.0.0",
+  "private": true,
+  "main": "index.js",
+  "description": "BOA Radio in the car: an Android Auto media browser for the stations, driving the app's own audio engine."
+}

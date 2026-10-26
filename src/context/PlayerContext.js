@@ -3,6 +3,7 @@ import * as engine from '../audio/engine';
 import { haptics } from '../utils/haptics';
 import useNowPlaying from '../hooks/useNowPlaying';
 import * as widget from '../../modules/boa-widget';
+import * as car from '../audio/car';
 
 const PlayerContext = createContext(null);
 // Position ticks several times a second; keep it in its own context so only
@@ -10,8 +11,10 @@ const PlayerContext = createContext(null);
 const ProgressContext = createContext({ position: 0, duration: 0 });
 
 export function PlayerProvider({ children }) {
+  // A station the car started before the app was opened (audio/car.js).
+  const [boot] = useState(car.takeBoot);
   // What's loaded: a radio station or a podcast episode (see audio/engine.js).
-  const [current, setCurrent] = useState(null);
+  const [current, setCurrent] = useState(() => boot?.item ?? null);
   const [core, setCore] = useState({ status: 'idle', title: null, rate: 1, retry: 0 });
   const [progress, setProgress] = useState({ position: 0, duration: 0 });
 
@@ -32,7 +35,7 @@ export function PlayerProvider({ children }) {
   // Home's trending row, your library), as it was at that moment, so
   // next/previous step through a stable order even if the list on screen
   // changes later.
-  const queue = useRef([]);
+  const queue = useRef(boot?.list ?? []);
   const currentRef = useRef(null);
   currentRef.current = current;
 
@@ -71,6 +74,21 @@ export function PlayerProvider({ children }) {
     engine.setRemoteControls({ next, previous });
     return () => engine.setRemoteControls(null);
   }, [next, previous]);
+
+  // Taps on the car screen play through here, so the app follows along.
+  useEffect(
+    () =>
+      car.attachPlayer({
+        play: (item, list) => {
+          if (list?.length) queue.current = list.filter((s) => s.kind === 'radio');
+          start(item);
+        },
+        next,
+        previous,
+        canStep: () => queue.current.length > 1,
+      }),
+    [start, next, previous],
+  );
 
   const pause = useCallback(() => {
     haptics.tap();
