@@ -150,12 +150,16 @@ describe('Hi-Fi audio', () => {
 describe('beauty filters', () => {
   const { toAgora, describe: describeBeauty } = require('../src/calls/beauty');
 
-  test('never lighten skin, and stay within gentle limits', () => {
+  test('skin tone protected, lightening capped, and within gentle limits', () => {
     const max = toAgora({ smoothing: 1, tone: 1, enabled: true });
-    expect(max.beauty.lighteningLevel).toBe(0);
-    expect(max.beauty.smoothnessLevel).toBeLessThanOrEqual(0.7);
-    expect(max.beauty.rednessLevel).toBeLessThanOrEqual(0.15);
+    expect(max.beauty.lighteningContrastLevel).toBe(2); // LighteningContrastHigh
+    expect(max.beauty.lighteningLevel).toBe(0.15);
+    expect(max.beauty.smoothnessLevel).toBe(0.5);
+    expect(max.beauty.rednessLevel).toBe(0.3);
     expect(max.colorEnhance.skinProtectLevel).toBe(1);
+    // Tone alone still glows a little; smoothing alone never lightens.
+    expect(toAgora({ smoothing: 0, tone: 0.5 }).beauty).toEqual(expect.objectContaining({ enabled: true, lighteningLevel: 0.08, smoothnessLevel: 0 }));
+    expect(toAgora({ smoothing: 0.5, tone: 0 }).beauty).toEqual(expect.objectContaining({ lighteningLevel: 0, smoothnessLevel: 0.25, rednessLevel: 0.15 }));
     expect(max.colorEnhance.strengthLevel).toBeLessThanOrEqual(0.45);
     const off = toAgora({ smoothing: 1, tone: 1, enabled: false });
     expect(off.beauty.enabled).toBe(false);

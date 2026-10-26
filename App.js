@@ -66,6 +66,8 @@ import HubWelcomeScreen from './src/screens/hub/HubWelcomeScreen';
 import HubDirectoryScreen from './src/screens/hub/HubDirectoryScreen';
 import HubProfileScreen from './src/screens/hub/HubProfileScreen';
 import HubSettingsScreen from './src/screens/hub/HubSettingsScreen';
+import ChatAppearanceScreen from './src/screens/hub/ChatAppearanceScreen';
+import RingtoneScreen from './src/screens/hub/RingtoneScreen';
 import HubChatsScreen from './src/screens/hub/HubChatsScreen';
 import HubThreadScreen from './src/screens/hub/HubThreadScreen';
 import AdminDashboard from './src/screens/admin/AdminDashboard';
@@ -388,6 +390,8 @@ function MainTabs({ freshInstall = false }) {
         <Stack.Screen name="HubDirectory" component={HubDirectoryScreen} />
         <Stack.Screen name="HubProfile" component={HubProfileScreen} />
         <Stack.Screen name="HubSettings" component={HubSettingsScreen} />
+        <Stack.Screen name="ChatAppearance" component={ChatAppearanceScreen} />
+        <Stack.Screen name="Ringtone" component={RingtoneScreen} />
         <Stack.Screen name="HubChats" component={HubChatsScreen} />
         <Stack.Screen name="HubThread" component={HubThreadScreen} />
         <Stack.Screen name="AdminDashboard" component={AdminDashboard} />

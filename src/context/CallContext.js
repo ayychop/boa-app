@@ -10,6 +10,7 @@ import { startRingtone, stopRingtone } from '../calls/ringtone';
 import { DEFAULT_BEAUTY } from '../calls/beauty';
 import CallScreen from '../components/calls/CallScreen';
 import { haptics } from '../utils/haptics';
+import { blockScreenshots } from '../calls/privacy';
 
 const CallContext = createContext(null);
 
@@ -34,7 +35,8 @@ export const END_REASONS = {
   unreachable: "Couldn't reach them",
 };
 
-const NO_MEDIA = Object.freeze({ status: 'idle', remoteUid: null, remoteVideo: false, error: null });
+const NO_MEDIA = Object.freeze({ status: 'idle', remoteUid: null, remoteVideo: false, remotePrivacy: false, error: null });
+const NO_CONTROLS = Object.freeze({ muted: false, cameraOff: false, speaker: true, privacy: false });
 
 /**
  * BOA video calls: the call in progress and everything about it (who,
@@ -44,10 +46,12 @@ const NO_MEDIA = Object.freeze({ status: 'idle', remoteUid: null, remoteVideo: f
  * Starting a call is BOA Premium; answering one never is.
  */
 export function CallProvider({ children }) {
-  const { userId, profile, blocked } = useHub();
+  const { userId, profile, blocked, ringtone } = useHub();
+  const ringtoneRef = useRef(ringtone);
+  ringtoneRef.current = ringtone;
   const { requirePremium } = usePremium();
   const [call, setCall] = useState(null); // { id, peer, direction, phase, startedAt, reason }
-  const [controls, setControls] = useState({ muted: false, cameraOff: false, speaker: true });
+  const [controls, setControls] = useState(NO_CONTROLS);
   const [beauty, setBeautyState] = useState(DEFAULT_BEAUTY);
   const [video, setVideo] = useState(NO_MEDIA); // the Agora side: status, the other person's uid and picture
   const callRef = useRef(null);
@@ -84,10 +88,13 @@ export function CallProvider({ children }) {
   const finish = useCallback((reason = 'ended') => {
     clearTimers();
     media.leave();
+    // Screenshots come back the moment the call ends, not when the screen closes.
+    if (controlsRef.current.privacy) blockScreenshots(false);
+    setControls((c) => (c.privacy ? { ...c, privacy: false } : c));
     setCall((c) => (c && c.phase !== 'ended' ? { ...c, phase: 'ended', reason } : c));
     timers.current.close = setTimeout(() => {
       setCall(null);
-      setControls({ muted: false, cameraOff: false, speaker: true });
+      setControls(NO_CONTROLS);
       setVideo(NO_MEDIA);
     }, ENDED_MS);
   }, []);
@@ -129,7 +136,7 @@ export function CallProvider({ children }) {
         setCall({ id: p.callId, peer: from, direction: 'in', phase: 'ringing', startedAt: null, reason: null });
         setVideo(NO_MEDIA);
         Vibration.vibrate(RING_VIBRATION, true);
-        startRingtone();
+        startRingtone(ringtoneRef.current);
         timers.current.ring = setTimeout(() => finish('missed'), RING_MS);
         return;
       }
@@ -145,6 +152,7 @@ export function CallProvider({ children }) {
     () => () => {
       clearTimers();
       media.leave();
+      if (controlsRef.current.privacy) blockScreenshots(false);
     },
     [],
   );
@@ -195,18 +203,24 @@ export function CallProvider({ children }) {
     finish('ended');
   }, [finish]);
 
+  // The call screen's buttons give their own haptic tap.
   const toggle = useCallback((key) => {
-    haptics.selection();
     const next = !controlsRef.current[key];
     if (key === 'muted') media.setMuted(next);
     else if (key === 'cameraOff') media.setCameraOff(next);
     else if (key === 'speaker') media.setSpeaker(next);
+    else if (key === 'privacy') {
+      blockScreenshots(next);
+      media.setPrivacy(next);
+    }
     setControls((c) => ({ ...c, [key]: next }));
   }, []);
 
+  const flipCamera = useCallback(() => media.switchCamera(), []);
+
   const value = useMemo(
-    () => ({ call, controls, video, beauty, setBeauty, startCall, accept, decline, hangUp, toggle }),
-    [call, controls, video, beauty, setBeauty, startCall, accept, decline, hangUp, toggle],
+    () => ({ call, controls, video, beauty, setBeauty, startCall, accept, decline, hangUp, toggle, flipCamera }),
+    [call, controls, video, beauty, setBeauty, startCall, accept, decline, hangUp, toggle, flipCamera],
   );
 
   return (

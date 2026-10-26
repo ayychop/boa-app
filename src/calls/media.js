@@ -9,6 +9,8 @@ export const leave = () => {};
 export const setMuted = () => {};
 export const setCameraOff = () => {};
 export const setSpeaker = () => {};
+export const switchCamera = () => {};
+export const setPrivacy = () => {};
 export const setBeauty = () => {};
 export const LocalVideo = () => null;
 export const RemoteVideo = () => null;

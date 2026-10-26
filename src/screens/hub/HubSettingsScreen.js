@@ -12,6 +12,7 @@ import { QUOTE_CATEGORIES } from '../../data/quotes';
 import { CHAT_SOUNDS } from '../../chat/sounds';
 import useChatVibe from '../../chat/vibes';
 import VibePicker from '../../components/chat/VibePicker';
+import { ringtoneById } from '../../calls/ringtone';
 import { colors, fonts, radius, space } from '../../theme';
 
 /**
@@ -37,6 +38,8 @@ export default function HubSettingsScreen({ navigation }) {
     setChatSound,
     disappearing,
     setDisappearing,
+    chatTheme,
+    ringtone,
   } = useHub();
   const [form, setForm] = useState(() => ({
     display_name: profile?.display_name ?? '',
@@ -273,6 +276,17 @@ export default function HubSettingsScreen({ navigation }) {
           <Slate style={styles.section}>Chat vibe</Slate>
           <VibePicker value={vibe.id} onChange={setVibe} />
 
+          <Slate style={styles.section}>Make it yours</Slate>
+          <View style={styles.group}>
+            <SettingRow icon="color-palette-outline" title="Chat Appearance" detail="Your bubbles' colour and glass" onPress={() => navigation.navigate('ChatAppearance')}>
+              <View style={[styles.themeDot, { backgroundColor: chatTheme?.color ?? vibe.accent }]} />
+              <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
+            </SettingRow>
+            <SettingRow icon="musical-notes-outline" title="Ringtone" detail={`Incoming calls play ${ringtoneById(ringtone).label}`} onPress={() => navigation.navigate('Ringtone')} last>
+              <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
+            </SettingRow>
+          </View>
+
           <Slate style={styles.section}>Chat</Slate>
           <View style={styles.group}>
             <SettingRow
@@ -345,6 +359,7 @@ const styles = StyleSheet.create({
   photoRow: { flexDirection: 'row', alignItems: 'center', gap: space.lg },
   section: { marginTop: space.xl, marginBottom: space.md },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
+  themeDot: { width: 18, height: 18, borderRadius: 9, borderWidth: 1, borderColor: 'rgba(255,255,255,0.4)' },
   group: { borderRadius: radius.lg, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
   credit: { fontFamily: fonts.regular, fontSize: 11, lineHeight: 16, color: colors.textFaint, marginTop: space.sm },
 });

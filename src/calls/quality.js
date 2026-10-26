@@ -27,7 +27,7 @@ export const PREVIEW = Object.freeze({
 export const ENCODER = Object.freeze({
   dimensions: { width: HD.width, height: HD.height },
   frameRate: HD.fps,
-  bitrate: 0, // STANDARD_BITRATE: Agora sizes it for the resolution and raises it on good networks
+  bitrate: 2000, // Kbps: steady, clean 720p30 for a face and a room
   minBitrate: -1, // DEFAULT_MIN_BITRATE
   orientationMode: 0, // OrientationModeAdaptive: portrait phones send portrait video
   // MaintainQuality: on a weak network keep the picture sharp and give up
@@ -59,5 +59,25 @@ export const STABILIZATION_OFF = -1; // CameraStabilizationModeOff
 export const DENOISER = Object.freeze({ mode: 0, level: 0 }); // VideoDenoiserAuto, VideoDenoiserLevelHighQuality
 export const LOW_LIGHT = Object.freeze({ mode: 0, level: 0 }); // LowLightEnhanceAuto, LowLightEnhanceLevelHighQuality
 
-/** 48 kHz voice (AudioProfileMusicStandard) in the default call scenario. */
-export const AUDIO = Object.freeze({ profile: 2, scenario: 0 });
+/**
+ * 48 kHz voice (AudioProfileMusicStandard) in the chatroom scenario: calls
+ * play on the loudspeaker, and chatroom uses the phone's in-call audio path,
+ * which brings the hardware echo canceller in alongside Agora's own.
+ */
+export const AUDIO = Object.freeze({ profile: 2, scenario: 5 }); // AudioScenarioChatroom
+
+/**
+ * setParameters, before any join: Agora's echo cancellation (AEC), noise
+ * suppression (ANS) and automatic gain control (AGC), switched on
+ * explicitly so no device profile can leave one off. AI noise suppression
+ * (setAINSMode) runs on top in balanced mode.
+ */
+export const AUDIO_PROCESSING = Object.freeze(['{"che.audio.aec.enable":true}', '{"che.audio.ans.enable":true}', '{"che.audio.agc.enable":true}']);
+export const AINS_BALANCED = 0; // AinsModeBalanced
+
+/**
+ * setVideoScenario: ApplicationScenario1v1, Agora's tuning for two-person
+ * calls (low latency, fast first frame). Dual stream stays off: with one
+ * viewer there's no one to send a second, smaller stream to.
+ */
+export const VIDEO_SCENARIO = 2; // ApplicationScenario1v1

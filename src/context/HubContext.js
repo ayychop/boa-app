@@ -11,6 +11,8 @@ import * as hearts from '../api/hearts';
 import { useUser } from './UserContext';
 import * as chat from '../chat/notifications';
 import { chatSoundById, DEFAULT_CHAT_SOUND } from '../chat/sounds';
+import { cleanTheme } from '../chat/bubbleTheme';
+import { DEFAULT_RINGTONE, ringtoneById } from '../calls/ringtone';
 import { openPage } from '../navigation/ref';
 import { usePlayer } from './PlayerContext';
 import { useMedia } from './MediaContext';
@@ -18,6 +20,8 @@ import * as ambient from '../audio/ambient';
 import { soundscapeById, categoryById } from '../data/sleep';
 
 const SHARE_KEY = 'boa.hub.shareStatus';
+const CHAT_THEME_KEY = 'boa:chat-theme:v1:';
+const RINGTONE_KEY = 'boa:ringtone:v1:';
 // Status writes wait a moment, so flicking between stations is one update.
 const STATUS_DEBOUNCE_MS = 1500;
 // While something plays the status is re-stamped this often, so a phone
@@ -438,6 +442,78 @@ export function HubProvider({ children }) {
     [userId],
   );
 
+  // Chat Appearance: your bubbles' colour and glass, kept on your profile so
+  // every phone you sign in on shows it. This phone remembers it too, so the
+  // thread opens in your colour before the database answers.
+  const [chatTheme, setChatThemeState] = useState(null);
+  useEffect(() => {
+    if (!supabase || stage !== 'ready' || !userId) return undefined;
+    let alive = true;
+    const key = CHAT_THEME_KEY + userId;
+    AsyncStorage.getItem(key)
+      .then((raw) => alive && raw && setChatThemeState((t) => t ?? cleanTheme(JSON.parse(raw))))
+      .catch(() => {});
+    hub
+      .getChatTheme(userId)
+      .then((theme) => {
+        if (!alive || theme === undefined) return;
+        const clean = cleanTheme(theme);
+        setChatThemeState(clean);
+        AsyncStorage.setItem(key, JSON.stringify(clean)).catch(() => {});
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [stage, userId]);
+  const setChatTheme = useCallback(
+    async (theme) => {
+      const clean = cleanTheme(theme);
+      await hub.setChatTheme(userId, clean);
+      setChatThemeState(clean);
+      AsyncStorage.setItem(CHAT_THEME_KEY + userId, JSON.stringify(clean)).catch(() => {});
+    },
+    [userId],
+  );
+
+  // Call ringtone: on your profile like Chat Appearance, and remembered on
+  // this phone so an incoming call rings the right one even offline.
+  const [ringtone, setRingtoneState] = useState(DEFAULT_RINGTONE);
+  useEffect(() => {
+    if (!supabase || stage !== 'ready' || !userId) return undefined;
+    let alive = true;
+    const key = RINGTONE_KEY + userId;
+    AsyncStorage.getItem(key)
+      .then((id) => alive && id && setRingtoneState(ringtoneById(id).id))
+      .catch(() => {});
+    hub
+      .getRingtone(userId)
+      .then((id) => {
+        if (!alive || id === undefined) return;
+        setRingtoneState(ringtoneById(id).id);
+        AsyncStorage.setItem(key, ringtoneById(id).id).catch(() => {});
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [stage, userId]);
+  const setRingtone = useCallback(
+    async (id) => {
+      const next = ringtoneById(id).id;
+      const before = ringtone;
+      setRingtoneState(next);
+      try {
+        await hub.setRingtone(userId, next);
+        AsyncStorage.setItem(RINGTONE_KEY + userId, next).catch(() => {});
+      } catch (err) {
+        setRingtoneState(before);
+        throw err;
+      }
+    },
+    [userId, ringtone],
+  );
+
   // Admin: asked of the database whenever who's signed in changes.
   const [isAdmin, setIsAdmin] = useState(false);
   useEffect(() => {
@@ -475,13 +551,17 @@ export function HubProvider({ children }) {
       chatSound,
       setChatSound,
       disappearing,
+      chatTheme,
+      setChatTheme,
+      ringtone,
+      setRingtone,
       setDisappearing,
       dayOneNews,
       clearDayOneNews,
       heartsUnseen,
       seeHearts,
     }),
-    [heartsUnseen, seeHearts, dayOneNews, clearDayOneNews, chatSound, setChatSound, disappearing, setDisappearing, isAdmin, stage, session, userId, profile, online, blocked, shareStatus, setShareStatus, loadProfile, saveProfile, finishOnboarding, block, unblock, signOut, deleteAccount],
+    [heartsUnseen, seeHearts, dayOneNews, clearDayOneNews, chatSound, setChatSound, disappearing, setDisappearing, chatTheme, setChatTheme, ringtone, setRingtone, isAdmin, stage, session, userId, profile, online, blocked, shareStatus, setShareStatus, loadProfile, saveProfile, finishOnboarding, block, unblock, signOut, deleteAccount],
   );
   return <HubContext.Provider value={value}>{children}</HubContext.Provider>;
 }

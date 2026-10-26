@@ -352,5 +352,11 @@ jest.mock('react-native-agora', () => {
     },
   );
   const RtcSurfaceView = (props) => <View {...props} />;
-  return { __engine: engine, createAgoraRtcEngine: jest.fn(() => engine), RtcSurfaceView };
+  return { __engine: engine, createAgoraRtcEngine: jest.fn(() => engine), RtcSurfaceView, RtcTextureView: RtcSurfaceView };
 });
+
+// Privacy Mode's screenshot block: records whether screenshots were blocked or allowed.
+jest.mock('expo-screen-capture', () => ({
+  preventScreenCaptureAsync: jest.fn(async () => {}),
+  allowScreenCaptureAsync: jest.fn(async () => {}),
+}));

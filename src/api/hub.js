@@ -680,6 +680,38 @@ export async function getDisappearing(userId) {
   return !error && data?.disappearing_messages === true;
 }
 
+/**
+ * Your Chat Appearance (src/chat/bubbleTheme.js): null for the vibe's own
+ * bubbles, undefined if it couldn't be read (offline, or the database
+ * doesn't have the column yet) so the phone keeps what it last knew.
+ */
+export async function getChatTheme(userId) {
+  const { data, error } = await need().from('profiles').select('chat_theme').eq('id', userId).maybeSingle();
+  return error ? undefined : data?.chat_theme ?? null;
+}
+
+export async function setChatTheme(userId, theme) {
+  const { error } = await need().from('profiles').update({ chat_theme: theme }).eq('id', userId);
+  if (error) {
+    if (error.code === 'PGRST204' || error.code === '42703') throw new Error("The Hub's database isn't up to date yet, so this can't be saved.");
+    throw new Error(error.message || "Couldn't save");
+  }
+}
+
+/** Your call ringtone's id (src/calls/ringtone.js), or undefined if it couldn't be read. */
+export async function getRingtone(userId) {
+  const { data, error } = await need().from('profiles').select('ringtone_preference').eq('id', userId).maybeSingle();
+  return error ? undefined : data?.ringtone_preference ?? undefined;
+}
+
+export async function setRingtone(userId, id) {
+  const { error } = await need().from('profiles').update({ ringtone_preference: id }).eq('id', userId);
+  if (error) {
+    if (error.code === 'PGRST204' || error.code === '42703') throw new Error("The Hub's database isn't up to date yet, so this can't be saved.");
+    throw new Error(error.message || "Couldn't save");
+  }
+}
+
 export async function setDisappearing(userId, on) {
   const { error } = await need().from('profiles').update({ disappearing_messages: !!on }).eq('id', userId);
   if (error) {

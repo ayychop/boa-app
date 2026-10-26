@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Keyboard, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -42,6 +42,7 @@ import ThreadHeader from '../../components/chat/ThreadHeader';
 import VibePicker from '../../components/chat/VibePicker';
 import BottomSheet from '../../components/BottomSheet';
 import useChatVibe, { vibeById } from '../../chat/vibes';
+import { withChatTheme } from '../../chat/bubbleTheme';
 import { MediaTile, MediaViewer, VoiceNote } from '../../components/chat/media';
 import { SendMediaSheet, ViewOnceTile, ViewOnceViewer } from '../../components/chat/ViewOnce';
 import { Button, PulseDot } from '../../components/ui';
@@ -180,7 +181,7 @@ function HeaderStatus({ person, online, typing, accent }) {
 function Thread({ navigation, route }) {
   const insets = useSafeAreaInsets();
   const id = route.params?.id;
-  const { userId, isOnline, blocked, unblock } = useHub();
+  const { userId, isOnline, blocked, unblock, chatTheme } = useHub();
   const calls = useCallMaybe();
   const [conv, setConv] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -202,7 +203,9 @@ function Thread({ navigation, route }) {
   // list keeps their heights clear at its ends.
   const [headerH, setHeaderH] = useState(insets.top + 60);
   const [composerH, setComposerH] = useState(64);
-  const { vibe, setVibe } = useChatVibe();
+  const { vibe: chatVibe, setVibe } = useChatVibe();
+  // Your own bubbles in your Chat Appearance colour, if you've chosen one.
+  const vibe = useMemo(() => withChatTheme(chatVibe, chatTheme), [chatVibe, chatTheme]);
   // What the glass blurs on Android: the backdrop and the messages.
   const behind = useRef(null);
   const alive = useRef(true);

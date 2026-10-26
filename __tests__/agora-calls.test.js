@@ -31,9 +31,9 @@ const { fetchToken } = require('../src/calls/token');
 const { __engine: engine, createAgoraRtcEngine } = require('react-native-agora');
 const { PremiumProvider } = require('../src/context/PremiumContext');
 const { CallProvider, useCall } = require('../src/context/CallContext');
-const { ENCODER, CAPTURE, DENOISER, LOW_LIGHT, HD, PREVIEW, STABILIZATION_OFF } = require('../src/calls/quality');
+const { ENCODER, CAPTURE, DENOISER, LOW_LIGHT, HD, PREVIEW, STABILIZATION_OFF, AUDIO, AUDIO_PROCESSING, VIDEO_SCENARIO } = require('../src/calls/quality');
 const { createAudioPlayer } = require('expo-audio');
-const { RINGTONE } = require('../src/calls/ringtone');
+const { ringtoneById } = require('../src/calls/ringtone');
 
 const ME = { id: 'user-me', username: 'ama', display_name: 'Ama Mensah', avatar_url: null };
 const KOFI = { id: 'user-kofi', username: 'kofi', display_name: 'Kofi Boateng', avatar_url: null };
@@ -62,6 +62,7 @@ describe('HD in any light', () => {
     expect(HD).toEqual({ width: 1280, height: 720, fps: 30 });
     expect(ENCODER.dimensions).toEqual({ width: 1280, height: 720 });
     expect(ENCODER.frameRate).toBe(30);
+    expect(ENCODER.bitrate).toBe(2000);
     expect(ENCODER.degradationPreference).toBe(0); // MaintainQuality
     expect(ENCODER.advanceOptions.compressionPreference).toBe(1); // PreferQuality
     expect(CAPTURE.cameraDirection).toBe(1); // front
@@ -72,6 +73,12 @@ describe('HD in any light', () => {
     expect(PREVIEW.frameRate).toBe(15);
     expect(CAPTURE.format).toBeUndefined();
     expect(STABILIZATION_OFF).toBe(-1); // CameraStabilizationModeOff
+  });
+
+  test('two-person tuning: the 1v1 video scenario, and echo-proof audio on the speaker', () => {
+    expect(VIDEO_SCENARIO).toBe(2); // ApplicationScenario1v1
+    expect(AUDIO.scenario).toBe(5); // AudioScenarioChatroom
+    expect(AUDIO_PROCESSING).toEqual(['{"che.audio.aec.enable":true}', '{"che.audio.ans.enable":true}', '{"che.audio.agc.enable":true}']);
   });
 
   test('low light and denoising are on, auto, high quality', () => {
@@ -103,13 +110,20 @@ describe('Agora video calls', () => {
     // Agora's rule: denoising before high-quality low light.
     expect(engine.setVideoDenoiserOptions.mock.invocationCallOrder[0]).toBeLessThan(engine.setLowlightEnhanceOptions.mock.invocationCallOrder[0]);
     expect(engine.setCameraAutoExposureFaceModeEnabled).toHaveBeenCalledWith(true);
-    expect(engine.setBeautyEffectOptions).toHaveBeenCalledWith(true, expect.objectContaining({ lighteningLevel: 0 }));
+    expect(engine.setBeautyEffectOptions).toHaveBeenCalledWith(true, expect.objectContaining({ lighteningContrastLevel: 2, smoothnessLevel: 0.25 }));
+    expect(engine.setColorEnhanceOptions).toHaveBeenCalledWith(true, expect.objectContaining({ skinProtectLevel: 1 }));
+    // Echo cancellation, noise suppression and gain control; one stream; 1v1 tuning.
+    for (const p of AUDIO_PROCESSING) expect(engine.setParameters).toHaveBeenCalledWith(p);
+    expect(engine.setAINSMode).toHaveBeenCalledWith(true, 0);
+    expect(engine.setVideoScenario).toHaveBeenCalledWith(2);
+    expect(engine.enableDualStreamMode).toHaveBeenCalledWith(false);
     expect(engine.startPreview).toHaveBeenCalled();
     expect(engine.joinChannel).not.toHaveBeenCalled();
     expect(screen.getByTestId('call-local-video')).toBeOnTheScreen();
 
-    // They answer: join the call's channel.
+    // They answer: join the call's channel, with the sound processing already on.
     await act(async () => mockSignal('accept', { callId }));
+    expect(engine.setParameters.mock.invocationCallOrder[0]).toBeLessThan(engine.joinChannel.mock.invocationCallOrder.at(-1));
     expect(engine.joinChannel).toHaveBeenCalledWith('tok-1', callId, 4242, expect.objectContaining({ publishCameraTrack: true, publishMicrophoneTrack: true }));
     expect(screen.getByTestId('call-video-note')).toHaveTextContent('Connecting HD video');
     engine.setEnableSpeakerphone.mockClear();
@@ -125,6 +139,7 @@ describe('Agora video calls', () => {
       handler().onRemoteVideoStateChanged({}, 777, 2, 0, 0);
     });
     expect(screen.getByTestId('call-remote-video').props.canvas).toEqual(expect.objectContaining({ uid: 777 }));
+    expect(screen.getByTestId('call-name')).toHaveTextContent('Kofi Boateng');
     expect(screen.queryByTestId('call-video-note')).toBeNull();
 
     // Mute and camera off reach the real tracks.
@@ -141,6 +156,15 @@ describe('Agora video calls', () => {
     expect(engine.muteLocalAudioStream).toHaveBeenLastCalledWith(false);
     await user.press(screen.getByTestId('call-speaker'));
     expect(engine.setEnableSpeakerphone).toHaveBeenLastCalledWith(false);
+
+    // Flip to the back camera and back, with a tap you can feel.
+    const tap = jest.spyOn(require('../src/utils/haptics').haptics, 'tap');
+    await user.press(screen.getByTestId('call-flip'));
+    expect(engine.switchCamera).toHaveBeenCalledTimes(1);
+    expect(tap).toHaveBeenCalledTimes(1);
+    tap.mockRestore();
+    expect(screen.getByTestId('call-controls')).toBeOnTheScreen();
+    expect(screen.getByTestId('call-self-view')).toBeOnTheScreen();
 
     // Filters off reach the camera too.
     await user.press(screen.getByTestId('call-filters-button'));
@@ -177,6 +201,72 @@ describe('Agora video calls', () => {
   });
 });
 
+describe('Privacy Mode', () => {
+  const ScreenCapture = require('expo-screen-capture');
+  const { decodeMessage, encodePrivacy } = require('../src/calls/privacy');
+
+  test('the message is tiny JSON both ways, and anything else is ignored', () => {
+    expect(decodeMessage(encodePrivacy(true))).toEqual({ type: 'privacy', active: true });
+    expect(decodeMessage(Uint8Array.from('not json', (c) => c.charCodeAt(0)))).toBeNull();
+  });
+
+  test('blocks screenshots, tells them over the data stream, shows both sides, and resets for the next call', async () => {
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    ScreenCapture.preventScreenCaptureAsync.mockClear();
+    ScreenCapture.allowScreenCaptureAsync.mockClear();
+    await mount();
+    await act(async () => mockSignal('ring', { callId: 'd1c3e1f0-0000-4000-8000-000000000001', from: { id: 'user-kofi', name: 'Kofi Boateng' } }));
+    await user.press(screen.getByTestId('call-accept'));
+    await act(async () => {});
+    engine.sendStreamMessage.mockClear();
+    await act(async () => handler().onJoinChannelSuccess({}, 10));
+    expect(engine.createDataStream).toHaveBeenCalledWith({ syncWithAudio: false, ordered: true });
+    expect(engine.sendStreamMessage).not.toHaveBeenCalled();
+
+    // On: screenshots blocked here, a gold shield on your picture, and they're told.
+    await user.press(screen.getByTestId('call-privacy'));
+    expect(ScreenCapture.preventScreenCaptureAsync).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('call-privacy-on')).toBeOnTheScreen();
+    expect(screen.getByLabelText('Privacy Mode on')).toBeOnTheScreen();
+    const [streamId, bytes, length] = engine.sendStreamMessage.mock.calls.at(-1);
+    expect(streamId).toBe(0);
+    expect(length).toBe(bytes.length);
+    expect(decodeMessage(bytes)).toEqual({ type: 'privacy', active: true });
+
+    // Someone joining after still hears it.
+    await act(async () => handler().onUserJoined({}, 777, 0));
+    expect(decodeMessage(engine.sendStreamMessage.mock.calls.at(-1)[1])).toEqual({ type: 'privacy', active: true });
+
+    // Off again.
+    await user.press(screen.getByTestId('call-privacy'));
+    expect(ScreenCapture.allowScreenCaptureAsync).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId('call-privacy-on')).toBeNull();
+    expect(decodeMessage(engine.sendStreamMessage.mock.calls.at(-1)[1])).toEqual({ type: 'privacy', active: false });
+
+    // They turn theirs on: the pill says so, and goes when they turn it off.
+    await act(async () => handler().onStreamMessage({}, 777, 1, encodePrivacy(true), 30, 0));
+    expect(screen.getByTestId('call-remote-privacy')).toHaveTextContent('🔒 Kofi Boateng has disabled screenshots.');
+    await act(async () => handler().onStreamMessage({}, 777, 1, encodePrivacy(false), 31, 0));
+    expect(screen.queryByTestId('call-remote-privacy')).toBeNull();
+
+    // On at hang up: screenshots come straight back, and the next call starts with everyone's off.
+    await act(async () => handler().onStreamMessage({}, 777, 1, encodePrivacy(true), 30, 0));
+    await user.press(screen.getByTestId('call-privacy'));
+    await user.press(screen.getByTestId('call-end'));
+    expect(ScreenCapture.allowScreenCaptureAsync).toHaveBeenCalledTimes(2);
+    await act(async () => jest.advanceTimersByTime(2000));
+    await act(async () => mockSignal('ring', { callId: 'd1c3e1f0-0000-4000-8000-000000000002', from: { id: 'user-kofi', name: 'Kofi Boateng' } }));
+    await user.press(screen.getByTestId('call-accept'));
+    await act(async () => {});
+    await act(async () => handler().onJoinChannelSuccess({}, 10));
+    expect(screen.queryByTestId('call-remote-privacy')).toBeNull();
+    expect(screen.queryByTestId('call-privacy-on')).toBeNull();
+    expect(screen.getByLabelText('Privacy Mode off')).toBeOnTheScreen();
+    await user.press(screen.getByTestId('call-end'));
+    await act(async () => jest.advanceTimersByTime(2000));
+  });
+});
+
 describe('the ringtone', () => {
   test('rings out loud and loops while an incoming call rings; answering stops it', async () => {
     const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
@@ -184,11 +274,26 @@ describe('the ringtone', () => {
     createAudioPlayer.mockClear();
     await act(async () => mockSignal('ring', { callId: 'c1c3e1f0-0000-4000-8000-000000000001', from: { id: 'user-kofi', name: 'Kofi Boateng' } }));
     const tone = createAudioPlayer.mock.results.at(-1).value;
-    expect(createAudioPlayer).toHaveBeenCalledWith(RINGTONE);
+    expect(createAudioPlayer).toHaveBeenCalledWith(ringtoneById('hiphop').asset);
     expect(tone.loop).toBe(true);
     expect(tone.play).toHaveBeenCalled();
     await user.press(screen.getByTestId('call-accept'));
     expect(tone.pause).toHaveBeenCalled();
+    expect(tone.removed).toBe(true);
+    await user.press(screen.getByTestId('call-end'));
+    await act(async () => jest.advanceTimersByTime(2000));
+  });
+
+  test("plays the ringtone you chose (Bashment here), and answering stops it", async () => {
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    mockHub = { ...mockHub, ringtone: 'bashment' };
+    await mount();
+    createAudioPlayer.mockClear();
+    await act(async () => mockSignal('ring', { callId: 'c1c3e1f0-0000-4000-8000-000000000009', from: { id: 'user-kofi', name: 'Kofi Boateng' } }));
+    const tone = createAudioPlayer.mock.results.at(-1).value;
+    expect(createAudioPlayer).toHaveBeenCalledWith(ringtoneById('bashment').asset);
+    expect(tone.loop).toBe(true);
+    await user.press(screen.getByTestId('call-accept'));
     expect(tone.removed).toBe(true);
     await user.press(screen.getByTestId('call-end'));
     await act(async () => jest.advanceTimersByTime(2000));

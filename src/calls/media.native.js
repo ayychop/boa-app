@@ -1,8 +1,9 @@
 import { Alert, Linking, PermissionsAndroid, Platform } from 'react-native';
-import { createAgoraRtcEngine, RtcSurfaceView } from 'react-native-agora';
+import { createAgoraRtcEngine, RtcSurfaceView, RtcTextureView } from 'react-native-agora';
 import { fetchToken } from './token';
 import { toAgora } from './beauty';
-import { AUDIO, CAPTURE, DENOISER, ENCODER, LOW_LIGHT, PREVIEW, STABILIZATION_OFF } from './quality';
+import { decodeMessage, encodePrivacy } from './privacy';
+import { AINS_BALANCED, AUDIO, AUDIO_PROCESSING, CAPTURE, DENOISER, ENCODER, LOW_LIGHT, PREVIEW, STABILIZATION_OFF, VIDEO_SCENARIO } from './quality';
 
 // The picture and sound of a BOA video call, over Agora. Ringing stays on
 // Supabase Realtime (src/calls/signaling.js); once both phones agree, each
@@ -18,7 +19,7 @@ export const available = true;
 
 let engine = null;
 let engineAppId = null;
-let session = null; // { channel, token, uid, camera, mic, joined, live, speaker, handler }
+let session = null; // { channel, token, uid, camera, mic, joined, live, speaker, privacy, streamId, handler }
 
 const CHANNEL_COMMUNICATION = 0;
 const ROLE_BROADCASTER = 1;
@@ -74,6 +75,11 @@ function setup(appId) {
   engine.enableAudio();
   engine.enableVideo();
   engine.setAudioProfile(AUDIO.profile, AUDIO.scenario);
+  // No echo: AEC, noise suppression and gain control, all on before any join.
+  for (const p of AUDIO_PROCESSING) engine.setParameters(p);
+  engine.setAINSMode(true, AINS_BALANCED);
+  engine.setVideoScenario(VIDEO_SCENARIO);
+  engine.enableDualStreamMode(false);
   engine.setCameraCapturerConfiguration(CAPTURE);
   // Stabilization holds back the first frames on Android; calls are handheld at arm's length anyway.
   engine.setCameraStabilizationMode?.(STABILIZATION_OFF);
@@ -143,6 +149,9 @@ export async function join(channel, { beauty, controls, onEvent }) {
       if (session !== s) return;
       s.live = true;
       engine.setVideoEncoderConfiguration(ENCODER);
+      // One small, reliable data stream for call messages (Privacy Mode).
+      s.streamId = engine.createDataStream({ syncWithAudio: false, ordered: true });
+      if (s.privacy) sendPrivacy(s);
       // Android only routes to the speaker once the channel is joined; set before that, it's ignored.
       const code = engine.setEnableSpeakerphone(s.speaker !== false);
       console.log('[call] speakerphone', { on: s.speaker !== false, code });
@@ -151,8 +160,14 @@ export async function join(channel, { beauty, controls, onEvent }) {
     onUserJoined: (_c, remoteUid) => {
       console.log('[call] other person joined', { channel, remoteUid });
       onEvent({ remoteUid });
+      // Whoever joins second still hears that Privacy Mode is on.
+      if (s.privacy) sendPrivacy(s);
     },
-    onUserOffline: (_c, remoteUid) => onEvent({ remoteUid: null, remoteVideo: false, gone: remoteUid }),
+    onUserOffline: (_c, remoteUid) => onEvent({ remoteUid: null, remoteVideo: false, remotePrivacy: false, gone: remoteUid }),
+    onStreamMessage: (_c, remoteUid, _id, data) => {
+      const msg = decodeMessage(data);
+      if (msg?.type === 'privacy') onEvent({ remotePrivacy: !!msg.active });
+    },
     onRemoteVideoStateChanged: (_c, remoteUid, state) =>
       onEvent({ remoteUid, remoteVideo: state !== REMOTE_STOPPED && state !== REMOTE_FAILED }),
     onConnectionStateChanged: (_c, state, reason) => {
@@ -198,6 +213,21 @@ export async function join(channel, { beauty, controls, onEvent }) {
   s.speaker = controls?.speaker !== false;
   setMuted(!!controls?.muted);
   setCameraOff(!!controls?.cameraOff);
+  s.privacy = !!controls?.privacy;
+}
+
+function sendPrivacy(s) {
+  if (s.streamId == null || s.streamId < 0) return;
+  const bytes = encodePrivacy(s.privacy);
+  const code = engine.sendStreamMessage(s.streamId, bytes, bytes.length);
+  if (code < 0) console.error('[call] privacy message not sent', { code });
+}
+
+/** Privacy Mode: tells the other person, now if the call is live, or once it is. */
+export function setPrivacy(on) {
+  if (!session) return;
+  session.privacy = on;
+  if (session.live) sendPrivacy(session);
 }
 
 /** Leaves the call and lets go of the camera and microphone. */
@@ -223,6 +253,12 @@ export function setCameraOff(off) {
   if (!off && session.joined) engine.updateChannelMediaOptions({ publishCameraTrack: true });
 }
 
+/** Front to back camera and back again. */
+export function switchCamera() {
+  if (!engine || !session?.camera) return;
+  engine.switchCamera();
+}
+
 /** Remembered until the join succeeds, then applied (see onJoinChannelSuccess). */
 export function setSpeaker(on) {
   if (!session) return;
@@ -230,9 +266,13 @@ export function setSpeaker(on) {
   if (session.live) engine?.setEnableSpeakerphone(on);
 }
 
+// On Android your picture is a TextureView: unlike a SurfaceView it is
+// clipped by rounded corners and follows the window as you drag it.
+const SelfView = Platform.OS === 'android' ? RtcTextureView : RtcSurfaceView;
+
 /** You, from your camera. */
 export function LocalVideo({ style }) {
-  return <RtcSurfaceView canvas={{ uid: 0, renderMode: RENDER_HIDDEN }} zOrderMediaOverlay style={style} testID="call-local-video" />;
+  return <SelfView canvas={{ uid: 0, renderMode: RENDER_HIDDEN }} zOrderMediaOverlay style={style} testID="call-local-video" />;
 }
 
 /** The other person. */
