@@ -1,5 +1,6 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, StyleSheet, Text, View } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Animated, { FadeInDown, ZoomIn } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
@@ -17,6 +18,8 @@ const PremiumContext = createContext(null);
 
 export const PAYWALL_PITCH = `Upgrade to BOA Premium for unlimited HD Video Calls, Hi-Fi Audio, and exclusive filters. ${PRICE}/month.`;
 const NO_ACCESS = { status: 'expired', hasAccess: false, isAdmin: false, trialEndsAt: null };
+const cacheKey = (userId) => `boa.premium.v1:${userId}`;
+
 
 /** "1 day 4 hrs left" / "3 hrs left" / "40 min left" until a trial ends. */
 export function trialLeft(endsAt, now = Date.now()) {
@@ -39,18 +42,49 @@ export function trialLeft(endsAt, now = Date.now()) {
  * access and shows the paywall to everyone else.
  */
 export function PremiumProvider({ children }) {
+  // Admins (the database's list: a confirmed sign-in email in
+  // public.admin_users) skip every paywall.
   const { userId, isAdmin } = useHub();
   const [access, setAccess] = useState(NO_ACCESS);
+  // Whether the database has answered for this account yet. Until then a
+  // Premium action waits for the answer rather than showing the paywall,
+  // so an admin opening the app never sees it, even for a moment.
+  const [checked, setChecked] = useState(false);
   const [screenOpen, setScreenOpen] = useState(false);
   const [paywall, setPaywall] = useState({ open: false, message: '' });
+  const pending = useRef(null);
 
   const refresh = useCallback(async () => {
-    if (!userId) return setAccess(NO_ACCESS);
-    try {
-      setAccess(await hub.getPremiumAccess());
-    } catch {
+    if (!userId) {
       setAccess(NO_ACCESS);
+      setChecked(true);
+      return;
     }
+    // Asked together: the admin check works even before the Premium
+    // migration has been run.
+    const [answer, admin] = await Promise.all([
+      hub.getPremiumAccess().catch(() => NO_ACCESS),
+      hub.amIAdmin().catch(() => false),
+    ]);
+    const next = { ...answer, isAdmin: answer.isAdmin || admin, hasAccess: answer.hasAccess || admin };
+    setAccess(next);
+    setChecked(true);
+    AsyncStorage.setItem(cacheKey(userId), JSON.stringify(next)).catch(() => {});
+  }, [userId]);
+
+  // The last answer for this account, so the app opens already unlocked.
+  useEffect(() => {
+    let alive = true;
+    setChecked(false);
+    setAccess(NO_ACCESS);
+    if (userId) {
+      AsyncStorage.getItem(cacheKey(userId))
+        .then((raw) => alive && raw && setAccess((a) => (a === NO_ACCESS ? { ...NO_ACCESS, ...JSON.parse(raw) } : a)))
+        .catch(() => {});
+    }
+    return () => {
+      alive = false;
+    };
   }, [userId]);
 
   useEffect(() => {
@@ -78,14 +112,25 @@ export function PremiumProvider({ children }) {
   const requirePremium = useCallback(
     (action, message) => {
       if (hasPremium) action();
+      else if (!checked) pending.current = { action, message };
       else setPaywall({ open: true, message: message ?? '' });
     },
-    [hasPremium],
+    [hasPremium, checked],
   );
 
+  // A Premium action tapped while the answer was on its way: run it, or
+  // show the paywall, once it's in.
+  useEffect(() => {
+    const p = pending.current;
+    if (!p || (!checked && !hasPremium)) return;
+    pending.current = null;
+    if (hasPremium) p.action();
+    else setPaywall({ open: true, message: p.message ?? '' });
+  }, [checked, hasPremium]);
+
   const value = useMemo(
-    () => ({ access, hasPremium, isAdmin: isAdmin || access.isAdmin, openPremium, requirePremium, refreshPremium: refresh }),
-    [access, hasPremium, isAdmin, openPremium, requirePremium, refresh],
+    () => ({ access, checked, hasPremium, isAdmin: isAdmin || access.isAdmin, openPremium, requirePremium, refreshPremium: refresh }),
+    [access, checked, hasPremium, isAdmin, openPremium, requirePremium, refresh],
   );
 
   const trialOver = !!userId && access.status === 'expired' && !hasPremium;

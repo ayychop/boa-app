@@ -10,6 +10,7 @@ jest.mock('../src/context/HubContext', () => ({ useHub: () => mockHub }));
 jest.mock('../src/api/hub', () => ({
   ...jest.requireActual('../src/api/hub'),
   getPremiumAccess: jest.fn(),
+  amIAdmin: jest.fn(async () => false),
   uploadBlockEvidence: jest.fn(async () => 'https://x.supabase.co/storage/v1/object/public/block-evidence/user-me/block-1.jpg'),
 }));
 // Call ringing: the test plays the other phone.
@@ -41,6 +42,7 @@ const SQL = fs.readFileSync(path.join(__dirname, '../supabase/migrations/2026102
 beforeEach(() => {
   mockHub = { userId: 'user-me', profile: ME, isAdmin: false, blocked: new Set(), block: jest.fn(async () => {}) };
   hub.getPremiumAccess.mockResolvedValue({ status: 'trial', hasAccess: true, isAdmin: false, trialEndsAt: new Date(Date.now() + 47 * 3600e3).toISOString() });
+  hub.amIAdmin.mockResolvedValue(false);
 });
 
 // Shows what the provider says about Premium.
@@ -273,3 +275,70 @@ describe('push notifications', () => {
     expect(fs.existsSync(path.join(__dirname, '../assets/notification-icon.png'))).toBe(true);
   });
 });
+
+describe('the admin account skips every paywall', () => {
+  const { CallProvider, useCall } = require('../src/context/CallContext');
+  const EqualizerSheet = require('../src/components/radio/EqualizerSheet').default;
+  function Dial() {
+    const { startCall } = useCall();
+    return <Text onPress={() => startCall(KOFI)}>Call Kofi</Text>;
+  }
+  const mount = () =>
+    render(
+      <PremiumProvider>
+        <CallProvider>
+          <Dial />
+          <EqualizerSheet open onClose={() => {}} />
+        </CallProvider>
+      </PremiumProvider>,
+    );
+
+  beforeEach(() => {
+    // Trial long over, and even with the Premium migration not yet run:
+    // the database's admin check alone unlocks everything.
+    hub.getPremiumAccess.mockRejectedValue(new Error('function premium_access() does not exist'));
+    hub.amIAdmin.mockResolvedValue(true);
+    signal.send.mockClear();
+    return require('@react-native-async-storage/async-storage').clear();
+  });
+
+  test('Hi-Fi, video calls and beauty filters open straight away, with no paywall', async () => {
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    await mount();
+    expect(screen.queryByTestId('eq-locked')).toBeNull();
+    await user.press(screen.getByText('Call Kofi'));
+    expect(screen.queryByTestId('premium-paywall')).toBeNull();
+    expect(signal.send).toHaveBeenCalledWith('user-kofi', 'ring', expect.anything());
+    const { callId } = signal.send.mock.calls.at(-1)[2];
+    await act(async () => mockSignal('accept', { callId }));
+    await user.press(screen.getByTestId('call-filters-button'));
+    expect(screen.getByTestId('call-filters')).toBeOnTheScreen();
+    expect(screen.queryByTestId('premium-paywall')).toBeNull();
+  });
+
+  test('tapping before the database has answered waits for it instead of flashing the paywall', async () => {
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    let answer;
+    hub.amIAdmin.mockReturnValue(new Promise((r) => (answer = r)));
+    await mount();
+    expect(screen.queryByTestId('eq-locked')).toBeNull();
+    await user.press(screen.getByText('Call Kofi'));
+    expect(screen.queryByTestId('premium-paywall')).toBeNull();
+    expect(signal.send).not.toHaveBeenCalled();
+    await act(async () => answer(true));
+    expect(signal.send).toHaveBeenCalledWith('user-kofi', 'ring', expect.anything());
+    expect(screen.queryByTestId('premium-paywall')).toBeNull();
+  });
+
+  test('the same taps from a non-admin with an expired trial do show the paywall', async () => {
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    hub.amIAdmin.mockResolvedValue(false);
+    hub.getPremiumAccess.mockResolvedValue({ status: 'expired', hasAccess: false, isAdmin: false, trialEndsAt: null });
+    await mount();
+    expect(screen.getByTestId('eq-locked')).toBeOnTheScreen();
+    await user.press(screen.getByText('Call Kofi'));
+    expect(signal.send).not.toHaveBeenCalled();
+    expect(screen.getByTestId('premium-paywall')).toBeOnTheScreen();
+  });
+});
+

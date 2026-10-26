@@ -61,9 +61,11 @@ function Band({ label, hint, value, onChange, locked, testID }) {
  * "Unlock with BOA Premium".
  */
 export default function EqualizerSheet({ open, onClose }) {
-  const { hasPremium, requirePremium } = usePremium();
+  const { hasPremium, checked, requirePremium } = usePremium();
   const { settings, active, supported } = useEq();
-  const locked = !hasPremium;
+  // Never shown locked while the answer is still coming (an admin opening
+  // the app straight onto Radio would otherwise see it flash).
+  const locked = checked && !hasPremium;
   const preset = eq.presetOf(settings);
 
   return (
