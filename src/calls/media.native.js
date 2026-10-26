@@ -105,6 +105,7 @@ export async function prepare(channel, beauty) {
   session = s;
   s.ready = (async () => {
     const [pass, perm] = await Promise.all([fetchToken(channel), permissions()]);
+    console.log('[call] token ok', { channel, uid: pass.uid, appId: pass.appId, camera: perm.camera, mic: perm.mic });
     if (session !== s) return false;
     Object.assign(s, { token: pass.token, uid: pass.uid, camera: perm.camera, mic: perm.mic });
     setup(pass.appId);
@@ -126,23 +127,31 @@ export async function join(channel, { beauty, controls, onEvent }) {
   try {
     ok = await prepare(channel, beauty);
   } catch (err) {
+    console.error('[call] token failed', channel, err?.message ?? err);
     if (session?.channel === channel) onEvent({ status: 'failed', error: err.message });
     return;
   }
   const s = session;
   if (!ok || s?.channel !== channel || s.joined) return;
   s.handler = {
-    onJoinChannelSuccess: () => onEvent({ status: 'connected' }),
-    onUserJoined: (_c, remoteUid) => onEvent({ remoteUid }),
+    onJoinChannelSuccess: (conn) => {
+      console.log('[call] joined', { channel: conn?.channelId, uid: conn?.localUid });
+      onEvent({ status: 'connected' });
+    },
+    onUserJoined: (_c, remoteUid) => {
+      console.log('[call] other person joined', { channel, remoteUid });
+      onEvent({ remoteUid });
+    },
     onUserOffline: (_c, remoteUid) => onEvent({ remoteUid: null, remoteVideo: false, gone: remoteUid }),
     onRemoteVideoStateChanged: (_c, remoteUid, state) =>
       onEvent({ remoteUid, remoteVideo: state !== REMOTE_STOPPED && state !== REMOTE_FAILED }),
     onConnectionStateChanged: (_c, state, reason) => {
+      console.log('[call] connection state', { state, reason });
       if (state === CONNECTION_RECONNECTING) onEvent({ status: 'reconnecting' });
       else if (state === CONNECTION_FAILED) onEvent({ status: 'failed', error: `connection ${reason}` });
       else if (state === CONNECTION_CONNECTED) onEvent({ status: 'connected' });
     },
-    onError: (code, msg) => console.warn('[call] agora error', code, msg),
+    onError: (code, msg) => console.error('Agora Error:', { code, msg }),
     onTokenPrivilegeWillExpire: async () => {
       try {
         const pass = await fetchToken(channel);
@@ -153,6 +162,8 @@ export async function join(channel, { beauty, controls, onEvent }) {
     },
   };
   engine.registerEventHandler(s.handler);
+  // The token was signed for exactly this channel and uid (supabase/functions/agora-token).
+  console.log('[call] joining', { channel, uid: s.uid });
   const code = engine.joinChannel(s.token, channel, s.uid, {
     channelProfile: CHANNEL_COMMUNICATION,
     clientRoleType: ROLE_BROADCASTER,
@@ -162,6 +173,7 @@ export async function join(channel, { beauty, controls, onEvent }) {
     autoSubscribeVideo: true,
   });
   if (code < 0) {
+    console.error('[call] joinChannel refused', { channel, uid: s.uid, code });
     // Say so on the call screen, with Agora's code, instead of a black screen.
     engine.unregisterEventHandler(s.handler);
     s.handler = null;

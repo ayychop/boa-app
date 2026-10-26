@@ -31,7 +31,8 @@ export function listen(myId, onSignal) {
   authed().then(() => {
     if (stopped) return;
     channel.subscribe((status, err) => {
-      if (status === 'CHANNEL_ERROR') console.warn('[call] inbox refused', err?.message ?? err);
+      console.log('[call] inbox', status, err?.message ?? '');
+      if (status === 'CHANNEL_ERROR') console.error('[call] inbox refused', err?.message ?? err);
     });
   });
   return () => {
@@ -53,9 +54,10 @@ export async function send(toId, event, payload) {
   try {
     await authed();
     const res = await channel.httpSend(event, payload ?? {}, { timeout: 8000 });
+    console.log('[call] signal sent', event, res);
     return !!res?.success;
   } catch (err) {
-    console.warn('[call] signal not sent', err?.message ?? err);
+    console.error('[call] signal not sent', event, err?.message ?? err);
     return false;
   } finally {
     if (!existed) supabase.removeChannel(channel);
