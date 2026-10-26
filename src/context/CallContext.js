@@ -1,9 +1,11 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Vibration } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Crypto from 'expo-crypto';
 import { useHub } from './HubContext';
 import { usePremium } from './PremiumContext';
 import * as signal from '../calls/signaling';
+import * as media from '../calls/media';
 import { DEFAULT_BEAUTY } from '../calls/beauty';
 import CallScreen from '../components/calls/CallScreen';
 import { haptics } from '../utils/haptics';
@@ -18,7 +20,8 @@ const BEAUTY_KEY = 'boa.call.beauty';
 // The incoming-call buzz: long, pause, long, repeating.
 const RING_VIBRATION = [0, 800, 600, 800, 1600];
 
-const newId = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+// The call's id is also its Agora channel name, so it has to be unguessable.
+const newId = () => Crypto.randomUUID?.() || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`;
 const personOf = (p) => (p ? { id: p.id, name: p.display_name || (p.username ? `@${p.username}` : 'BOA HUB member'), avatar_url: p.avatar_url ?? null } : null);
 
 /** What the call screen says about a call that's over. */
@@ -30,13 +33,14 @@ export const END_REASONS = {
   unreachable: "Couldn't reach them",
 };
 
+const NO_MEDIA = Object.freeze({ status: 'idle', remoteUid: null, remoteVideo: false, error: null });
+
 /**
  * BOA video calls: the call in progress and everything about it (who,
  * which way, ringing, connecting, live, ended), the in-call controls (mute,
  * camera, speaker) and the beauty filters. Ringing travels over
- * src/calls/signaling.js; a media service (Agora/WebRTC) plugs in at the
- * marked spots once it's chosen. Starting a call is BOA Premium; answering
- * one never is.
+ * src/calls/signaling.js; picture and sound over Agora (src/calls/media).
+ * Starting a call is BOA Premium; answering one never is.
  */
 export function CallProvider({ children }) {
   const { userId, profile, blocked } = useHub();
@@ -44,8 +48,13 @@ export function CallProvider({ children }) {
   const [call, setCall] = useState(null); // { id, peer, direction, phase, startedAt, reason }
   const [controls, setControls] = useState({ muted: false, cameraOff: false, speaker: true });
   const [beauty, setBeautyState] = useState(DEFAULT_BEAUTY);
+  const [video, setVideo] = useState(NO_MEDIA); // the Agora side: status, the other person's uid and picture
   const callRef = useRef(null);
   callRef.current = call;
+  const controlsRef = useRef(controls);
+  controlsRef.current = controls;
+  const beautyRef = useRef(beauty);
+  beautyRef.current = beauty;
   const timers = useRef({});
 
   useEffect(() => {
@@ -58,7 +67,7 @@ export function CallProvider({ children }) {
     setBeautyState((b) => {
       const next = { ...b, ...patch };
       AsyncStorage.setItem(BEAUTY_KEY, JSON.stringify(next)).catch(() => {});
-      // Media service: engine.setBeautyEffectOptions / setColorEnhanceOptions(toAgora(next)).
+      media.setBeauty(next);
       return next;
     });
   }, []);
@@ -72,19 +81,34 @@ export function CallProvider({ children }) {
   // A call ends: say why for a moment, then close the screen.
   const finish = useCallback((reason = 'ended') => {
     clearTimers();
-    // Media service: leave the channel and release the camera here.
+    media.leave();
     setCall((c) => (c && c.phase !== 'ended' ? { ...c, phase: 'ended', reason } : c));
     timers.current.close = setTimeout(() => {
       setCall(null);
       setControls({ muted: false, cameraOff: false, speaker: true });
+      setVideo(NO_MEDIA);
     }, ENDED_MS);
   }, []);
 
   const goLive = useCallback(() => {
     clearTimers();
     haptics.success();
-    // Media service: join the channel named by call.id here.
-    setCall((c) => (c ? { ...c, phase: 'active', startedAt: Date.now() } : c));
+    const c = callRef.current;
+    setCall((cur) => (cur ? { ...cur, phase: 'active', startedAt: Date.now() } : cur));
+    if (!c) return;
+    media.join(c.id, {
+      beauty: beautyRef.current,
+      controls: controlsRef.current,
+      onEvent: (patch) => {
+        if (callRef.current?.id !== c.id) return;
+        setVideo((v) => {
+          // Someone else leaving (a stale uid) doesn't take their picture away.
+          if (patch.gone != null && v.remoteUid != null && patch.gone !== v.remoteUid) return v;
+          const { gone, ...rest } = patch;
+          return { ...v, ...rest };
+        });
+      },
+    });
   }, []);
 
   // Signals sent to this phone.
@@ -101,6 +125,7 @@ export function CallProvider({ children }) {
         }
         clearTimers();
         setCall({ id: p.callId, peer: from, direction: 'in', phase: 'ringing', startedAt: null, reason: null });
+        setVideo(NO_MEDIA);
         Vibration.vibrate(RING_VIBRATION, true);
         timers.current.ring = setTimeout(() => finish('missed'), RING_MS);
         return;
@@ -113,7 +138,13 @@ export function CallProvider({ children }) {
     });
   }, [userId, blocked, finish, goLive]);
 
-  useEffect(() => () => clearTimers(), []);
+  useEffect(
+    () => () => {
+      clearTimers();
+      media.leave();
+    },
+    [],
+  );
 
   /** Calls someone (BOA Premium). person: their profile. */
   const startCall = useCallback(
@@ -125,7 +156,10 @@ export function CallProvider({ children }) {
         clearTimers();
         const id = newId();
         setCall({ id, peer, direction: 'out', phase: 'ringing', startedAt: null, reason: null });
+        setVideo(NO_MEDIA);
         haptics.selection();
+        // Your camera comes on while it rings, so you can check how you look.
+        media.prepare(id, beautyRef.current).catch(() => {});
         const sent = await signal.send(peer.id, 'ring', { callId: id, video: true, from: personOf(profile) ?? { id: userId, name: 'BOA HUB member' } });
         if (callRef.current?.id !== id) return;
         if (!sent) return finish('unreachable');
@@ -158,15 +192,18 @@ export function CallProvider({ children }) {
     finish('ended');
   }, [finish]);
 
-  // Media service: mute the mic / stop the camera / route audio here.
   const toggle = useCallback((key) => {
     haptics.selection();
-    setControls((c) => ({ ...c, [key]: !c[key] }));
+    const next = !controlsRef.current[key];
+    if (key === 'muted') media.setMuted(next);
+    else if (key === 'cameraOff') media.setCameraOff(next);
+    else if (key === 'speaker') media.setSpeaker(next);
+    setControls((c) => ({ ...c, [key]: next }));
   }, []);
 
   const value = useMemo(
-    () => ({ call, controls, beauty, setBeauty, startCall, accept, decline, hangUp, toggle }),
-    [call, controls, beauty, setBeauty, startCall, accept, decline, hangUp, toggle],
+    () => ({ call, controls, video, beauty, setBeauty, startCall, accept, decline, hangUp, toggle }),
+    [call, controls, video, beauty, setBeauty, startCall, accept, decline, hangUp, toggle],
   );
 
   return (

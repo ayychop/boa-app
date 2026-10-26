@@ -332,3 +332,21 @@ global.fetch = jest.fn(() => Promise.resolve({ ok: true, status: 200, json: () =
 // The welcome tour and "What's New" open as modals over the app once each;
 // the app's render tests run without them (first-run.test.js covers them).
 jest.mock('./src/components/FirstRun', () => () => null);
+
+// Agora (video calls): one engine whose every method records its calls and
+// succeeds, and video views that render as plain Views with their canvas.
+jest.mock('react-native-agora', () => {
+  const { View } = require('react-native');
+  const engine = new Proxy(
+    {},
+    {
+      get: (t, k) => {
+        if (typeof k !== 'string' || k === 'then' || k === 'asymmetricMatch') return undefined;
+        if (!(k in t)) t[k] = jest.fn(() => (k === 'registerEventHandler' ? true : 0));
+        return t[k];
+      },
+    },
+  );
+  const RtcSurfaceView = (props) => <View {...props} />;
+  return { __engine: engine, createAgoraRtcEngine: jest.fn(() => engine), RtcSurfaceView };
+});

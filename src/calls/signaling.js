@@ -4,9 +4,8 @@ import { supabase } from '../lib/supabase';
 // signed-in phone listens on its own inbox topic (boa-call:<user id>); a
 // call sends 'ring' to the other person's inbox, and answers come back to
 // the caller's. Only call control travels here (ring, accept, decline, end,
-// busy). Audio and video will go over a media service (Agora/WebRTC) once
-// it's wired in; until then a connected call is the call screen without
-// pictures.
+// busy). Audio and video go over Agora (src/calls/media), on a channel
+// named by the call's id.
 
 export const EVENTS = ['ring', 'accept', 'decline', 'end', 'busy'];
 const topic = (userId) => `boa-call:${userId}`;

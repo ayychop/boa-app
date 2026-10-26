@@ -20,6 +20,7 @@ jest.mock('../src/api/admin', () => ({
   setCallApproved: jest.fn(async () => {}),
   updateCall: jest.fn(async () => {}),
   deleteCall: jest.fn(async () => {}),
+  deleteUser: jest.fn(async () => ({ deleted: 'u-ama' })),
 }));
 jest.mock('../src/api/trending', () => ({
   ...jest.requireActual('../src/api/trending'),
@@ -32,6 +33,7 @@ const admin = require('../src/api/admin');
 const trending = require('../src/api/trending');
 
 const AMA = { id: 'u-ama', username: 'ama', display_name: 'Ama Mensah', roles: ['director'], is_boa_star: false, is_featured: false, visible_on_hub: true };
+const BOSS = { id: 'user-boss', username: 'boss', display_name: 'BOA Admin', roles: [], is_boa_star: false, is_featured: false, visible_on_hub: true };
 const KOFI = { id: 'u-kofi', username: 'kofi', display_name: 'Kofi', roles: ['actor'], is_boa_star: true, is_featured: true, visible_on_hub: true };
 const REPORT = {
   id: 'r1',
@@ -184,5 +186,60 @@ describe('Radio: Trending on BOA Radio', () => {
     await user.type(screen.getByTestId('admin-radio-search'), first.name);
     expect(screen.getByTestId(`admin-station-${first.id}`)).toBeOnTheScreen();
     expect(screen.queryAllByTestId(/^admin-station-/).length).toBeLessThan(catalogue().length);
+  });
+});
+
+test('Delete User: confirm, then the delete-user function wipes the account; never your own', async () => {
+  admin.listUsers.mockResolvedValue([AMA, KOFI, BOSS]);
+  let buttons = null;
+  const alert = jest.spyOn(Alert, 'alert').mockImplementation((title, msg, b) => {
+    buttons = b;
+  });
+  const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTimeAsync });
+  await show();
+  expect(screen.getByTestId('admin-delete-user-ama')).toBeOnTheScreen();
+  expect(screen.getByTestId('admin-delete-user-kofi')).toBeOnTheScreen();
+  expect(screen.queryByTestId('admin-delete-user-boss')).toBeNull();
+
+  await user.press(screen.getByTestId('admin-delete-user-ama'));
+  expect(alert).toHaveBeenCalledWith('Delete Ama Mensah?', expect.stringMatching(/cannot be undone/), expect.any(Array));
+  // Cancel does nothing.
+  expect(admin.deleteUser).not.toHaveBeenCalled();
+  await act(async () => buttons.find((b) => b.text === 'Delete forever').onPress());
+  expect(admin.deleteUser).toHaveBeenCalledWith('u-ama');
+  expect(admin.listUsers).toHaveBeenCalledTimes(2);
+  alert.mockRestore();
+});
+
+describe('delete-user Edge Function and cascades', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const fn = fs.readFileSync(path.join(__dirname, '../supabase/functions/delete-user/index.ts'), 'utf8');
+  const sql = fs.readFileSync(path.join(__dirname, '../supabase/migrations/20261027090000_delete_user_cascade.sql'), 'utf8');
+
+  test('only an admin can call it, with the service role doing the delete', () => {
+    expect(fn).toMatch(/caller\.rpc\('is_admin'\)/);
+    expect(fn).toMatch(/isAdmin !== true\) return json\(\{ error: 'Admins only\.' \}, 403\)/);
+    expect(fn).toMatch(/SUPABASE_SERVICE_ROLE_KEY/);
+    expect(fn).toMatch(/admin\.auth\.admin\.deleteUser\(userId, false\)/);
+    expect(fn).toMatch(/userId === me\.user\.id/);
+    // Files are cleared too: Storage isn't covered by database cascades.
+    for (const bucket of ['chat-media', 'avatars', 'posts', 'block-evidence']) expect(fn).toContain(`'${bucket}'`);
+  });
+
+  test('the migration turns blocking foreign keys into cascades and checks the promised tables', () => {
+    expect(sql).toMatch(/confdeltype in \('a', 'r'\)/);
+    expect(sql).toMatch(/ON DELETE CASCADE/);
+    for (const t of ['profiles', 'posts', 'messages', 'blocks']) expect(sql).toContain(`('${t}',`);
+  });
+
+  test('every foreign key to a member in every migration says what happens on delete', () => {
+    const dir = path.join(__dirname, '../supabase/migrations');
+    for (const file of fs.readdirSync(dir)) {
+      const lines = fs.readFileSync(path.join(dir, file), 'utf8').split('\n');
+      for (const line of lines.filter((l) => /references (public\.profiles|auth\.users)/.test(l))) {
+        expect(`${file}: ${line.trim()}`).toMatch(/on delete (cascade|set null)/);
+      }
+    }
   });
 });

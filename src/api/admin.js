@@ -111,6 +111,21 @@ export async function setSubscription(userId, status) {
   check(await need().from('profiles').update({ subscription_status: status }).eq('id', userId));
 }
 
+/**
+ * Deletes a member for good: their sign-in, profile, posts, messages,
+ * blocks and files. Done by the delete-user Edge Function, because only the
+ * server can delete sign-in accounts.
+ */
+export async function deleteUser(userId) {
+  const { data, error } = await need().functions.invoke('delete-user', { body: { userId } });
+  if (error) {
+    // The function's own reason ("Admins only.") is in the response body.
+    const reason = await error.context?.json?.().catch(() => null);
+    throw new Error(reason?.error || error.message || "Couldn't delete that account");
+  }
+  return data;
+}
+
 /** Featured in the Chat Hub's Community Pulse. */
 export async function setFeatured(userId, featured) {
   check(await need().from('profiles').update({ is_featured: featured }).eq('id', userId));

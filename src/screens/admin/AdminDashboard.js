@@ -80,7 +80,7 @@ function Action({ label, icon, onPress, tone = colors.text, testID }) {
 
 // ------------------------------------------------------------ the sections
 
-function TalentDirectory({ users, query, setQuery, onToggleStar, onTogglePremium }) {
+function TalentDirectory({ users, query, setQuery, onToggleStar, onTogglePremium, onDelete, myId }) {
   return (
     <>
       <Field value={query} onChangeText={setQuery} placeholder="Search by name or @username" autoCapitalize="none" testID="admin-search" />
@@ -119,6 +119,11 @@ function TalentDirectory({ users, query, setQuery, onToggleStar, onTogglePremium
               testID={`admin-premium-${u.username}`}
             />
           </View>
+          {u.id !== myId ? (
+            <View style={styles.deleteRow}>
+              <Action label="Delete user" icon="trash-outline" tone="#FF6B6B" onPress={() => onDelete(u)} testID={`admin-delete-user-${u.username}`} />
+            </View>
+          ) : null}
         </Panel>
       ))}
       {users.length === 0 ? <Text style={styles.empty}>No members match.</Text> : null}
@@ -361,7 +366,7 @@ function EditCallSheet({ call, onClose, onSave }) {
  */
 export default function AdminDashboard({ navigation }) {
   const insets = useSafeAreaInsets();
-  const { isAdmin } = useHub();
+  const { isAdmin, userId } = useHub();
   const [tab, setTab] = useState('talent');
   const [query, setQuery] = useState('');
   const [data, setData] = useState({ users: [], reports: [], blocks: [], calls: [], picked: [], ready: false });
@@ -475,6 +480,17 @@ export default function AdminDashboard({ navigation }) {
             setQuery={setQuery}
             onToggleStar={(u, star) => run(() => admin.setBoaStar(u.id, star))}
             onTogglePremium={(u, on) => run(() => admin.setSubscription(u.id, on ? 'active' : 'expired'))}
+            myId={userId}
+            onDelete={(u) =>
+              Alert.alert(
+                `Delete ${nameOf(u)}?`,
+                'This permanently deletes their account, profile, posts, messages, blocks and files. It cannot be undone.',
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  { text: 'Delete forever', style: 'destructive', onPress: () => run(() => admin.deleteUser(u.id)) },
+                ],
+              )
+            }
           />
         ) : tab === 'moderation' ? (
           <Moderation
@@ -595,6 +611,7 @@ const styles = StyleSheet.create({
   name: { fontFamily: fonts.semibold, fontSize: 16, color: colors.text, flexShrink: 1 },
   mono: { fontFamily: fonts.mono, fontSize: 10.5, letterSpacing: 1.2, color: MONO_GOLD },
   sub: { fontFamily: fonts.medium, fontSize: 12.5, color: colors.textMuted },
+  deleteRow: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: space.md },
   toggleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: space.sm },
   toggleLabel: { fontFamily: fonts.semibold, fontSize: 13.5, color: colors.text },
   quote: { borderLeftWidth: 2, borderLeftColor: colors.gold, paddingLeft: space.md, marginVertical: 4 },
