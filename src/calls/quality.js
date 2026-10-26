@@ -1,16 +1,29 @@
 // How BOA video calls look and sound. Models and creatives take these
-// calls, so picture quality wins over everything else: full HD from the
-// camera, a quality-first encoder, and Agora's clear-vision pipeline on in
-// every call so a dim bedroom or a backlit window still looks good.
+// calls, so picture quality wins once the call is live: HD, a quality-first
+// encoder, and Agora's clear-vision pipeline on in every call so a dim
+// bedroom or a backlit window still looks good. While it rings the camera
+// starts small (PREVIEW) so it comes on almost at once, then steps up to
+// ENCODER when the call connects.
 //
 // Plain numbers (Agora's enum values, named beside each one) so this file
 // loads anywhere, tests included; src/calls/media.native.js hands them to
 // the engine.
 
-/** 1080p at 30 fps, the most a phone camera call carries well. */
-export const HD = Object.freeze({ width: 1920, height: 1080, fps: 30 });
+/** 720p at 30 fps for the live call. */
+export const HD = Object.freeze({ width: 1280, height: 720, fps: 30 });
 
-/** setVideoEncoderConfiguration. */
+/** setVideoEncoderConfiguration while it rings: 360p at 15 fps opens the camera fast. */
+export const PREVIEW = Object.freeze({
+  dimensions: { width: 640, height: 360 },
+  frameRate: 15,
+  bitrate: 0,
+  minBitrate: -1,
+  orientationMode: 0,
+  degradationPreference: 0,
+  advanceOptions: { compressionPreference: 1 },
+});
+
+/** setVideoEncoderConfiguration once the call is connected. */
 export const ENCODER = Object.freeze({
   dimensions: { width: HD.width, height: HD.height },
   frameRate: HD.fps,
@@ -24,12 +37,18 @@ export const ENCODER = Object.freeze({
   advanceOptions: { compressionPreference: 1 }, // PreferQuality
 });
 
-/** setCameraCapturerConfiguration: capture at the size we send, front camera. */
+/**
+ * setCameraCapturerConfiguration: front camera. No fixed format, so the
+ * camera opens at the encoder's size (PREVIEW, then ENCODER) instead of
+ * spinning up full resolution before anyone has answered.
+ */
 export const CAPTURE = Object.freeze({
   cameraDirection: 1, // CameraFront
-  format: { width: HD.width, height: HD.height, fps: HD.fps },
   followEncodeDimensionRatio: true,
 });
+
+/** setCameraStabilizationMode: off. Stabilization delays the camera's first frames. */
+export const STABILIZATION_OFF = -1; // CameraStabilizationModeOff
 
 /**
  * Any light: denoising and low-light enhancement both run in auto mode, so

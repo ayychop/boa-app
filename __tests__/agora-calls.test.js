@@ -31,7 +31,9 @@ const { fetchToken } = require('../src/calls/token');
 const { __engine: engine, createAgoraRtcEngine } = require('react-native-agora');
 const { PremiumProvider } = require('../src/context/PremiumContext');
 const { CallProvider, useCall } = require('../src/context/CallContext');
-const { ENCODER, CAPTURE, DENOISER, LOW_LIGHT, HD } = require('../src/calls/quality');
+const { ENCODER, CAPTURE, DENOISER, LOW_LIGHT, HD, PREVIEW, STABILIZATION_OFF } = require('../src/calls/quality');
+const { createAudioPlayer } = require('expo-audio');
+const { RINGTONE } = require('../src/calls/ringtone');
 
 const ME = { id: 'user-me', username: 'ama', display_name: 'Ama Mensah', avatar_url: null };
 const KOFI = { id: 'user-kofi', username: 'kofi', display_name: 'Kofi Boateng', avatar_url: null };
@@ -56,13 +58,20 @@ const mount = () =>
 const handler = () => engine.registerEventHandler.mock.calls.at(-1)[0];
 
 describe('HD in any light', () => {
-  test('1080p30, quality first, never trading sharpness for frames', () => {
-    expect(HD).toEqual({ width: 1920, height: 1080, fps: 30 });
-    expect(ENCODER.dimensions).toEqual({ width: 1920, height: 1080 });
+  test('720p30 once live, quality first, never trading sharpness for frames', () => {
+    expect(HD).toEqual({ width: 1280, height: 720, fps: 30 });
+    expect(ENCODER.dimensions).toEqual({ width: 1280, height: 720 });
+    expect(ENCODER.frameRate).toBe(30);
     expect(ENCODER.degradationPreference).toBe(0); // MaintainQuality
     expect(ENCODER.advanceOptions.compressionPreference).toBe(1); // PreferQuality
-    expect(CAPTURE.format).toEqual({ width: 1920, height: 1080, fps: 30 });
     expect(CAPTURE.cameraDirection).toBe(1); // front
+  });
+
+  test('a fast camera while it rings: 360p15, capture follows the encoder, no stabilization', () => {
+    expect(PREVIEW.dimensions).toEqual({ width: 640, height: 360 });
+    expect(PREVIEW.frameRate).toBe(15);
+    expect(CAPTURE.format).toBeUndefined();
+    expect(STABILIZATION_OFF).toBe(-1); // CameraStabilizationModeOff
   });
 
   test('low light and denoising are on, auto, high quality', () => {
@@ -84,8 +93,11 @@ describe('Agora video calls', () => {
     expect(createAgoraRtcEngine).toHaveBeenCalled();
     expect(engine.initialize).toHaveBeenCalledWith(expect.objectContaining({ appId: 'boa-app-id' }));
     expect(engine.enableVideo).toHaveBeenCalled();
-    expect(engine.setVideoEncoderConfiguration).toHaveBeenCalledWith(ENCODER);
+    // Small and fast while it rings, before the camera starts.
+    expect(engine.setVideoEncoderConfiguration).toHaveBeenLastCalledWith(PREVIEW);
+    expect(engine.setVideoEncoderConfiguration.mock.invocationCallOrder.at(-1)).toBeLessThan(engine.startPreview.mock.invocationCallOrder.at(-1));
     expect(engine.setCameraCapturerConfiguration).toHaveBeenCalledWith(CAPTURE);
+    expect(engine.setCameraStabilizationMode).toHaveBeenCalledWith(-1);
     expect(engine.setVideoDenoiserOptions).toHaveBeenCalledWith(true, DENOISER);
     expect(engine.setLowlightEnhanceOptions).toHaveBeenCalledWith(true, LOW_LIGHT);
     // Agora's rule: denoising before high-quality low light.
@@ -100,7 +112,11 @@ describe('Agora video calls', () => {
     await act(async () => mockSignal('accept', { callId }));
     expect(engine.joinChannel).toHaveBeenCalledWith('tok-1', callId, 4242, expect.objectContaining({ publishCameraTrack: true, publishMicrophoneTrack: true }));
     expect(screen.getByTestId('call-video-note')).toHaveTextContent('Connecting HD video');
+    engine.setEnableSpeakerphone.mockClear();
     await act(async () => handler().onJoinChannelSuccess({}, 10));
+    // Joined: HD for the real stream, and the speaker forced on now that Android will take it.
+    expect(engine.setVideoEncoderConfiguration).toHaveBeenLastCalledWith(ENCODER);
+    expect(engine.setEnableSpeakerphone).toHaveBeenCalledWith(true);
     expect(screen.getByTestId('call-video-note')).toHaveTextContent('Waiting for their video');
 
     // Their picture fills the screen.
@@ -161,6 +177,41 @@ describe('Agora video calls', () => {
   });
 });
 
+describe('the ringtone', () => {
+  test('rings out loud and loops while an incoming call rings; answering stops it', async () => {
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    await mount();
+    createAudioPlayer.mockClear();
+    await act(async () => mockSignal('ring', { callId: 'c1c3e1f0-0000-4000-8000-000000000001', from: { id: 'user-kofi', name: 'Kofi Boateng' } }));
+    const tone = createAudioPlayer.mock.results.at(-1).value;
+    expect(createAudioPlayer).toHaveBeenCalledWith(RINGTONE);
+    expect(tone.loop).toBe(true);
+    expect(tone.play).toHaveBeenCalled();
+    await user.press(screen.getByTestId('call-accept'));
+    expect(tone.pause).toHaveBeenCalled();
+    expect(tone.removed).toBe(true);
+    await user.press(screen.getByTestId('call-end'));
+    await act(async () => jest.advanceTimersByTime(2000));
+  });
+
+  test('declining or missing a call stops it too', async () => {
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    await mount();
+    await act(async () => mockSignal('ring', { callId: 'c1c3e1f0-0000-4000-8000-000000000002', from: { id: 'user-kofi', name: 'Kofi Boateng' } }));
+    const declined = createAudioPlayer.mock.results.at(-1).value;
+    await user.press(screen.getByTestId('call-decline'));
+    expect(declined.removed).toBe(true);
+    await act(async () => jest.advanceTimersByTime(2000));
+
+    await act(async () => mockSignal('ring', { callId: 'c1c3e1f0-0000-4000-8000-000000000003', from: { id: 'user-kofi', name: 'Kofi Boateng' } }));
+    const missed = createAudioPlayer.mock.results.at(-1).value;
+    expect(missed).not.toBe(declined);
+    await act(async () => jest.advanceTimersByTime(46000));
+    expect(missed.removed).toBe(true);
+    await act(async () => jest.advanceTimersByTime(2000));
+  });
+});
+
 describe('agora-token Edge Function', () => {
   const fn = fs.readFileSync(path.join(__dirname, '../supabase/functions/agora-token/index.ts'), 'utf8');
   test('signs on the server with the certificate, for signed-in, unbanned callers only', () => {
@@ -168,6 +219,11 @@ describe('agora-token Edge Function', () => {
     expect(fn).toMatch(/auth\.getUser\(\)/);
     expect(fn).toMatch(/banned_at/);
     expect(fn).toMatch(/RtcTokenBuilder\.buildTokenWithUid\(APP_ID, CERTIFICATE, channel, uid, RtcRole\.PUBLISHER/);
+  });
+  test('every refusal is logged with console.error and returned as JSON; success carries the channel', () => {
+    expect(fn).toMatch(/console\.error\('\[agora-token\]'/);
+    expect(fn).toMatch(/Couldn't sign the video token/);
+    expect(fn).toMatch(/json\(\{ appId: APP_ID, token, uid, channel, expiresIn: TTL \}\)/);
   });
   test('the certificate never appears in the app', () => {
     const src = fs.readFileSync(path.join(__dirname, '../src/calls/media.native.js'), 'utf8') + fs.readFileSync(path.join(__dirname, '../src/calls/token.js'), 'utf8');

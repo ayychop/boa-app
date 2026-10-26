@@ -6,6 +6,7 @@ import { useHub } from './HubContext';
 import { usePremium } from './PremiumContext';
 import * as signal from '../calls/signaling';
 import * as media from '../calls/media';
+import { startRingtone, stopRingtone } from '../calls/ringtone';
 import { DEFAULT_BEAUTY } from '../calls/beauty';
 import CallScreen from '../components/calls/CallScreen';
 import { haptics } from '../utils/haptics';
@@ -76,6 +77,7 @@ export function CallProvider({ children }) {
     Object.values(timers.current).forEach(clearTimeout);
     timers.current = {};
     Vibration.cancel();
+    stopRingtone();
   };
 
   // A call ends: say why for a moment, then close the screen.
@@ -127,6 +129,7 @@ export function CallProvider({ children }) {
         setCall({ id: p.callId, peer: from, direction: 'in', phase: 'ringing', startedAt: null, reason: null });
         setVideo(NO_MEDIA);
         Vibration.vibrate(RING_VIBRATION, true);
+        startRingtone();
         timers.current.ring = setTimeout(() => finish('missed'), RING_MS);
         return;
       }

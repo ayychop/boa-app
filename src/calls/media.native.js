@@ -2,22 +2,23 @@ import { Alert, Linking, PermissionsAndroid, Platform } from 'react-native';
 import { createAgoraRtcEngine, RtcSurfaceView } from 'react-native-agora';
 import { fetchToken } from './token';
 import { toAgora } from './beauty';
-import { AUDIO, CAPTURE, DENOISER, ENCODER, LOW_LIGHT } from './quality';
+import { AUDIO, CAPTURE, DENOISER, ENCODER, LOW_LIGHT, PREVIEW, STABILIZATION_OFF } from './quality';
 
 // The picture and sound of a BOA video call, over Agora. Ringing stays on
 // Supabase Realtime (src/calls/signaling.js); once both phones agree, each
 // one joins the Agora channel named by the call's id with a token from our
 // own backend (src/calls/token.js).
 //
-// One engine for the app's life, set up for quality the first time it's
-// needed (src/calls/quality.js): 1080p, quality-first encoding and the
-// low-light pipeline. Each call only previews, joins and leaves.
+// One engine for the app's life, set up the first time it's needed
+// (src/calls/quality.js): a small, fast preview while it rings, HD once the
+// call connects, quality-first encoding and the low-light pipeline. Each
+// call only previews, joins and leaves.
 
 export const available = true;
 
 let engine = null;
 let engineAppId = null;
-let session = null; // { channel, token, uid, camera, mic, joined, handler }
+let session = null; // { channel, token, uid, camera, mic, joined, live, speaker, handler }
 
 const CHANNEL_COMMUNICATION = 0;
 const ROLE_BROADCASTER = 1;
@@ -74,7 +75,8 @@ function setup(appId) {
   engine.enableVideo();
   engine.setAudioProfile(AUDIO.profile, AUDIO.scenario);
   engine.setCameraCapturerConfiguration(CAPTURE);
-  engine.setVideoEncoderConfiguration(ENCODER);
+  // Stabilization holds back the first frames on Android; calls are handheld at arm's length anyway.
+  engine.setCameraStabilizationMode?.(STABILIZATION_OFF);
   // Any light: denoise first (low light's high-quality mode needs it), then
   // lift dark rooms. Both are auto, so a well-lit face is left alone.
   engine.setVideoDenoiserOptions(true, DENOISER);
@@ -110,6 +112,8 @@ export async function prepare(channel, beauty) {
     Object.assign(s, { token: pass.token, uid: pass.uid, camera: perm.camera, mic: perm.mic });
     setup(pass.appId);
     setBeauty(beauty);
+    // Small and fast while it rings; join success steps it up to HD.
+    engine.setVideoEncoderConfiguration(PREVIEW);
     if (s.camera) engine.startPreview();
     return true;
   })();
@@ -136,6 +140,12 @@ export async function join(channel, { beauty, controls, onEvent }) {
   s.handler = {
     onJoinChannelSuccess: (conn) => {
       console.log('[call] joined', { channel: conn?.channelId, uid: conn?.localUid });
+      if (session !== s) return;
+      s.live = true;
+      engine.setVideoEncoderConfiguration(ENCODER);
+      // Android only routes to the speaker once the channel is joined; set before that, it's ignored.
+      const code = engine.setEnableSpeakerphone(s.speaker !== false);
+      console.log('[call] speakerphone', { on: s.speaker !== false, code });
       onEvent({ status: 'connected' });
     },
     onUserJoined: (_c, remoteUid) => {
@@ -151,6 +161,10 @@ export async function join(channel, { beauty, controls, onEvent }) {
       else if (state === CONNECTION_FAILED) onEvent({ status: 'failed', error: `connection ${reason}` });
       else if (state === CONNECTION_CONNECTED) onEvent({ status: 'connected' });
     },
+    // Sound: what each side's audio is doing, and where it's playing.
+    onLocalAudioStateChanged: (_c, state, reason) => console.log('[call] local audio', { state, reason }),
+    onRemoteAudioStateChanged: (_c, remoteUid, state, reason) => console.log('[call] remote audio', { remoteUid, state, reason }),
+    onAudioRoutingChanged: (routing) => console.log('[call] audio route', { routing }),
     onError: (code, msg) => console.error('Agora Error:', { code, msg }),
     onTokenPrivilegeWillExpire: async () => {
       try {
@@ -181,9 +195,9 @@ export async function join(channel, { beauty, controls, onEvent }) {
     return;
   }
   s.joined = true;
+  s.speaker = controls?.speaker !== false;
   setMuted(!!controls?.muted);
   setCameraOff(!!controls?.cameraOff);
-  setSpeaker(controls?.speaker !== false);
 }
 
 /** Leaves the call and lets go of the camera and microphone. */
@@ -209,8 +223,11 @@ export function setCameraOff(off) {
   if (!off && session.joined) engine.updateChannelMediaOptions({ publishCameraTrack: true });
 }
 
+/** Remembered until the join succeeds, then applied (see onJoinChannelSuccess). */
 export function setSpeaker(on) {
-  if (session?.joined) engine?.setEnableSpeakerphone(on);
+  if (!session) return;
+  session.speaker = on;
+  if (session.live) engine?.setEnableSpeakerphone(on);
 }
 
 /** You, from your camera. */

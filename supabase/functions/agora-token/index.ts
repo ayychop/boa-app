@@ -1,7 +1,12 @@
 // BOA video calls: the Agora pass for one call.
 //
 //   POST /agora-token   { "channel": "<call id>" }
-//   -> { "appId", "token", "uid", "expiresIn" }
+//   -> { "appId", "token", "uid", "channel", "expiresIn" }
+//
+// Every refusal is JSON ({ error }) with its own status, and is logged with
+// console.error, so the function's logs (Dashboard, Edge Functions,
+// agora-token, Logs) say exactly why a call couldn't connect. The app shows
+// the same message on the call screen (src/calls/token.js).
 //
 // The App Certificate signs tokens and must never ship in the app, so only
 // this function knows it. It checks the caller is signed in and not
@@ -39,28 +44,47 @@ export function uidFor(userId: string) {
 }
 
 Deno.serve(async (req) => {
-  if (req.method !== 'POST') return json({ error: 'POST only' }, 405);
-  if (!APP_ID || !CERTIFICATE) return json({ error: 'Video calls are not set up yet.' }, 503);
-
-  const caller = createClient(SUPABASE_URL, ANON_KEY, {
-    global: { headers: { Authorization: req.headers.get('Authorization') ?? '' } },
-    auth: { persistSession: false },
-  });
-  const { data: me } = await caller.auth.getUser();
-  if (!me?.user) return json({ error: 'Sign in first.' }, 401);
-
-  let channel: string;
+  const refuse = (status: number, error: string, detail?: unknown) => {
+    console.error('[agora-token]', status, error, detail ?? '');
+    return json({ error }, status);
+  };
   try {
-    channel = String((await req.json())?.channel ?? '');
-  } catch {
-    return json({ error: 'bad body' }, 400);
+    if (req.method !== 'POST') return refuse(405, 'POST only');
+    if (!APP_ID || !CERTIFICATE) return refuse(503, 'Video calls are not set up yet.', { appId: !!APP_ID, certificate: !!CERTIFICATE });
+
+    // No auth header (or an expired session) is a clear 401, never a crash.
+    const auth = req.headers.get('Authorization') ?? '';
+    if (!auth.startsWith('Bearer ')) return refuse(401, 'Sign in first.', 'no Authorization header');
+    const caller = createClient(SUPABASE_URL, ANON_KEY, {
+      global: { headers: { Authorization: auth } },
+      auth: { persistSession: false },
+    });
+    const { data: me, error: authError } = await caller.auth.getUser();
+    if (!me?.user) return refuse(401, 'Sign in first.', authError?.message);
+
+    let channel: string;
+    try {
+      channel = String((await req.json())?.channel ?? '');
+    } catch (err) {
+      return refuse(400, 'bad body', String(err));
+    }
+    if (!CHANNEL.test(channel)) return refuse(400, 'bad channel', channel);
+
+    const { data: profile, error: profileError } = await admin.from('profiles').select('banned_at').eq('id', me.user.id).maybeSingle();
+    if (profileError) return refuse(500, "Couldn't check your account.", profileError.message);
+    if (!profile) return refuse(403, "This account can't make calls.", { user: me.user.id, reason: 'no profile row' });
+    if (profile.banned_at) return refuse(403, "This account can't make calls.", { user: me.user.id, reason: 'banned' });
+
+    const uid = uidFor(me.user.id);
+    let token: string;
+    try {
+      token = RtcTokenBuilder.buildTokenWithUid(APP_ID, CERTIFICATE, channel, uid, RtcRole.PUBLISHER, TTL, TTL);
+    } catch (err) {
+      return refuse(500, "Couldn't sign the video token.", err instanceof Error ? err.stack ?? err.message : String(err));
+    }
+    console.log('[agora-token] ok', { channel, uid });
+    return json({ appId: APP_ID, token, uid, channel, expiresIn: TTL });
+  } catch (err) {
+    return refuse(500, 'Video token failed.', err instanceof Error ? err.stack ?? err.message : String(err));
   }
-  if (!CHANNEL.test(channel)) return json({ error: 'bad channel' }, 400);
-
-  const { data: profile } = await admin.from('profiles').select('banned_at').eq('id', me.user.id).maybeSingle();
-  if (!profile || profile.banned_at) return json({ error: "This account can't make calls." }, 403);
-
-  const uid = uidFor(me.user.id);
-  const token = RtcTokenBuilder.buildTokenWithUid(APP_ID, CERTIFICATE, channel, uid, RtcRole.PUBLISHER, TTL, TTL);
-  return json({ appId: APP_ID, token, uid, expiresIn: TTL });
 });

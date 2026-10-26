@@ -69,6 +69,10 @@ jest.mock('expo-audio', () => {
       pause: jest.fn(() => {
         player.playing = false;
       }),
+      remove: jest.fn(() => {
+        player.playing = false;
+        player.removed = true;
+      }),
       replace: jest.fn((next) => {
         player.source = next;
       }),
