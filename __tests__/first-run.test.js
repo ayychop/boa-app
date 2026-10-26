@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// The welcome tour after a member's first sign-in, and "What's New" once per
+// The welcome tour on first open (per member, or per phone when signed out), and "What's New" once per
 // update (src/components/FirstRun.js).
 
 jest.unmock('../src/components/FirstRun');
@@ -24,6 +24,7 @@ jest.mock('../src/lib/supabase', () => ({
 
 const FirstRun = require('../src/components/FirstRun').default;
 const { SCENES } = require('../src/components/onboarding/FeatureTour');
+const { replayTour } = require('../src/api/onboarding');
 const { WHATS_NEW, LAST_SEEN_KEY, shouldShowWhatsNew } = require('../src/lib/whats-new');
 
 async function show(props = {}) {
@@ -80,9 +81,32 @@ describe('the welcome tour', () => {
     expect(screen.queryByTestId('feature-tour')).toBeNull();
   });
 
-  test('only for signed-in members', async () => {
+  test('listeners not signed in to the Hub get it once per phone', async () => {
     mockHub = { stage: 'signedOut', userId: null };
     await show();
+    expect(screen.getByTestId('feature-tour')).toBeTruthy();
+    await fireEvent.press(screen.getByText('Skip'));
+    await act(async () => {});
+    expect(mockUpdate).not.toHaveBeenCalled();
+    await screen.unmount();
+    await show();
+    expect(screen.queryByTestId('feature-tour')).toBeNull();
+  });
+
+  test('waits while the Hub is still loading', async () => {
+    mockHub = { stage: 'loading', userId: null };
+    await show();
+    expect(screen.queryByTestId('feature-tour')).toBeNull();
+  });
+
+  test('Replay Welcome Tour shows it again after it has been seen', async () => {
+    mockRow = { has_seen_onboarding: true };
+    await show();
+    expect(screen.queryByTestId('feature-tour')).toBeNull();
+    await act(async () => replayTour());
+    expect(screen.getByTestId('feature-tour')).toBeTruthy();
+    await fireEvent.press(screen.getByText('Skip'));
+    await act(async () => {});
     expect(screen.queryByTestId('feature-tour')).toBeNull();
   });
 });

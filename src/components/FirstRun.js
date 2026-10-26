@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useHub } from '../context/HubContext';
-import { hasSeenTour, markTourSeen } from '../api/onboarding';
+import { hasSeenTour, markTourSeen, onTourReplay } from '../api/onboarding';
 import { LAST_SEEN_KEY, WHATS_NEW, shouldShowWhatsNew } from '../lib/whats-new';
 import FeatureTour from './onboarding/FeatureTour';
 import WhatsNewModal from './WhatsNewModal';
 
 /**
- * What shows over the app once: the welcome tour after a member's first
- * sign-in, and "What's New" after an update. Never both at once; the tour
+ * What shows over the app once: the welcome tour on first open (once per
+ * member when signed in to the Hub, once per phone otherwise), and
+ * "What's New" after an update. Never both at once; the tour
  * goes first. freshInstall: this launch began with the vibe check.
  */
 export default function FirstRun({ freshInstall }) {
@@ -31,19 +32,25 @@ export default function FirstRun({ freshInstall }) {
     };
   }, [freshInstall]);
 
+  // Waits for the Hub to know whether anyone is signed in. A member is
+  // asked by their profile; anyone else (signed out, no Hub project, or a
+  // profile not made yet) by this phone.
+  const member = stage === 'ready' ? userId : null;
   useEffect(() => {
-    if (stage !== 'ready' || !userId) return undefined;
+    if (stage === 'loading') return undefined;
     let alive = true;
-    hasSeenTour(userId).then((seen) => alive && seen === false && setTour(true));
+    hasSeenTour(member).then((seen) => alive && seen === false && setTour(true));
     return () => {
       alive = false;
     };
-  }, [stage, userId]);
+  }, [stage, member]);
+
+  useEffect(() => onTourReplay(() => setTour(true)), []);
 
   const finishTour = useCallback(() => {
     setTour(false);
-    markTourSeen(userId);
-  }, [userId]);
+    markTourSeen(member);
+  }, [member]);
 
   const closeWhatsNew = useCallback(() => {
     setWhatsNew(false);

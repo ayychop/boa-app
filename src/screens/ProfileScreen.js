@@ -23,6 +23,7 @@ import { useOpenHub } from '../components/hub/hubNav';
 import { useHub } from '../context/HubContext';
 import { Avatar, BoaStarBadge } from '../components/kit';
 import DailySpark from '../components/DailySpark';
+import { replayTour } from '../api/onboarding';
 
 // Until you sign in, the profile card has a placeholder name.
 const LISTENER_NAME = 'BOA Listener';
@@ -72,6 +73,7 @@ export default function ProfileScreen({ navigation }) {
     { icon: 'people-circle-outline', label: 'Creative Hub', detail: 'Find talent and message creatives', onPress: () => openHub() },
     { icon: 'alarm-outline', label: 'Alarms', detail: 'Wake up to a sound or a station', onPress: () => navigation.navigate('AlarmSettings') },
     { icon: 'ribbon-outline', label: 'Credits', detail: "Zen's sounds, videos and photos", onPress: () => setCreditsOpen(true) },
+    { icon: 'play-circle-outline', label: 'Replay Welcome Tour', detail: 'Radio, Originals, Zen, the Hub and Casting', onPress: replayTour },
     { icon: 'apps-outline', label: 'Home screen widget', detail: 'Colour and transparency', onPress: () => setWidgetOpen(true) },
     { icon: 'person-add-outline', label: 'Get seen', detail: 'Submit as talent', onPress: forms.openGetSeen },
     { icon: 'chatbubble-ellipses-outline', label: 'Contact BOA', detail: 'Bookings, press, hello', onPress: () => forms.openContact() },
