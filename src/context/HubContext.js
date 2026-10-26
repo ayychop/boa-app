@@ -6,6 +6,9 @@ import { createAudioPlayer } from 'expo-audio';
 import { isConfigured, supabase } from '../lib/supabase';
 import { ownChannel } from '../lib/realtime';
 import * as hub from '../api/hub';
+import { claimDayOne, forgetDayOnes } from '../api/dayOne';
+import * as hearts from '../api/hearts';
+import { useUser } from './UserContext';
 import * as chat from '../chat/notifications';
 import { chatSoundById, DEFAULT_CHAT_SOUND } from '../chat/sounds';
 import { openPage } from '../navigation/ref';
@@ -133,7 +136,7 @@ export function HubProvider({ children }) {
   // Zen Zone: <sound>" while a Zen soundscape plays, "Watching <Original>"
   // in the screening room; cleared when nothing plays (or sharing is off).
   const player = usePlayer();
-  const { watching } = useMedia();
+  const { watching, watchingId } = useMedia();
   const [zen, setZen] = useState(ambient.getState);
   useEffect(() => ambient.subscribe(setZen), []);
   const radio = player.current?.kind === 'radio' && player.isPlaying ? player.current : null;
@@ -180,6 +183,28 @@ export function HubProvider({ children }) {
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusKey, stage, userId]);
+
+  // Day One: the first time you play a station or watch an Original, the
+  // database gives you your place in the queue (the first 1,000 earn the
+  // badge). Asked once per thing per session; the database keeps the rest.
+  const claimed = useRef(new Set());
+  const [dayOneNews, setDayOneNews] = useState(null);
+  const firstPlay = watchingId ? ['original', watchingId, watching] : radio?.id ? ['station', radio.id, radio.name] : null;
+  const firstPlayKey = firstPlay ? `${firstPlay[0]}:${firstPlay[1]}` : '';
+  useEffect(() => {
+    if (stage !== 'ready' || !userId || !firstPlay || claimed.current.has(firstPlayKey)) return;
+    claimed.current.add(firstPlayKey);
+    claimDayOne(firstPlay[0], firstPlay[1], firstPlay[2])
+      .then((res) => {
+        if (res?.new && res.day_one) {
+          forgetDayOnes(userId);
+          setDayOneNews({ kind: firstPlay[0], label: firstPlay[2], rank: res.rank });
+        }
+      })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [firstPlayKey, stage, userId]);
+  const clearDayOneNews = useCallback(() => setDayOneNews(null), []);
 
   const setShareStatus = useCallback((on) => {
     setShareStatusState(on);
@@ -256,6 +281,8 @@ export function HubProvider({ children }) {
     const tapped = Notifications.addNotificationResponseReceivedListener((r) => {
       const data = r?.notification?.request?.content?.data ?? {};
       if (data.type === 'chat' && data.conversationId) openPage('HubThread', { id: data.conversationId });
+      // A heart: their profile, to look them over (they're never told).
+      if (data.type === 'heart' && data.likerId) openPage('HubProfile', { id: data.likerId });
     });
     return () => tapped.remove();
   }, []);
@@ -317,6 +344,59 @@ export function HubProvider({ children }) {
       supabase.removeChannel(channel);
     };
   }, [stage, userId]);
+
+  // Hearts on your posts: a notification while the app is open, unless
+  // push already covers it (the database sends those). Opening your hearts
+  // is noted on this phone only, never in the database.
+  const [heartsUnseen, setHeartsUnseen] = useState(0);
+  useEffect(() => {
+    if (!supabase || stage !== 'ready' || !userId) return undefined;
+    let alive = true;
+    Promise.all([hearts.listHeartsOnMine(userId, 60), hearts.heartsSeenAt()])
+      .then(([rows, seen]) => alive && setHeartsUnseen(rows.filter((h) => h.liker_id !== userId && (!seen || h.created_at > seen)).length))
+      .catch(() => {});
+    const channel = ownChannel(`hub:hearts:${userId}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'hearts', filter: `owner_id=eq.${userId}` }, async ({ new: h }) => {
+        if (!h || h.liker_id === userId) return;
+        setHeartsUnseen((n) => n + 1);
+        if (pushToken.current) return;
+        const p = await hub.getProfile(h.liker_id).catch(() => null);
+        chat.notifyHeart({ name: p?.display_name || (p?.username ? `@${p.username}` : 'Someone'), likerId: h.liker_id, sound: chatSoundRef.current });
+      })
+      .subscribe();
+    return () => {
+      alive = false;
+      supabase.removeChannel(channel);
+    };
+  }, [stage, userId]);
+  const seeHearts = useCallback(() => {
+    setHeartsUnseen(0);
+    hearts.markHeartsSeen();
+  }, []);
+
+  // Saved stations are your favourites on the Hub: saving or unsaving one
+  // on the radio hearts or unhearts it on your profile.
+  const { saved = [] } = useUser();
+  const savedKey = saved.map((s) => s.id).join(',');
+  const syncedStations = useRef(null);
+  useEffect(() => {
+    if (!supabase || stage !== 'ready' || !userId) return;
+    const now = new Map(saved.map((s) => [s.id, s]));
+    const before = syncedStations.current;
+    syncedStations.current = new Set(now.keys());
+    const sync = async () => {
+      // The first time this session: whatever the database has that isn't saved here goes.
+      let had = before;
+      if (!had) {
+        const favs = await hearts.listFavourites(userId, 200);
+        had = new Set(favs.filter((f) => f.target_kind === 'station').map((f) => f.target_id));
+      }
+      for (const [id, s] of now) if (!had.has(id)) await hearts.heart(userId, 'station', id, { label: s.name, meta: hearts.stationMeta(s) }).catch(() => {});
+      for (const id of had) if (!now.has(id)) await hearts.unheart(userId, 'station', id).catch(() => {});
+    };
+    sync().catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [savedKey, stage, userId]);
 
   const preview = useRef(null);
   /** Picks the new-message sound: plays it, saves it, and tells the database for pushes. */
@@ -396,8 +476,12 @@ export function HubProvider({ children }) {
       setChatSound,
       disappearing,
       setDisappearing,
+      dayOneNews,
+      clearDayOneNews,
+      heartsUnseen,
+      seeHearts,
     }),
-    [chatSound, setChatSound, disappearing, setDisappearing, isAdmin, stage, session, userId, profile, online, blocked, shareStatus, setShareStatus, loadProfile, saveProfile, finishOnboarding, block, unblock, signOut, deleteAccount],
+    [heartsUnseen, seeHearts, dayOneNews, clearDayOneNews, chatSound, setChatSound, disappearing, setDisappearing, isAdmin, stage, session, userId, profile, online, blocked, shareStatus, setShareStatus, loadProfile, saveProfile, finishOnboarding, block, unblock, signOut, deleteAccount],
   );
   return <HubContext.Provider value={value}>{children}</HubContext.Provider>;
 }

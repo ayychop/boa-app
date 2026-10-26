@@ -67,6 +67,14 @@ import HubSettingsScreen from './src/screens/hub/HubSettingsScreen';
 import HubChatsScreen from './src/screens/hub/HubChatsScreen';
 import HubThreadScreen from './src/screens/hub/HubThreadScreen';
 import AdminDashboard from './src/screens/admin/AdminDashboard';
+import HubNewPostScreen from './src/screens/hub/HubNewPostScreen';
+import HubPostScreen from './src/screens/hub/HubPostScreen';
+import CipherScreen from './src/screens/hub/CipherScreen';
+import CipherRoomScreen from './src/screens/hub/CipherRoomScreen';
+import HubSplitsScreen from './src/screens/hub/HubSplitsScreen';
+import HubSplitSheetScreen from './src/screens/hub/HubSplitSheetScreen';
+import HubInvoiceScreen from './src/screens/hub/HubInvoiceScreen';
+import HubHeartsScreen from './src/screens/hub/HubHeartsScreen';
 import { colors, fonts } from './src/theme';
 import ErrorBoundary from './src/components/ErrorBoundary';
 import { installCrashGuard } from './src/utils/crashGuard';
@@ -350,6 +358,14 @@ function MainTabs({ narrow }) {
         <Stack.Screen name="HubChats" component={HubChatsScreen} />
         <Stack.Screen name="HubThread" component={HubThreadScreen} />
         <Stack.Screen name="AdminDashboard" component={AdminDashboard} />
+        <Stack.Screen name="HubNewPost" component={HubNewPostScreen} options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+        <Stack.Screen name="HubPost" component={HubPostScreen} />
+        <Stack.Screen name="Cipher" component={CipherScreen} />
+        <Stack.Screen name="CipherRoom" component={CipherRoomScreen} options={{ animation: 'slide_from_bottom', gestureEnabled: false }} />
+        <Stack.Screen name="HubSplits" component={HubSplitsScreen} />
+        <Stack.Screen name="HubSplitSheet" component={HubSplitSheetScreen} />
+        <Stack.Screen name="HubInvoice" component={HubInvoiceScreen} />
+        <Stack.Screen name="HubHearts" component={HubHeartsScreen} />
       </Stack.Navigator>
       <AlarmRinger navReady={navReady} />
       <DeepLinks navReady={navReady} />

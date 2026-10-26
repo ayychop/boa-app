@@ -1,21 +1,71 @@
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { useHub } from '../../context/HubContext';
-import { getProfile, roleLabel, startConversation } from '../../api/hub';
-import { BoaStarBadge, Avatar, IconButton, PageHeader } from '../../components/kit';
+import { canMessage, getProfile, MESSAGES_CLOSED, roleLabel, startConversation } from '../../api/hub';
+import { compactCount, listPosts, postCounts } from '../../api/posts';
+import { listDayOnes, placeLine } from '../../api/dayOne';
+import { supabase } from '../../lib/supabase';
+import { ownChannel } from '../../lib/realtime';
+import { BoaStarBadge, DayOneBadge, Avatar, IconButton, PageHeader } from '../../components/kit';
 import { lastSeen, statusLine } from '../../components/hub/hubNav';
 import NowPlaying from '../../components/hub/NowPlaying';
 import useProfileUpdates from '../../hooks/useProfileUpdates';
 import ReportSheet from '../../components/hub/ReportSheet';
-import { Button, Fog, GoldBadge, Slate, Viewfinder } from '../../components/ui';
+import { GridEmpty, PostGrid, ProfileTabs } from '../../components/profile/PostGrid';
+import Favourites from '../../components/profile/Favourites';
+import { GoldBadge, Tappable } from '../../components/ui';
 import { colors, fonts, radius, space, type } from '../../theme';
 
-/** A Hub profile: yours (with Edit) or someone else's (Message, Block, Report). */
+// Unfolded and on tablets the profile is a centred column, like a phone's.
+const MAX_WIDTH = 720;
+
+function Stat({ value, label, onPress, testID }) {
+  return (
+    <Pressable onPress={onPress} disabled={!onPress} accessibilityRole={onPress ? 'button' : undefined} accessibilityLabel={`${value} ${label}`} style={styles.stat} testID={testID}>
+      <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+        {value}
+      </Text>
+      <Text style={styles.statLabel} numberOfLines={1}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+/** A full-width action: gold for the main one, dark glass for the rest. */
+function Action({ label, icon, onPress, primary, disabled, testID }) {
+  return (
+    <Tappable
+      onPress={disabled ? undefined : onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled: !!disabled }}
+      style={[styles.action, primary ? styles.actionPrimary : styles.actionGlass, disabled && { opacity: 0.5 }]}
+      testID={testID}
+    >
+      {!primary ? <LinearGradient colors={['rgba(255,255,255,0.10)', 'rgba(255,255,255,0.03)']} style={StyleSheet.absoluteFill} /> : null}
+      {icon ? <Ionicons name={icon} size={16} color={primary ? colors.bg : colors.text} /> : null}
+      <Text style={[styles.actionText, { color: primary ? colors.bg : colors.text }]} numberOfLines={1}>
+        {label}
+      </Text>
+    </Tappable>
+  );
+}
+
+/**
+ * A Hub profile, Instagram-style: a cinematic header (the avatar in a
+ * glowing gold ring for BOA Stars), name, badges, bio and stats, then the
+ * Posts, Reels and Tagged grids. Yours has Edit profile, New post and
+ * Splits; someone else's has Message (and Block or Report).
+ */
 export default function HubProfileScreen({ navigation, route }) {
   const insets = useSafeAreaInsets();
+  const window = useWindowDimensions();
+  const width = Math.min(window.width, MAX_WIDTH);
   const { userId, profile: me, isOnline, blocked, block, unblock } = useHub();
   const id = route.params?.id ?? userId;
   const mine = id === userId;
@@ -23,6 +73,25 @@ export default function HubProfileScreen({ navigation, route }) {
   const [state, setState] = useState(mine ? 'ready' : 'loading');
   const [reporting, setReporting] = useState(null);
   const [opening, setOpening] = useState(false);
+  const [tab, setTab] = useState('posts');
+  const [grids, setGrids] = useState({});
+  const [counts, setCounts] = useState({ posts: 0, reels: 0, tagged: 0 });
+  const [dayOnes, setDayOnes] = useState([]);
+  const [refreshing, setRefreshing] = useState(false);
+  const [open, setOpen] = useState(true);
+
+  // Whether they take messages from you (their privacy setting): asked of
+  // the database, which never says why.
+  useEffect(() => {
+    if (mine || state !== 'ready') return undefined;
+    let alive = true;
+    canMessage(id)
+      .then((yes) => alive && setOpen(yes))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [id, mine, state]);
 
   useEffect(() => {
     if (mine) {
@@ -45,6 +114,49 @@ export default function HubProfileScreen({ navigation, route }) {
 
   // Their now-playing status (and anything else they change), live.
   useProfileUpdates(mine ? [] : [id], (p) => setPerson((prev) => (prev ? { ...prev, ...p } : prev)));
+
+  const loadTab = useCallback(
+    async (which) => {
+      try {
+        const rows = await listPosts(id, which);
+        setGrids((g) => ({ ...g, [which]: { rows, error: null } }));
+      } catch (err) {
+        setGrids((g) => ({ ...g, [which]: { rows: g[which]?.rows ?? [], error: err.message } }));
+      }
+    },
+    [id],
+  );
+  const loadCounts = useCallback(() => postCounts(id).then(setCounts).catch(() => {}), [id]);
+
+  useEffect(() => {
+    if (state !== 'ready') return;
+    loadCounts();
+    listDayOnes(id).then(setDayOnes).catch(() => {});
+  }, [id, state, loadCounts]);
+  useEffect(() => {
+    if (state === 'ready' && !grids[tab]) loadTab(tab);
+  }, [tab, state, grids, loadTab]);
+
+  // New and deleted posts appear at once, on every grid that shows them.
+  useEffect(() => {
+    if (!supabase || state !== 'ready') return undefined;
+    const refresh = () => {
+      setGrids({});
+      loadCounts();
+    };
+    const channel = ownChannel(`hub:posts:${id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'posts', filter: `author_id=eq.${id}` }, refresh)
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [id, state, loadCounts]);
+
+  const refresh = async () => {
+    setRefreshing(true);
+    await Promise.all([loadTab(tab), loadCounts()]);
+    setRefreshing(false);
+  };
 
   const isBlocked = blocked.has(id);
   const online = isOnline(id);
@@ -80,7 +192,14 @@ export default function HubProfileScreen({ navigation, route }) {
     );
   }
 
+  const name = person.display_name || `@${person.username}`;
   const status = statusLine(person);
+  const roles = person.roles ?? [];
+  const star = !!person.is_boa_star;
+  const grid = grids[tab];
+  const newPost = () => navigation.navigate('HubNewPost');
+  const openPost = (p) => navigation.navigate('HubPost', { post: p });
+
   return (
     <View style={styles.screen} testID={mine ? 'hub-my-profile' : 'hub-profile'}>
       <PageHeader
@@ -89,60 +208,127 @@ export default function HubProfileScreen({ navigation, route }) {
         onBack={() => navigation.goBack()}
         right={
           mine ? (
-            <IconButton icon="settings-outline" label="Hub settings" onPress={() => navigation.navigate('HubSettings')} />
+            <View style={styles.headerActions}>
+              <IconButton icon="add" label="New post" onPress={newPost} testID="profile-new-post" />
+              <IconButton icon="settings-outline" label="Hub settings" onPress={() => navigation.navigate('HubSettings')} />
+            </View>
           ) : (
             <IconButton icon="flag-outline" label="Report user" onPress={() => setReporting({ user: person })} testID="hub-report-user" />
           )
         }
       />
-      <ScrollView contentContainerStyle={{ padding: space.xl, paddingTop: 0, paddingBottom: insets.bottom + space.xxl }}>
-        <Animated.View entering={FadeInDown.springify().damping(18)} style={styles.card}>
-          <LinearGradient colors={['rgba(226,168,75,0.22)', 'rgba(226,168,75,0)']} style={StyleSheet.absoluteFill} />
-          <Fog opacity={0.22} />
-          <Viewfinder inset={12} size={12} />
-          <Avatar uri={person.avatar_url} name={person.display_name || person.username} size={112} online={online} ring />
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <Text style={styles.name}>{person.display_name || `@${person.username}`}</Text>
-            {person.is_boa_star ? <BoaStarBadge size={22} /> : null}
-          </View>
-          <Text style={styles.seen}>{mine ? (person.visible_on_hub ? 'Visible on the Hub' : 'Hidden from the Hub') : lastSeen(person.last_seen_at, online)}</Text>
-          {person.open_for_work && <GoldBadge label="OPEN FOR WORK" icon="briefcase" style={{ marginTop: space.md }} />}
-          {status ? (
-            <Animated.View entering={FadeIn} style={styles.status}>
-              <NowPlaying person={person} size="lg" lines={2} />
-            </Animated.View>
-          ) : null}
-        </Animated.View>
+      <ScrollView
+        contentContainerStyle={{ paddingBottom: insets.bottom + space.xxl, alignItems: 'center' }}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={colors.gold} />}
+      >
+        <View style={{ width }}>
+          <Animated.View entering={FadeInDown.springify().damping(18)} style={styles.hero}>
+            {/* The stage light: warm gold from above, violet from the side. */}
+            <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+              <View style={[styles.orb, { top: -150, right: -80, backgroundColor: star ? 'rgba(226,168,75,0.34)' : 'rgba(226,168,75,0.2)' }]} />
+              <View style={[styles.orb, { top: -60, left: -140, backgroundColor: 'rgba(120,80,200,0.16)' }]} />
+              <LinearGradient colors={['rgba(5,5,6,0)', colors.bg]} locations={[0.3, 1]} style={StyleSheet.absoluteFill} />
+            </View>
 
-        {person.roles.length > 0 && (
-          <>
-            <Slate style={styles.section}>Roles</Slate>
-            <View style={styles.roles}>
-              {person.roles.map((r) => (
-                <View key={r} style={styles.role}>
-                  <Text style={styles.roleText}>{roleLabel(r)}</Text>
+            <View style={styles.topRow}>
+              <View style={[styles.avatarWrap, star && styles.avatarGlow]} testID={star ? 'profile-star-ring' : undefined}>
+                <Avatar uri={person.avatar_url} name={name} size={width < 380 ? 92 : 104} online={online} ring={star} />
+              </View>
+              <View style={styles.stats}>
+                <Stat value={compactCount(counts.posts)} label="Posts" onPress={() => setTab('posts')} testID="stat-posts" />
+                <Stat value={compactCount(counts.reels)} label="Reels" onPress={() => setTab('reels')} testID="stat-reels" />
+                <Stat value={compactCount(dayOnes.length)} label="Day One" testID="stat-day-one" />
+              </View>
+            </View>
+
+            <View style={styles.nameRow}>
+              <Text style={styles.name} numberOfLines={2}>
+                {name}
+              </Text>
+            </View>
+            {star || dayOnes.length ? (
+              <View style={styles.badges}>
+                {star ? <BoaStarBadge size={20} /> : null}
+                {dayOnes.length ? <DayOneBadge size={20} /> : null}
+              </View>
+            ) : null}
+            <Text style={styles.handle} numberOfLines={1}>
+              @{person.username}
+              <Text style={styles.seen}>{`  ·  ${mine ? (person.visible_on_hub ? 'Visible on the Hub' : 'Hidden from the Hub') : lastSeen(person.last_seen_at, online) || 'On the Hub'}`}</Text>
+            </Text>
+            {roles.length ? (
+              <Text style={styles.roles} numberOfLines={2}>
+                {roles.map(roleLabel).join('  ·  ')}
+              </Text>
+            ) : null}
+            {person.bio ? (
+              <Text style={styles.bio} numberOfLines={6}>
+                {person.bio}
+              </Text>
+            ) : mine ? (
+              <Text style={[styles.bio, { color: colors.textFaint }]} onPress={() => navigation.navigate('HubSettings')}>
+                Add a bio so people know what you do.
+              </Text>
+            ) : null}
+            {person.open_for_work ? <GoldBadge label="OPEN FOR WORK" icon="briefcase" style={{ marginTop: space.md, alignSelf: 'flex-start' }} /> : null}
+            {status ? (
+              <Animated.View entering={FadeIn} style={styles.status}>
+                <NowPlaying person={person} size="lg" lines={2} />
+              </Animated.View>
+            ) : null}
+
+            <View style={styles.actions}>
+              {mine ? (
+                <>
+                  <Action label="Edit profile" icon="create-outline" onPress={() => navigation.navigate('HubSettings')} testID="profile-edit" />
+                  <Action label="Splits" icon="pie-chart-outline" onPress={() => navigation.navigate('HubSplits')} testID="profile-splits" />
+                </>
+              ) : isBlocked ? (
+                <Action label="Unblock" icon="lock-open-outline" onPress={() => unblock(id).catch(() => {})} />
+              ) : (
+                <>
+                  {open ? (
+                    <Action primary label={opening ? 'Opening' : 'Message'} icon="chatbubble-ellipses" onPress={message} disabled={opening} testID="profile-message" />
+                  ) : (
+                    <Action label="Messages off" icon="lock-closed-outline" onPress={() => Alert.alert('Messages off', MESSAGES_CLOSED)} testID="profile-messages-off" />
+                  )}
+                  <Action label="Block" icon="ban-outline" onPress={confirmBlock} testID="profile-block" />
+                </>
+              )}
+            </View>
+          </Animated.View>
+
+          {dayOnes.length ? (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dayOnes} testID="profile-day-ones">
+              {dayOnes.map((d) => (
+                <View key={`${d.kind}:${d.item_id}`} style={styles.dayOne}>
+                  <LinearGradient colors={['rgba(246,211,138,0.16)', 'rgba(255,255,255,0.02)']} style={StyleSheet.absoluteFill} />
+                  <Ionicons name={d.kind === 'original' ? 'film' : 'radio'} size={16} color={colors.gold} />
+                  <View style={{ flexShrink: 1 }}>
+                    <Text style={styles.dayOneTitle} numberOfLines={1}>
+                      {d.item_label || (d.kind === 'original' ? 'BOA Original' : 'Station')}
+                    </Text>
+                    <Text style={styles.dayOneRank} numberOfLines={1}>
+                      {placeLine(d.rank)}
+                    </Text>
+                  </View>
                 </View>
               ))}
-            </View>
-          </>
-        )}
-        {person.bio ? (
-          <>
-            <Slate style={styles.section}>About</Slate>
-            <Text style={type.body}>{person.bio}</Text>
-          </>
-        ) : null}
+            </ScrollView>
+          ) : null}
 
-        <View style={styles.actions}>
-          {mine ? (
-            <Button label="Edit profile" icon="create-outline" onPress={() => navigation.navigate('HubSettings')} />
-          ) : isBlocked ? (
-            <Button label="Unblock" icon="lock-open-outline" variant="ghost" onPress={() => unblock(id).catch(() => {})} />
+          <Favourites userId={id} myId={userId} />
+
+          <ProfileTabs value={tab} onChange={setTab} width={width} />
+          {!grid ? (
+            <ActivityIndicator color={colors.gold} style={{ marginTop: space.xxl }} />
+          ) : grid.rows.length ? (
+            <PostGrid posts={grid.rows} width={width} onOpen={openPost} />
+          ) : grid.error ? (
+            <Text style={[type.bodyMuted, styles.gridError]}>{grid.error}</Text>
           ) : (
-            <>
-              <Button label={opening ? 'Opening' : 'Message'} icon="chatbubble-ellipses" onPress={message} disabled={opening} />
-              <Button label="Block" icon="ban-outline" variant="ghost" onPress={confirmBlock} />
-            </>
+            <GridEmpty tab={tab} mine={mine} onCreate={newPost} />
           )}
         </View>
       </ScrollView>
@@ -153,23 +339,44 @@ export default function HubProfileScreen({ navigation, route }) {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
-  card: {
+  headerActions: { flexDirection: 'row', gap: space.sm },
+  hero: { paddingHorizontal: space.lg, paddingTop: space.sm, overflow: 'hidden' },
+  orb: { position: 'absolute', width: 340, height: 340, borderRadius: 170 },
+  topRow: { flexDirection: 'row', alignItems: 'center', gap: space.lg },
+  avatarWrap: { borderRadius: 999 },
+  avatarGlow: { boxShadow: '0px 0px 28px rgba(226,168,75,0.7)' },
+  stats: { flex: 1, flexDirection: 'row', justifyContent: 'space-around', minWidth: 0 },
+  stat: { alignItems: 'center', minWidth: 56, paddingVertical: space.xs, flexShrink: 1 },
+  statValue: { fontFamily: fonts.bold, fontSize: 20, letterSpacing: -0.5, color: colors.text },
+  statLabel: { fontFamily: fonts.medium, fontSize: 12.5, color: colors.textMuted, marginTop: 2 },
+  nameRow: { marginTop: space.lg },
+  name: { fontFamily: fonts.semibold, fontSize: 24, lineHeight: 29, letterSpacing: -0.8, color: colors.text },
+  badges: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, marginTop: space.sm },
+  handle: { fontFamily: fonts.semibold, fontSize: 13.5, color: colors.textMuted, marginTop: space.sm },
+  seen: { fontFamily: fonts.medium, color: colors.textFaint },
+  roles: { fontFamily: fonts.mono, fontSize: 10.5, letterSpacing: 1.6, textTransform: 'uppercase', color: colors.gold, marginTop: space.md, lineHeight: 16 },
+  bio: { fontFamily: fonts.medium, fontSize: 14.5, lineHeight: 21, color: colors.text, marginTop: space.sm },
+  status: { flexDirection: 'row', gap: 8, alignItems: 'center', alignSelf: 'flex-start', maxWidth: '100%', marginTop: space.md, paddingHorizontal: 14, paddingVertical: 10, borderRadius: radius.pill, backgroundColor: colors.goldSoft },
+  actions: { flexDirection: 'row', gap: space.sm, marginTop: space.lg },
+  action: { flex: 1, height: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, borderRadius: radius.md, overflow: 'hidden', paddingHorizontal: space.md },
+  actionPrimary: { backgroundColor: colors.gold, boxShadow: '0px 6px 20px rgba(226,168,75,0.35)' },
+  actionGlass: { backgroundColor: 'rgba(18,18,22,0.7)', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.borderStrong },
+  actionText: { fontFamily: fonts.semibold, fontSize: 14, flexShrink: 1 },
+  dayOnes: { paddingHorizontal: space.lg, gap: space.sm, paddingTop: space.lg },
+  dayOne: {
+    flexDirection: 'row',
     alignItems: 'center',
-    padding: space.xl,
-    paddingTop: space.xxl,
-    borderRadius: 24,
+    gap: space.sm,
+    maxWidth: 230,
+    paddingHorizontal: space.md,
+    paddingVertical: 10,
+    borderRadius: radius.lg,
     overflow: 'hidden',
-    backgroundColor: colors.surface,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
+    borderColor: 'rgba(246,211,138,0.45)',
+    backgroundColor: 'rgba(18,18,22,0.6)',
   },
-  name: { fontFamily: fonts.semibold, fontSize: 26, letterSpacing: -0.8, color: colors.text, marginTop: space.lg, textAlign: 'center' },
-  seen: { fontFamily: fonts.medium, fontSize: 12.5, color: colors.textFaint, marginTop: 4 },
-  status: { flexDirection: 'row', gap: 8, alignItems: 'center', marginTop: space.lg, paddingHorizontal: 14, paddingVertical: 10, borderRadius: radius.pill, backgroundColor: colors.goldSoft },
-  statusText: { fontFamily: fonts.semibold, fontSize: 13, color: colors.text, flexShrink: 1 },
-  section: { marginTop: space.xl, marginBottom: space.md },
-  roles: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
-  role: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: radius.pill, borderWidth: 1, borderColor: 'rgba(226,168,75,0.5)' },
-  roleText: { fontFamily: fonts.semibold, fontSize: 13, color: colors.gold },
-  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: space.md, marginTop: space.xxl },
+  dayOneTitle: { fontFamily: fonts.semibold, fontSize: 13, color: colors.text },
+  dayOneRank: { fontFamily: fonts.mono, fontSize: 9.5, letterSpacing: 1, color: '#F6D38A', marginTop: 2 },
+  gridError: { textAlign: 'center', marginTop: space.xxl, paddingHorizontal: space.lg },
 });

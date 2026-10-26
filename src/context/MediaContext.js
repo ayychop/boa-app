@@ -40,6 +40,8 @@ export function MediaProvider({ children }) {
       close: () => setScreening(null),
       // What's on the big screen, for the Creative Hub's "Watching" status.
       watching: screening ? screening.production.title : null,
+      // Which Original it is, for Day One.
+      watchingId: screening?.production?.id ?? null,
     }),
     [openVideo, openPodcast, screening],
   );

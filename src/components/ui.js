@@ -67,7 +67,7 @@ export function Tappable({ children, style, onPress, scaleTo = 0.96, ...rest }) 
 }
 
 /** Gold, glowing primary button ("Get seen" on the site) and a ghost variant. */
-export function Button({ label, icon, onPress, variant = 'primary', disabled, style }) {
+export function Button({ label, icon, onPress, variant = 'primary', disabled, style, testID }) {
   const primary = variant === 'primary';
   return (
     <Tappable
@@ -75,6 +75,8 @@ export function Button({ label, icon, onPress, variant = 'primary', disabled, st
       disabled={!!disabled}
       accessibilityRole="button"
       accessibilityState={{ disabled: !!disabled }}
+      accessibilityLabel={label}
+      testID={testID}
       style={[styles.button, primary ? styles.primary : styles.ghost, disabled && { opacity: 0.45 }, style]}
     >
       {icon && <Ionicons name={icon} size={17} color={primary ? colors.bg : colors.text} />}

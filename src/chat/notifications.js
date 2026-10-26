@@ -66,7 +66,7 @@ export function installChatHandler() {
   Notifications.setNotificationHandler({
     handleNotification: async (n) => {
       const data = n?.request?.content?.data ?? {};
-      const show = data.type === 'chat' && data.conversationId !== openThread;
+      const show = (data.type === 'chat' && data.conversationId !== openThread) || data.type === 'heart';
       return { shouldShowBanner: show, shouldShowList: show, shouldPlaySound: show, shouldSetBadge: false };
     },
   });
@@ -113,6 +113,20 @@ export async function notifyLocal({ title, body, conversationId, messageId, soun
       sound: tone.file,
       vibrate: CHAT_VIBRATION,
       data: { type: 'chat', conversationId, messageId },
+    },
+    trigger: Platform.OS === 'android' ? { channelId: chatChannel(tone.id) } : null,
+  }).catch(() => null);
+}
+
+/** "❤️ Kofi loved your photo": tapping it opens their profile. */
+export async function notifyHeart({ name, what = 'post', likerId, sound }) {
+  const tone = chatSoundById(sound);
+  return Notifications.scheduleNotificationAsync({
+    content: {
+      title: `❤️ ${name}`,
+      body: `loved your ${what}`,
+      sound: tone.file,
+      data: { type: 'heart', likerId },
     },
     trigger: Platform.OS === 'android' ? { channelId: chatChannel(tone.id) } : null,
   }).catch(() => null);

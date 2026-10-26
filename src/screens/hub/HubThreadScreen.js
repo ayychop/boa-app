@@ -11,6 +11,7 @@ import { useHub } from '../../context/HubContext';
 import { supabase } from '../../lib/supabase';
 import { ownChannel } from '../../lib/realtime';
 import {
+  canMessage,
   deleteMessage,
   getConversation,
   isExpired,
@@ -25,7 +26,8 @@ import {
 } from '../../api/hub';
 import { setOpenThread } from '../../chat/notifications';
 import { openTyping, TYPING_HOLD_MS } from '../../chat/typing';
-import { BoaStarBadge } from '../../components/kit';
+import { BoaStarBadge, DayOneBadge } from '../../components/kit';
+import useDayOne from '../../hooks/useDayOne';
 import { lastSeen, statusLine } from '../../components/hub/hubNav';
 import ReportSheet from '../../components/hub/ReportSheet';
 import NowPlaying from '../../components/hub/NowPlaying';
@@ -434,7 +436,23 @@ function Thread({ navigation, route }) {
   const other = conv?.other;
   const name = other?.display_name || (other?.username ? `@${other.username}` : 'Conversation');
   const online = conv ? isOnline(conv.otherId) : false;
+  const dayOne = useDayOne([conv?.otherId]).has(conv?.otherId);
   const isBlocked = conv ? blocked.has(conv.otherId) : false;
+  // They've turned messages off (Hub settings > Who can message you): the
+  // thread stays readable, and the composer makes way for a quiet note.
+  const [closed, setClosed] = useState(false);
+  const otherId = conv?.otherId;
+  useEffect(() => {
+    if (!otherId) return undefined;
+    let alive = true;
+    Promise.resolve()
+      .then(() => canMessage(otherId))
+      .then((yes) => alive && setClosed(!yes))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [otherId]);
   // "Seen" goes under your latest message once they've read it.
   const lastMine = messages.find((m) => m.sender_id === userId && !m.pending && !m.failed);
   const seenId = lastMine && conv?.theirReadAt && new Date(conv.theirReadAt) >= new Date(lastMine.created_at) ? lastMine.id : null;
@@ -447,7 +465,14 @@ function Thread({ navigation, route }) {
       online={online}
       vibe={vibe}
       blurTarget={behind}
-      badge={other?.is_boa_star ? <BoaStarBadge size={15} /> : null}
+      badge={
+        other?.is_boa_star || dayOne ? (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+            {other?.is_boa_star ? <BoaStarBadge size={15} /> : null}
+            {dayOne ? <DayOneBadge size={15} label={!other?.is_boa_star} /> : null}
+          </View>
+        ) : null
+      }
       status={other ? <HeaderStatus person={other} online={online} typing={theyType} accent={vibe.accent} /> : null}
       onBack={() => navigation.goBack()}
       onProfile={conv && other ? () => navigation.navigate('HubProfile', { id: conv.otherId }) : null}
@@ -540,6 +565,11 @@ function Thread({ navigation, route }) {
             <View style={[styles.blocked, { paddingBottom: insets.bottom + space.md, backgroundColor: vibe.bar }]} onLayout={(e) => setComposerH(e.nativeEvent.layout.height)}>
               <Text style={[type.bodyMuted, { flex: 1 }]}>You've blocked {name}. Unblock them to send messages.</Text>
               <Button label="Unblock" variant="ghost" onPress={() => unblock(conv.otherId).catch((e) => Alert.alert('Unblock failed', e.message))} />
+            </View>
+          ) : closed ? (
+            <View style={[styles.blocked, { paddingBottom: insets.bottom + space.md, backgroundColor: vibe.bar }]} onLayout={(e) => setComposerH(e.nativeEvent.layout.height)} testID="thread-messages-off">
+              <Ionicons name="lock-closed-outline" size={18} color={colors.textMuted} />
+              <Text style={[type.bodyMuted, { flex: 1 }]}>{name} isn't taking messages right now.</Text>
             </View>
           ) : (
             <Composer

@@ -5,7 +5,8 @@ import Animated, { FadeInDown, LinearTransition } from 'react-native-reanimated'
 import { LinearGradient } from 'expo-linear-gradient';
 import { useHub } from '../../context/HubContext';
 import useConversations from '../../hooks/useConversations';
-import { Avatar, IconButton, PageHeader, BoaStarBadge } from '../../components/kit';
+import useDayOne from '../../hooks/useDayOne';
+import { Avatar, IconButton, PageHeader, BoaStarBadge, DayOneBadge } from '../../components/kit';
 import { Button } from '../../components/ui';
 import NowPlaying from '../../components/hub/NowPlaying';
 import { colors, fonts, radius, space, type } from '../../theme';
@@ -25,7 +26,7 @@ export function chatTime(iso, now = new Date()) {
  * they're online), their name, the last message and when. Unread threads
  * glow gold at the edge. Rows rise in one after another.
  */
-export function ThreadRow({ conv, online, onPress, index, myId }) {
+export function ThreadRow({ conv, online, onPress, index, myId, dayOne = false }) {
   const name = conv.other?.display_name || (conv.other?.username ? `@${conv.other.username}` : 'BOA HUB member');
   const preview = `${conv.last_sender_id === myId ? 'You: ' : ''}${conv.last_message_preview ?? ''}`;
   return (
@@ -46,11 +47,12 @@ export function ThreadRow({ conv, online, onPress, index, myId }) {
         <Avatar uri={conv.other?.avatar_url} name={name} size={64} online={online} />
         <View style={{ flex: 1, minWidth: 0 }}>
           <View style={styles.line}>
-            <Text style={[styles.name, conv.unread && { fontFamily: fonts.bold }, conv.other?.is_boa_star && { flex: 0, flexShrink: 1 }]} numberOfLines={1}>
+            <Text style={[styles.name, conv.unread && { fontFamily: fonts.bold }, (conv.other?.is_boa_star || dayOne) && { flex: 0, flexShrink: 1 }]} numberOfLines={1}>
               {name}
             </Text>
             {conv.other?.is_boa_star ? <BoaStarBadge size={16} /> : null}
-            {conv.other?.is_boa_star ? <View style={{ flex: 1 }} /> : null}
+            {dayOne ? <DayOneBadge size={16} label={!conv.other?.is_boa_star} /> : null}
+            {conv.other?.is_boa_star || dayOne ? <View style={{ flex: 1 }} /> : null}
             <Text style={[styles.time, conv.unread && { color: colors.gold }]}>{chatTime(conv.last_message_at)}</Text>
           </View>
           <NowPlaying person={conv.other} style={{ marginTop: 2 }} />
@@ -76,6 +78,7 @@ export default function HubChatsScreen({ navigation, inTab = false, bottomPaddin
   const { rows, state, error, reload: load } = useConversations(userId);
 
   const visible = rows.filter((c) => !blocked.has(c.otherId));
+  const dayOnes = useDayOne(visible.map((c) => c.otherId));
 
   return (
     <View style={styles.screen} testID={inTab ? 'chat-tab' : 'hub-chats'}>
@@ -94,6 +97,7 @@ export default function HubChatsScreen({ navigation, inTab = false, bottomPaddin
             index={index}
             myId={userId}
             online={isOnline(item.otherId)}
+            dayOne={dayOnes.has(item.otherId)}
             onPress={() => navigation.navigate('HubThread', { id: item.id })}
           />
         )}

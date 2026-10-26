@@ -8,11 +8,14 @@ import { useHub } from '../../context/HubContext';
 import * as hub from '../../api/hub';
 import useConversations from '../../hooks/useConversations';
 import { talent as roster } from '../../data/boaContent';
-import { Avatar, IconButton, BoaStarBadge } from '../../components/kit';
-import { Button, Slate } from '../../components/ui';
+import { Avatar, IconButton, BoaStarBadge, DayOneBadge } from '../../components/kit';
+import { Button, PulseDot, Slate } from '../../components/ui';
 import DailySpark from '../../components/DailySpark';
 import Headshot from '../../components/Headshot';
 import { ThreadRow } from './HubChatsScreen';
+import { RoomCard, useLiveRooms } from './CipherScreen';
+import useDayOne from '../../hooks/useDayOne';
+import { placeLine } from '../../api/dayOne';
 import { colors, fonts, radius, space, type } from '../../theme';
 
 const roleLabel = (id) => hub.ROLES.find((r) => r.id === id)?.label ?? null;
@@ -104,6 +107,25 @@ function TalentCard({ person, onPress, index }) {
   );
 }
 
+// A shortcut on dark glass: an icon in a gold ring, a name and a line.
+function Tool({ icon, title, detail, onPress, live, testID }) {
+  return (
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={`${title}. ${detail}`} style={({ pressed }) => [styles.tool, pressed && { transform: [{ scale: 0.97 }] }]} testID={testID}>
+      <LinearGradient colors={['rgba(255,255,255,0.09)', 'rgba(255,255,255,0.02)']} style={StyleSheet.absoluteFill} />
+      <View style={styles.toolIcon}>
+        <Ionicons name={icon} size={20} color={colors.gold} />
+        {live ? <PulseDot color="#FF4D5E" size={7} style={styles.toolLive} /> : null}
+      </View>
+      <Text style={styles.toolTitle} numberOfLines={1}>
+        {title}
+      </Text>
+      <Text style={styles.toolDetail} numberOfLines={2}>
+        {detail}
+      </Text>
+    </Pressable>
+  );
+}
+
 function Row({ children }) {
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.rowContent}>
@@ -122,7 +144,8 @@ function Row({ children }) {
  */
 export default function ChatHome({ navigation, bottomPadding }) {
   const insets = useSafeAreaInsets();
-  const { userId, profile, isOnline, blocked } = useHub();
+  const { userId, profile, isOnline, blocked, dayOneNews, clearDayOneNews, heartsUnseen = 0 } = useHub();
+  const live = useLiveRooms(3);
   const { rows, state, error, reload } = useConversations(userId);
   const [pulse, setPulse] = useState({ featured: [], fresh: [], suggested: [], ready: false });
 
@@ -155,6 +178,7 @@ export default function ChatHome({ navigation, bottomPadding }) {
   const suggested = pulse.suggested.filter((p) => !blocked.has(p.id));
   const openPerson = (p) => navigation.navigate('HubProfile', { id: p.id });
   const unread = visible.filter((c) => c.unread).length;
+  const dayOnes = useDayOne([userId, ...visible.map((c) => c.otherId)]);
 
   return (
     <View style={styles.screen} testID="chat-tab">
@@ -177,12 +201,25 @@ export default function ChatHome({ navigation, bottomPadding }) {
               <Text style={styles.heroTitle} accessibilityRole="header" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6} testID="chat-title">
                 Messages
               </Text>
-              {profile?.is_boa_star ? <BoaStarBadge size={18} style={{ alignSelf: 'flex-start', marginTop: 6 }} /> : null}
+              {profile?.is_boa_star || dayOnes.has(userId) ? (
+                <View style={{ flexDirection: 'row', gap: 6, marginTop: 6 }}>
+                  {profile?.is_boa_star ? <BoaStarBadge size={18} /> : null}
+                  {dayOnes.has(userId) ? <DayOneBadge size={18} /> : null}
+                </View>
+              ) : null}
               <Text style={styles.heroSub} numberOfLines={1}>
                 {unread ? `${unread} unread` : profile ? `Hi, ${profile.display_name || profile.username}` : ''}
               </Text>
             </View>
             <View style={{ flexDirection: 'row', gap: space.sm, flexShrink: 0 }}>
+              <View>
+                <IconButton icon={heartsUnseen ? 'heart' : 'heart-outline'} tone={heartsUnseen ? '#FF3B5C' : colors.text} label={heartsUnseen ? `Hearts, ${heartsUnseen} new` : 'Hearts'} onPress={() => navigation.navigate('HubHearts')} testID="chat-hearts" />
+                {heartsUnseen ? (
+                  <View style={styles.heartBadge} pointerEvents="none">
+                    <Text style={styles.heartBadgeText}>{heartsUnseen > 9 ? '9+' : heartsUnseen}</Text>
+                  </View>
+                ) : null}
+              </View>
               <IconButton icon="settings-outline" label="Chat settings" onPress={() => navigation.navigate('HubSettings')} testID="chat-settings" />
               <IconButton icon="search" label="Find talent" onPress={() => navigation.navigate('HubDirectory')} />
             </View>
@@ -192,6 +229,36 @@ export default function ChatHome({ navigation, bottomPadding }) {
         <Animated.View entering={FadeInDown.delay(80).springify().damping(18)} style={styles.spark}>
           <DailySpark category={profile?.quote_category} hint={profile?.quote_category ? null : 'Choose your kind in Hub settings.'} />
         </Animated.View>
+
+        {dayOneNews ? (
+          <Animated.View entering={FadeInDown.springify().damping(16)} style={styles.dayOneNews} testID="day-one-news">
+            <LinearGradient colors={['rgba(246,211,138,0.22)', 'rgba(255,255,255,0.02)']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+            <DayOneBadge size={22} />
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={styles.dayOneTitle} numberOfLines={2}>
+                You're a Day One for {dayOneNews.label}
+              </Text>
+              <Text style={styles.dayOneBody}>{placeLine(dayOneNews.rank)}. It's on your profile now.</Text>
+            </View>
+            <IconButton icon="close" label="Dismiss" onPress={clearDayOneNews} />
+          </Animated.View>
+        ) : null}
+
+        <SectionTitle kicker="Live on the Hub" title="The Cipher" action={live.rooms.length ? 'All rooms' : null} onAction={() => navigation.navigate('Cipher')} />
+        {live.rooms.length ? (
+          <Row>
+            {live.rooms.map((r, i) => (
+              <View key={r.id} style={{ width: 280 }}>
+                <RoomCard room={r} host={live.hosts[r.host_id]} count={live.counts[r.id]} index={i} onPress={() => navigation.navigate('CipherRoom', { id: r.id })} />
+              </View>
+            ))}
+          </Row>
+        ) : null}
+        <View style={styles.tools}>
+          <Tool icon="mic" title="The Cipher" detail={live.rooms.length ? `${live.rooms.length} live now` : 'Go live: play the new joint'} live={live.rooms.length > 0} onPress={() => navigation.navigate('Cipher')} testID="tool-cipher" />
+          <Tool icon="pie-chart" title="Splits" detail="Split sheets and invoices" onPress={() => navigation.navigate('HubSplits')} testID="tool-splits" />
+          <Tool icon="grid" title="Your profile" detail="Posts, reels and badges" onPress={() => navigation.navigate('HubProfile')} testID="tool-profile" />
+        </View>
 
         {featured.length > 0 && (
           <>
@@ -259,6 +326,7 @@ export default function ChatHome({ navigation, bottomPadding }) {
               index={index}
               myId={userId}
               online={isOnline(item.otherId)}
+              dayOne={dayOnes.has(item.otherId)}
               onPress={() => navigation.navigate('HubThread', { id: item.id })}
             />
           ))
@@ -270,17 +338,17 @@ export default function ChatHome({ navigation, bottomPadding }) {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
-  hero: { paddingHorizontal: space.xl, paddingBottom: space.lg, overflow: 'hidden' },
+  hero: { paddingHorizontal: space.lg, paddingBottom: space.lg, overflow: 'hidden' },
   orb: { position: 'absolute', width: 300, height: 300, borderRadius: 150 },
   heroRow: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   heroTitle: { fontFamily: fonts.semibold, fontSize: 34, lineHeight: 38, letterSpacing: -1.4, color: colors.text, marginTop: 4, flexShrink: 1 },
   heroSub: { fontFamily: fonts.medium, fontSize: 13, color: colors.textMuted, marginTop: 2 },
   spark: { paddingHorizontal: space.lg, marginTop: -space.md },
-  sectionHead: { flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: space.xl, marginTop: space.xxl, marginBottom: space.md },
+  sectionHead: { flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: space.lg, marginTop: space.xxl, marginBottom: space.md },
   sectionTitle: { fontFamily: fonts.semibold, fontSize: 21, letterSpacing: -0.6, color: colors.text, marginTop: 4 },
   sectionAction: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingBottom: 3 },
   sectionActionText: { fontFamily: fonts.semibold, fontSize: 13, color: colors.gold },
-  rowContent: { paddingHorizontal: space.xl, gap: space.md },
+  rowContent: { paddingHorizontal: space.lg, gap: space.md },
   person: {
     width: 148,
     alignItems: 'center',
@@ -308,6 +376,17 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(226,168,75,0.35)',
     backgroundColor: 'rgba(18,18,22,0.6)',
   },
+  heartBadge: { position: 'absolute', top: -4, right: -4, minWidth: 18, height: 18, paddingHorizontal: 4, borderRadius: 9, alignItems: 'center', justifyContent: 'center', backgroundColor: '#FF3B5C', borderWidth: 2, borderColor: colors.bg },
+  heartBadgeText: { fontFamily: fonts.bold, fontSize: 10, color: '#fff' },
+  tools: { flexDirection: 'row', gap: space.sm, paddingHorizontal: space.lg, marginTop: space.md },
+  tool: { flex: 1, minWidth: 0, padding: space.md, borderRadius: radius.lg, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255,255,255,0.14)', backgroundColor: 'rgba(18,18,22,0.6)' },
+  toolIcon: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.goldSoft, borderWidth: 1, borderColor: 'rgba(226,168,75,0.45)' },
+  toolLive: { position: 'absolute', top: 0, right: 0 },
+  toolTitle: { fontFamily: fonts.semibold, fontSize: 14, color: colors.text, marginTop: space.md },
+  toolDetail: { fontFamily: fonts.medium, fontSize: 11.5, lineHeight: 15, color: colors.textMuted, marginTop: 2 },
+  dayOneNews: { flexDirection: 'row', alignItems: 'center', gap: space.md, marginHorizontal: space.lg, marginTop: space.xl, padding: space.md, borderRadius: radius.lg, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(246,211,138,0.55)', backgroundColor: 'rgba(18,18,22,0.7)', boxShadow: '0px 0px 24px rgba(246,211,138,0.2)' },
+  dayOneTitle: { fontFamily: fonts.semibold, fontSize: 14.5, color: colors.text },
+  dayOneBody: { fontFamily: fonts.medium, fontSize: 12, color: '#F6D38A', marginTop: 2 },
   emptyTitle: { marginTop: space.md, textAlign: 'center' },
   emptyBody: { textAlign: 'center', marginTop: space.sm },
 });

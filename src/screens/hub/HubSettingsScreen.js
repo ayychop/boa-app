@@ -47,6 +47,30 @@ export default function HubSettingsScreen({ navigation }) {
   const [saving, setSaving] = useState(false);
   const [busy, setBusy] = useState(null);
   const [blockedPeople, setBlockedPeople] = useState([]);
+  const [privacy, setPrivacy] = useState('everyone');
+
+  useEffect(() => {
+    let alive = true;
+    hub
+      .getMessagePrivacy(userId)
+      .then((v) => alive && setPrivacy(v))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [userId]);
+
+  const choosePrivacy = async (value) => {
+    const before = privacy;
+    haptics.selection();
+    setPrivacy(value);
+    try {
+      await hub.setMessagePrivacy(userId, value);
+    } catch (err) {
+      setPrivacy(before);
+      Alert.alert("Couldn't save", err.message);
+    }
+  };
 
   useEffect(() => {
     let alive = true;
@@ -125,7 +149,7 @@ export default function HubSettingsScreen({ navigation }) {
     <View style={styles.screen} testID="hub-settings">
       <PageHeader kicker="Creative Hub" title="Hub settings" onBack={() => navigation.goBack()} />
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-        <ScrollView contentContainerStyle={{ padding: space.xl, paddingTop: 0, paddingBottom: insets.bottom + space.xxl }} keyboardShouldPersistTaps="handled">
+        <ScrollView contentContainerStyle={{ padding: space.lg, paddingTop: 0, paddingBottom: insets.bottom + space.xxl }} keyboardShouldPersistTaps="handled">
           <View style={styles.photoRow}>
             <Pressable onPress={changePhoto} accessibilityRole="button" accessibilityLabel="Change profile photo">
               <Avatar uri={profile.avatar_url} name={profile.display_name || profile.username} size={76} ring />
@@ -206,6 +230,21 @@ export default function HubSettingsScreen({ navigation }) {
             <SettingRow icon="musical-notes-outline" title="Show what I'm playing" detail="'Listening to' a station or 'Watching' a BOA Original, on your profile." last>
               <Toggle value={shareStatus} onChange={setShareStatus} label="Show what I'm playing" testID="hub-share-status" />
             </SettingRow>
+          </View>
+
+          <Slate style={styles.section}>Who can message you</Slate>
+          <View style={styles.group} accessibilityRole="radiogroup">
+            {hub.MESSAGE_PRIVACY.map((o, i) => (
+              <SettingRow key={o.id} icon={o.icon} title={o.label} detail={o.detail} onPress={() => choosePrivacy(o.id)} last={i === hub.MESSAGE_PRIVACY.length - 1}>
+                <Ionicons
+                  name={privacy === o.id ? 'radio-button-on' : 'radio-button-off'}
+                  size={22}
+                  color={privacy === o.id ? colors.gold : colors.textFaint}
+                  accessibilityLabel={privacy === o.id ? 'Selected' : undefined}
+                  testID={`message-privacy-${o.id}${privacy === o.id ? '-selected' : ''}`}
+                />
+              </SettingRow>
+            ))}
           </View>
 
           <Slate style={styles.section}>Chat vibe</Slate>

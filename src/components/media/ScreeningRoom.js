@@ -8,6 +8,7 @@ import VideoPlayer from './VideoPlayer';
 import Poster, { metaLine } from '../Poster';
 import { Button, Slate, Viewfinder } from '../ui';
 import { fillFrame, toSource } from '../HeroArt';
+import OriginalHeart from '../hub/OriginalHeart';
 import { colors, fonts, space, type } from '../../theme';
 
 // Default room art when a production has none of its own.
@@ -88,7 +89,10 @@ export default function ScreeningRoom({ screening, onClose, onSwitch }) {
           </Animated.View>
 
           <View style={[styles.info, { width: Math.min(width, 760) }]}>
-            <Text style={type.h1}>{production.title}</Text>
+            <View style={styles.titleRow}>
+              <Text style={[type.h1, { flex: 1 }]}>{production.title}</Text>
+              <OriginalHeart production={production} />
+            </View>
             {!!metaLine(production) && <Slate style={{ marginTop: 10 }}>{metaLine(production)}</Slate>}
             {production.logline && <Text style={[type.bodyMuted, { marginTop: space.lg }]}>{production.logline}</Text>}
             <View style={styles.actions}>
@@ -126,6 +130,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.xl,
     paddingBottom: space.md,
   },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   close: {
     width: 40,
     height: 40,

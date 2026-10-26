@@ -224,6 +224,50 @@ export function BoaStarBadge({ size = 18, style }) {
 }
 
 /**
+ * The Day One badge: among the first 1,000 to play a station or watch a
+ * BOA Original. A dark pill with a glowing gold "1" seal, quieter than
+ * BOA Star (that one is BOA's pick; this one you earned by being early).
+ */
+export function DayOneBadge({ size = 18, style, label = true }) {
+  const seal = Math.round(size * 0.78);
+  return (
+    <View
+      accessible
+      accessibilityLabel="Day One"
+      testID="day-one"
+      style={[{ borderRadius: size, boxShadow: `0px 0px ${Math.round(size * 0.6)}px rgba(246,211,138,0.45)` }, style]}
+    >
+      <LinearGradient
+        colors={['#2A2116', '#14110C']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={{
+          height: size,
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: Math.round(size * 0.22),
+          paddingLeft: Math.round(size * 0.12),
+          paddingRight: label ? Math.round(size * 0.45) : Math.round(size * 0.12),
+          borderRadius: size,
+          borderWidth: 1,
+          borderColor: 'rgba(246,211,138,0.75)',
+        }}
+      >
+        <LinearGradient
+          colors={['#FFE6A8', colors.gold]}
+          style={{ width: seal, height: seal, borderRadius: seal / 2, alignItems: 'center', justifyContent: 'center' }}
+        >
+          <Text style={{ fontFamily: fonts.extrabold, fontSize: Math.round(seal * 0.62), lineHeight: Math.round(seal * 0.8), color: colors.bg }}>1</Text>
+        </LinearGradient>
+        {label ? (
+          <Text style={{ fontFamily: fonts.bold, fontSize: Math.round(size * 0.5), letterSpacing: size * 0.08, color: '#F6D38A' }}>DAY ONE</Text>
+        ) : null}
+      </LinearGradient>
+    </View>
+  );
+}
+
+/**
  * A round profile picture (initials if there isn't one). People who are
  * online, or `ring`, get BOA's gold ring: a gradient band with a dark gap
  * between it and the photo, like a story ring.

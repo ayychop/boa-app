@@ -146,7 +146,7 @@ export default function HubDirectoryScreen({ navigation }) {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
-  filters: { paddingHorizontal: space.xl, paddingBottom: space.md, gap: space.md },
+  filters: { paddingHorizontal: space.lg, paddingBottom: space.md, gap: space.md },
   chips: { gap: space.sm },
   person: {
     flexDirection: 'row',

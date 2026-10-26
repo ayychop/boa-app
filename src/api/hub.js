@@ -398,7 +398,9 @@ export function shapeConversation(c, myId, byId = {}) {
 }
 
 export async function startConversation(otherId) {
-  return check(await need().rpc('start_conversation', { other: otherId }));
+  const { data, error } = await need().rpc('start_conversation', { other: otherId });
+  if (error) throw /taking new messages/i.test(error.message || '') ? new Error(MESSAGES_CLOSED) : new Error(error.message || 'Something went wrong');
+  return data;
 }
 
 export async function getConversation(id, myId) {
@@ -423,7 +425,9 @@ export async function listMessages(conversationId, before = null, limit = 40) {
 }
 
 export async function sendMessage(conversationId, body) {
-  return check(await need().from('messages').insert({ conversation_id: conversationId, body: body.trim() }).select('*').single());
+  const res = await need().from('messages').insert({ conversation_id: conversationId, body: body.trim() }).select('*').single();
+  if (res.error) throw sendError(res.error);
+  return res.data;
 }
 
 /** Removes one of your own messages, for both people (and its file, if it had one). */
@@ -517,24 +521,24 @@ export async function uploadChatMedia(conversationId, userId, { uri, mimeType, k
 
 /** Saves a media message (after uploadChatMedia). */
 export async function sendMedia(conversationId, { kind, path, mime, size, width = null, height = null, durationMs = null, waveform = null, caption = '' }) {
-  return check(
-    await need()
-      .from('messages')
-      .insert({
-        conversation_id: conversationId,
-        kind,
-        body: caption.trim(),
-        media_path: path,
-        media_mime: mime,
-        media_size: size,
-        media_width: width ? Math.round(width) : null,
-        media_height: height ? Math.round(height) : null,
-        media_duration_ms: durationMs ? Math.round(durationMs) : null,
-        waveform,
-      })
-      .select('*')
-      .single(),
-  );
+  const res = await need()
+    .from('messages')
+    .insert({
+      conversation_id: conversationId,
+      kind,
+      body: caption.trim(),
+      media_path: path,
+      media_mime: mime,
+      media_size: size,
+      media_width: width ? Math.round(width) : null,
+      media_height: height ? Math.round(height) : null,
+      media_duration_ms: durationMs ? Math.round(durationMs) : null,
+      waveform,
+    })
+    .select('*')
+    .single();
+  if (res.error) throw sendError(res.error);
+  return res.data;
 }
 
 // Signed links last an hour; they're reused until ten minutes before then.
@@ -563,6 +567,39 @@ export async function setDisappearing(userId, on) {
     throw new Error(error.message || "Couldn't save");
   }
 }
+
+// ------------------------------------------------------ message privacy
+
+export const MESSAGE_PRIVACY = [
+  { id: 'everyone', icon: 'people-outline', label: 'Everyone', detail: 'Anyone on the Hub can start a chat with you.' },
+  { id: 'chatted', icon: 'chatbubbles-outline', label: "People I've chatted with", detail: 'Nobody new can message you. Your conversations carry on.' },
+  { id: 'nobody', icon: 'lock-closed-outline', label: 'Nobody', detail: "Nobody can message you. You can still message others, and your old chats stay." },
+];
+export const MESSAGES_CLOSED = "They aren't taking messages right now.";
+
+/** Who can message this person ('everyone' if the database doesn't have the setting yet). */
+export async function getMessagePrivacy(userId) {
+  const { data, error } = await need().from('profiles').select('messages_from').eq('id', userId).maybeSingle();
+  return !error && data?.messages_from ? data.messages_from : 'everyone';
+}
+
+export async function setMessagePrivacy(userId, value) {
+  const { error } = await need().from('profiles').update({ messages_from: value }).eq('id', userId);
+  if (error) {
+    if (error.code === 'PGRST204' || error.code === '42703') throw new Error("The Hub's database isn't up to date yet, so this can't be changed.");
+    throw new Error(error.message || "Couldn't save");
+  }
+}
+
+/** Whether you can message this person right now (the database decides; true if it can't say). */
+export async function canMessage(otherId) {
+  const { data, error } = await need().rpc('accepts_messages', { target: otherId });
+  return error ? true : data !== false;
+}
+
+/** A refused send (their privacy setting, or a block) in words. */
+const sendError = (error) =>
+  /row-level security|violates row level|They aren.t taking/i.test(error?.message || '') ? new Error(MESSAGES_CLOSED) : new Error(error?.message || 'Something went wrong');
 
 // ------------------------------------------------------- push notifications
 
