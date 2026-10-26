@@ -231,8 +231,8 @@ export function HubProvider({ children }) {
   );
 
   const block = useCallback(
-    async (otherId) => {
-      await hub.blockUser(userId, otherId);
+    async (otherId, details) => {
+      await hub.blockUser(userId, otherId, details);
       setBlocked((b) => new Set([...b, otherId]));
     },
     [userId],

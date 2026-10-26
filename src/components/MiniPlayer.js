@@ -21,7 +21,7 @@ import { podcastById } from '../data/podcasts';
 import PodcastCover from './PodcastCover';
 import { describePlayback } from '../audio/status';
 import useNowPlaying from '../hooks/useNowPlaying';
-import { useUser } from '../context/UserContext';
+import { useHasPremium } from '../context/PremiumContext';
 import { GoldBadge } from './ui';
 import StationLogo from './StationLogo';
 import { SleepButton } from './SleepTimerMenu';
@@ -172,7 +172,7 @@ function RadioPill({ onOpenRadio, placement = 'bottom', maxWidth }) {
   const { current, status, trackTitle, isPlaying, toggle, retry } = usePlayer();
   const media = useMedia();
   const reduceMotion = useReducedMotion();
-  const { isPremium } = useUser();
+  const isPremium = useHasPremium();
   const nowPlaying = useNowPlaying(current, current?.kind === 'radio');
   const m = useMetrics();
   const sleepLeft = useSleepRemaining();

@@ -14,7 +14,7 @@ const AVATAR = 42;
  * and the vibe button. Avatar and the name block share one centre line.
  * On Android the blur needs `blurTarget`, the view holding what's behind.
  */
-export default function ThreadHeader({ name, person, online, badge, status, vibe, blurTarget, onBack, onProfile, onVibe, onLayout }) {
+export default function ThreadHeader({ name, person, online, badge, status, vibe, blurTarget, onBack, onProfile, onVibe, onCall, onLayout }) {
   const insets = useSafeAreaInsets();
   return (
     <View style={[styles.wrap, { paddingTop: insets.top + space.sm }]} onLayout={onLayout} testID="thread-header">
@@ -44,6 +44,11 @@ export default function ThreadHeader({ name, person, online, badge, status, vibe
             {status}
           </View>
         </Pressable>
+        {onCall ? (
+          <Pressable onPress={onCall} hitSlop={8} accessibilityRole="button" accessibilityLabel={`Video call ${name}`} style={({ pressed }) => [styles.vibe, { borderColor: vibe.accentEdge, backgroundColor: vibe.accentSoft }, pressed && styles.pressed]} testID="thread-call">
+            <Ionicons name="videocam-outline" size={19} color={vibe.accent} />
+          </Pressable>
+        ) : null}
         {onVibe ? (
           <Pressable onPress={onVibe} hitSlop={8} accessibilityRole="button" accessibilityLabel="Chat vibe" style={({ pressed }) => [styles.vibe, { borderColor: vibe.accentEdge, backgroundColor: vibe.accentSoft }, pressed && styles.pressed]} testID="thread-vibe">
             <Ionicons name="color-palette-outline" size={18} color={vibe.accent} />

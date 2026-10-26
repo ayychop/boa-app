@@ -31,6 +31,8 @@ import Vinyl from '../components/Vinyl';
 import { useMiniPlayerSpace } from '../components/MiniPlayer';
 import useLayout from '../hooks/useLayout';
 import ZenButton from '../components/display/ZenButton';
+import EqualizerSheet from '../components/radio/EqualizerSheet';
+import { IconButton } from '../components/kit';
 import Reactions from '../components/Reactions';
 import { GoldBadge, PulseDot } from '../components/ui';
 import { genreForVibes, useUser } from '../context/UserContext';
@@ -225,7 +227,7 @@ export default function RadioScreen({ route, navigation }) {
   const insets = useSafeAreaInsets();
   const player = usePlayer();
   const user = useUser();
-  const { requirePremium } = usePremium();
+  const { requirePremium, hasPremium } = usePremium();
   const isFocused = useIsFocused();
   // Carousel position, shared with the parallax layers behind it.
   const scrollX = useSharedValue(0);
@@ -235,6 +237,7 @@ export default function RadioScreen({ route, navigation }) {
   const [index, setIndex] = useState(0);
   const [data, setData] = useState({ status: 'loading', stations: [] });
   const [layout, setLayout] = useState(null);
+  const [eqOpen, setEqOpen] = useState(false);
   const requestRef = useRef(0);
   // A station to centre once its genre's list has loaded (from Home).
   const pendingFocus = useRef(null);
@@ -460,7 +463,7 @@ export default function RadioScreen({ route, navigation }) {
           <StationText
             station={active}
             saved={user.isSaved(active.id)}
-            hifi={user.isPremium}
+            hifi={hasPremium}
             onSave={() =>
               requirePremium(() => user.toggleSaved(active), 'Upgrade to BOA Premium to save your favourite stations.')
             }
@@ -521,6 +524,7 @@ export default function RadioScreen({ route, navigation }) {
               <Text style={{ color: colors.textFaint }}> / {String(stations.length).padStart(2, '0')}</Text>
             </Text>
           )}
+          <IconButton icon="options-outline" label="Hi-Fi sound" onPress={() => setEqOpen(true)} testID="radio-eq" />
           <ZenButton />
         </View>
       </View>
@@ -560,6 +564,7 @@ export default function RadioScreen({ route, navigation }) {
             Swipe to browse · Tap the record to play</Text>
         )}
       </View>
+      <EqualizerSheet open={eqOpen} onClose={() => setEqOpen(false)} />
     </View>
   );
 }

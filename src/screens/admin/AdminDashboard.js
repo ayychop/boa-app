@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -19,6 +19,7 @@ import { colors, fonts, radius, space, type } from '../../theme';
 const TABS = [
   { id: 'talent', label: 'Talent', icon: 'star-outline' },
   { id: 'moderation', label: 'Moderation', icon: 'shield-outline' },
+  { id: 'blocks', label: 'Blocks', icon: 'ban-outline' },
   { id: 'casting', label: 'Casting', icon: 'film-outline' },
   { id: 'pulse', label: 'Pulse', icon: 'pulse-outline' },
   { id: 'radio', label: 'Radio', icon: 'radio-outline' },
@@ -79,7 +80,7 @@ function Action({ label, icon, onPress, tone = colors.text, testID }) {
 
 // ------------------------------------------------------------ the sections
 
-function TalentDirectory({ users, query, setQuery, onToggleStar }) {
+function TalentDirectory({ users, query, setQuery, onToggleStar, onTogglePremium }) {
   return (
     <>
       <Field value={query} onChangeText={setQuery} placeholder="Search by name or @username" autoCapitalize="none" testID="admin-search" />
@@ -106,6 +107,17 @@ function TalentDirectory({ users, query, setQuery, onToggleStar }) {
           <View style={styles.toggleRow}>
             <Text style={styles.toggleLabel}>Badge as BOA Star</Text>
             <Toggle value={!!u.is_boa_star} onChange={(v) => onToggleStar(u, v)} label={`Badge ${nameOf(u)} as BOA Star`} testID={`admin-star-${u.username}`} />
+          </View>
+          <View style={styles.toggleRow}>
+            <Text style={styles.toggleLabel}>
+              BOA Premium <Text style={styles.mono}>{(u.subscription_status ?? 'trial').toUpperCase()}</Text>
+            </Text>
+            <Toggle
+              value={u.subscription_status === 'active'}
+              onChange={(v) => onTogglePremium(u, v)}
+              label={`BOA Premium for ${nameOf(u)}`}
+              testID={`admin-premium-${u.username}`}
+            />
           </View>
         </Panel>
       ))}
@@ -143,6 +155,55 @@ function Moderation({ reports, onBan, onDismiss, onUnban }) {
         {r.status !== 'dismissed' && r.status !== 'actioned' ? (
           <Action label="Dismiss" icon="close" tone={colors.textMuted} onPress={() => onDismiss(r)} testID={`admin-dismiss-${r.id}`} />
         ) : null}
+      </View>
+    </Panel>
+  ));
+}
+
+// A block's screenshot: fetched as a short-lived signed link when shown.
+function Evidence({ url }) {
+  const [link, setLink] = useState(null);
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    admin.evidenceLink(url).then((l) => alive && setLink(l)).catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [url]);
+  if (!link) return <Text style={styles.sub}>Screenshot attached (loading)</Text>;
+  return (
+    <Pressable onPress={() => setOpen((o) => !o)} accessibilityRole="button" accessibilityLabel={open ? 'Shrink screenshot' : 'Enlarge screenshot'}>
+      <Image source={{ uri: link }} style={[styles.evidence, open && styles.evidenceOpen]} resizeMode={open ? 'contain' : 'cover'} />
+    </Pressable>
+  );
+}
+
+function BlockReview({ blocks, onBan, onUnban }) {
+  if (blocks.length === 0) return <Text style={styles.empty}>No blocks yet.</Text>;
+  return blocks.map((b) => (
+    <Panel key={`${b.blocker_id}:${b.blocked_id}`} testID={`admin-block-${b.blocked_id}`}>
+      <View style={styles.nameRow}>
+        <PulseDot color={b.block_evidence_url ? '#FF6B6B' : colors.gold} size={7} />
+        <Text style={[styles.mono, { flexShrink: 1 }]} numberOfLines={1}>
+          BLOCKED · {new Date(b.created_at).toLocaleDateString()}
+          {b.block_evidence_url ? ' · SCREENSHOT' : ''}
+        </Text>
+      </View>
+      <Text style={styles.name}>
+        {nameOf(b.blocked)} <Text style={styles.sub}>blocked by {nameOf(b.blocker)}</Text>
+      </Text>
+      {b.block_reason ? (
+        <View style={styles.quote}>
+          <Text style={styles.quoteText}>{b.block_reason}</Text>
+        </View>
+      ) : (
+        <Text style={styles.sub}>No reason given.</Text>
+      )}
+      {b.block_evidence_url ? <Evidence url={b.block_evidence_url} /> : null}
+      <View style={styles.actions}>
+        {b.blocked && !b.blocked.banned_at ? <Action label="Ban user" icon="ban" tone="#FF6B6B" onPress={() => onBan(b)} testID={`admin-block-ban-${b.blocked_id}`} /> : null}
+        {b.blocked?.banned_at ? <Action label="Lift ban" icon="refresh" onPress={() => onUnban(b)} /> : null}
       </View>
     </Panel>
   ));
@@ -303,20 +364,21 @@ export default function AdminDashboard({ navigation }) {
   const { isAdmin } = useHub();
   const [tab, setTab] = useState('talent');
   const [query, setQuery] = useState('');
-  const [data, setData] = useState({ users: [], reports: [], calls: [], picked: [], ready: false });
+  const [data, setData] = useState({ users: [], reports: [], blocks: [], calls: [], picked: [], ready: false });
   const [error, setError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [editing, setEditing] = useState(null);
 
   const load = useCallback(async () => {
     try {
-      const [users, reports, calls, picked] = await Promise.all([
+      const [users, reports, blocks, calls, picked] = await Promise.all([
         admin.listUsers(query),
         admin.listReports(),
+        admin.listBlocks().catch(() => []),
         admin.listAllCalls(),
         trending.listTrending().catch(() => []),
       ]);
-      setData({ users, reports, calls, picked, ready: true });
+      setData({ users, reports, blocks, calls, picked, ready: true });
       setError(null);
     } catch (err) {
       setError(err.message);
@@ -412,6 +474,7 @@ export default function AdminDashboard({ navigation }) {
             query={query}
             setQuery={setQuery}
             onToggleStar={(u, star) => run(() => admin.setBoaStar(u.id, star))}
+            onTogglePremium={(u, on) => run(() => admin.setSubscription(u.id, on ? 'active' : 'expired'))}
           />
         ) : tab === 'moderation' ? (
           <Moderation
@@ -430,6 +493,17 @@ export default function AdminDashboard({ navigation }) {
                       await admin.setReportStatus(r.id, 'actioned');
                     }),
                 },
+              ])
+            }
+          />
+        ) : tab === 'blocks' ? (
+          <BlockReview
+            blocks={data.blocks}
+            onUnban={(b) => run(() => admin.setBanned(b.blocked.id, false))}
+            onBan={(b) =>
+              Alert.alert(`Ban ${nameOf(b.blocked)}?`, "They won't be able to message, post gigs or apply, and they leave the directory. You can lift it later.", [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Ban', style: 'destructive', onPress: () => run(() => admin.setBanned(b.blocked.id, true)) },
               ])
             }
           />
@@ -529,4 +603,6 @@ const styles = StyleSheet.create({
   action: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, height: 34, borderRadius: radius.pill, borderWidth: 1 },
   actionText: { fontFamily: fonts.semibold, fontSize: 12.5 },
   empty: { fontFamily: fonts.medium, fontSize: 14, color: colors.textMuted, textAlign: 'center', marginTop: space.xl },
+  evidence: { width: 120, height: 160, borderRadius: radius.md, marginTop: space.sm, backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(226,168,75,0.35)' },
+  evidenceOpen: { width: '100%', height: 420 },
 });

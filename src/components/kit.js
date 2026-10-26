@@ -191,8 +191,10 @@ export function Segmented({ options, value, onChange }) {
 // The badge pills are a little taller than `size` with real side padding,
 // so their caps never touch the edge; the text is centred on its own line
 // box (Android adds font padding otherwise).
-const pillHeight = (size) => Math.round(size * 1.3);
-const pillText = (size) => ({ fontSize: Math.round(size * 0.5), lineHeight: Math.round(size * 0.66), includeFontPadding: false, textAlignVertical: 'center' });
+// Pills are 1.5x their size tall with generous ends, so the caps never
+// crowd the rim.
+const pillHeight = (size) => Math.round(size * 1.5);
+const pillText = (size) => ({ fontSize: Math.round(size * 0.52), lineHeight: Math.round(size * 0.72), includeFontPadding: false, textAlignVertical: 'center' });
 
 /**
  * The BOA Star badge: exceptional talent, chosen by BOA. A gold gradient
@@ -205,7 +207,7 @@ export function BoaStarBadge({ size = 18, style }) {
       accessible
       accessibilityLabel="BOA Star"
       testID="boa-star"
-      style={[{ borderRadius: size, boxShadow: `0px 0px ${Math.round(size * 0.7)}px rgba(226,168,75,0.65)` }, style]}
+      style={[{ borderRadius: size, boxShadow: `0px 0px ${Math.round(size * 0.5)}px rgba(226,168,75,0.4)` }, style]}
     >
       <LinearGradient
         colors={['#FFE6A8', colors.gold, colors.goldDeep]}
@@ -215,17 +217,17 @@ export function BoaStarBadge({ size = 18, style }) {
           height,
           flexDirection: 'row',
           alignItems: 'center',
-          gap: Math.round(size * 0.26),
-          paddingLeft: Math.round(size * 0.55),
+          gap: Math.round(size * 0.32),
+          paddingLeft: Math.round(size * 0.7),
           // Letter spacing trails the last letter; this evens the sides.
-          paddingRight: Math.round(size * 0.55 - size * 0.08),
+          paddingRight: Math.round(size * 0.7 - size * 0.06),
           borderRadius: height,
           borderWidth: 1,
           borderColor: 'rgba(255,240,200,0.9)',
         }}
       >
         <Ionicons name="star" size={Math.round(size * 0.58)} color={colors.bg} />
-        <Text numberOfLines={1} style={[pillText(size), { fontFamily: fonts.bold, letterSpacing: size * 0.08, color: colors.bg }]}>
+        <Text numberOfLines={1} style={[pillText(size), { fontFamily: fonts.bold, letterSpacing: size * 0.06, color: colors.bg }]}>
           BOA STAR
         </Text>
       </LinearGradient>
@@ -235,12 +237,12 @@ export function BoaStarBadge({ size = 18, style }) {
 
 /**
  * The Day One badge: among the first 1,000 to play a station or watch a
- * BOA Original. A dark pill with a glowing gold "1" seal, quieter than
+ * BOA Original. A dark glass pill with a small gold "1" seal, quieter than
  * BOA Star (that one is BOA's pick; this one you earned by being early).
  */
 export function DayOneBadge({ size = 18, style, label = true }) {
   const height = pillHeight(size);
-  const seal = Math.round(size * 0.86);
+  const seal = Math.round(size * 0.92);
   // The seal sits evenly inside the round end.
   const sealInset = Math.round((height - 2 - seal) / 2);
   return (
@@ -248,22 +250,22 @@ export function DayOneBadge({ size = 18, style, label = true }) {
       accessible
       accessibilityLabel="Day One"
       testID="day-one"
-      style={[{ borderRadius: size, boxShadow: `0px 0px ${Math.round(size * 0.6)}px rgba(246,211,138,0.45)` }, style]}
+      style={[{ borderRadius: size, boxShadow: `0px 0px ${Math.round(size * 0.4)}px rgba(246,211,138,0.22)` }, style]}
     >
       <LinearGradient
-        colors={['#2A2116', '#14110C']}
+        colors={['#1D1D21', '#111114']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={{
           height,
           flexDirection: 'row',
           alignItems: 'center',
-          gap: Math.round(size * 0.3),
+          gap: Math.round(size * 0.32),
           paddingLeft: sealInset,
-          paddingRight: label ? Math.round(size * 0.55 - size * 0.08) : sealInset,
+          paddingRight: label ? Math.round(size * 0.7 - size * 0.06) : sealInset,
           borderRadius: height,
           borderWidth: 1,
-          borderColor: 'rgba(246,211,138,0.75)',
+          borderColor: 'rgba(246,211,138,0.55)',
         }}
       >
         <LinearGradient
@@ -273,7 +275,7 @@ export function DayOneBadge({ size = 18, style, label = true }) {
           <Text style={{ fontFamily: fonts.extrabold, fontSize: Math.round(seal * 0.62), lineHeight: Math.round(seal * 0.8), color: colors.bg }}>1</Text>
         </LinearGradient>
         {label ? (
-          <Text numberOfLines={1} style={[pillText(size), { fontFamily: fonts.bold, letterSpacing: size * 0.08, color: '#F6D38A' }]}>
+          <Text numberOfLines={1} style={[pillText(size), { fontFamily: fonts.bold, letterSpacing: size * 0.06, color: '#F6D38A' }]}>
             DAY ONE
           </Text>
         ) : null}

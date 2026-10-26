@@ -55,7 +55,9 @@ export default function ReportSheet({ target, onClose }) {
                   icon="ban-outline"
                   variant="ghost"
                   onPress={async () => {
-                    await block(target.user.id).catch(() => {});
+                    await block(target.user.id, {
+                      reason: `Reported: ${REPORT_REASONS.find((r) => r.id === reason)?.label ?? reason}${details.trim() ? `: ${details.trim().slice(0, 400)}` : ''}`,
+                    }).catch(() => {});
                     onClose(true);
                   }}
                 />

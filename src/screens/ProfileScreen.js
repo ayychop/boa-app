@@ -41,7 +41,7 @@ export default function ProfileScreen({ navigation }) {
   const forms = useForms();
   const user = useUser();
   const player = usePlayer();
-  const { openPremium } = usePremium();
+  const { openPremium, hasPremium } = usePremium();
 
   // Grouped lists, as on a phone; wide screens turn each list into a grid
   // of tiles (two columns, three once there's room).
@@ -99,8 +99,8 @@ export default function ProfileScreen({ navigation }) {
             {signedIn ? (
               <Avatar uri={profile.avatar_url} name={name} size={56} />
             ) : (
-              <View style={[styles.avatar, user.isPremium && styles.avatarPremium]}>
-                <Ionicons name="person" size={26} color={user.isPremium ? colors.bg : colors.textMuted} />
+              <View style={[styles.avatar, hasPremium && styles.avatarPremium]}>
+                <Ionicons name="person" size={26} color={hasPremium ? colors.bg : colors.textMuted} />
               </View>
             )}
             <View style={{ flex: 1, minWidth: 0 }}>
@@ -108,7 +108,7 @@ export default function ProfileScreen({ navigation }) {
                 <Text style={styles.name} numberOfLines={1}>
                   {name}
                 </Text>
-                {user.isPremium && <GoldBadge label="PREMIUM" icon="diamond" />}
+                {hasPremium && <GoldBadge label="PREMIUM" icon="diamond" />}
                 {signedIn && profile.is_boa_star ? <BoaStarBadge size={20} /> : null}
               </View>
               <Text style={styles.nameSub}>{nameSub}</Text>
@@ -153,7 +153,7 @@ export default function ProfileScreen({ navigation }) {
           hint={signedIn ? (profile.quote_category ? null : 'Choose your kind in Hub settings.') : 'Sign in to choose your kind: Love, Wealth, Health or Career.'}
         />
 
-        {user.isPremium ? (
+        {hasPremium ? (
           <Pressable onPress={openPremium} accessibilityRole="button" style={({ pressed }) => [styles.premiumActive, pressed && { opacity: 0.85 }]}>
             <Ionicons name="diamond" size={18} color={colors.gold} />
             <View style={{ flex: 1 }}>
@@ -217,7 +217,7 @@ export default function ProfileScreen({ navigation }) {
         ) : (
           <EmptyState
             body={
-              user.isPremium
+              hasPremium
                 ? 'Tap the heart next to a station on Radio to save it here.'
                 : 'Save your favourite stations with BOA Premium.'
             }

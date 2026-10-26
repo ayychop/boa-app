@@ -1,12 +1,11 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { haptics } from '../utils/haptics';
 
 // Everything we remember about this listener on-device: whether they've done
-// the vibe check (and what they picked), BOA Premium, and saved stations.
-// TODO: move to a real account + payment backend; Premium is a local flag.
+// the vibe check (and what they picked) and saved stations. BOA Premium
+// lives in the database (PremiumContext).
 const KEY = 'boa:user:v1';
-const EMPTY = { onboarded: false, vibes: [], isPremium: false, saved: [] };
+const EMPTY = { onboarded: false, vibes: [], saved: [] };
 
 const UserContext = createContext(null);
 
@@ -28,7 +27,12 @@ export function UserProvider({ children }) {
 
   useEffect(() => {
     AsyncStorage.getItem(KEY)
-      .then((raw) => raw && setUser({ ...EMPTY, ...JSON.parse(raw) }))
+      .then((raw) => {
+        if (!raw) return;
+        // Premium used to be a flag on this phone; the database has it now.
+        const { isPremium, ...stored } = JSON.parse(raw);
+        setUser({ ...EMPTY, ...stored });
+      })
       .catch(() => {})
       .finally(() => setReady(true));
   }, []);
@@ -39,13 +43,6 @@ export function UserProvider({ children }) {
   }, [user, ready]);
 
   const completeOnboarding = useCallback((vibes) => setUser((u) => ({ ...u, onboarded: true, vibes })), []);
-
-  const subscribe = useCallback(() => {
-    haptics.success();
-    setUser((u) => ({ ...u, isPremium: true }));
-  }, []);
-
-  const cancelPremium = useCallback(() => setUser((u) => ({ ...u, isPremium: false })), []);
 
   const toggleSaved = useCallback((station) => {
     setUser((u) => {
@@ -59,12 +56,10 @@ export function UserProvider({ children }) {
       ready,
       ...user,
       completeOnboarding,
-      subscribe,
-      cancelPremium,
       toggleSaved,
       isSaved: (id) => user.saved.some((s) => s.id === id),
     }),
-    [ready, user, completeOnboarding, subscribe, cancelPremium, toggleSaved],
+    [ready, user, completeOnboarding, toggleSaved],
   );
 
   return <UserContext.Provider value={value}>{children}</UserContext.Provider>;

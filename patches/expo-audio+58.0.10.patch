@@ -1,3 +1,22 @@
+diff --git a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/AudioModule.kt b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/AudioModule.kt
+index 6c81fce..6abad52 100644
+--- a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/AudioModule.kt
++++ b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/AudioModule.kt
+@@ -577,6 +577,14 @@ class AudioModule : Module() {
+         player.id
+       }
+ 
++      // BOA: the player's Android audio session, so the Hi-Fi equaliser
++      // (modules/boa-eq) can attach its effects to this player's sound.
++      Property("audioSessionId") { player ->
++        runOnMain {
++          player.ref.audioSessionId
++        }
++      }
++
+       Property("isBuffering") { player ->
+         runOnMain {
+           player.ref.playbackState == Player.STATE_BUFFERING
 diff --git a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/AudioPlayer.kt b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/AudioPlayer.kt
 index fb2d0b5..3780fd4 100644
 --- a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/AudioPlayer.kt

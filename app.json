@@ -127,6 +127,7 @@
             "./assets/sounds/chat_cashregister.wav",
             "./assets/sounds/chat_bassdrop.wav"
           ],
+          "icon": "./assets/notification-icon.png",
           "color": "#E2A84B"
         }
       ]

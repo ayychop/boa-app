@@ -15,6 +15,7 @@ import { BoaStarBadge, DayOneBadge, Avatar, IconButton, PageHeader } from '../..
 import { lastSeen, statusLine } from '../../components/hub/hubNav';
 import NowPlaying from '../../components/hub/NowPlaying';
 import useProfileUpdates from '../../hooks/useProfileUpdates';
+import BlockSheet from '../../components/hub/BlockSheet';
 import ReportSheet from '../../components/hub/ReportSheet';
 import BoaCodeSheet from '../../components/hub/BoaCode';
 import { GridEmpty, PostGrid, ProfileTabs } from '../../components/profile/PostGrid';
@@ -100,7 +101,7 @@ export default function HubProfileScreen({ navigation, route }) {
   const insets = useSafeAreaInsets();
   const window = useWindowDimensions();
   const width = Math.min(window.width, MAX_WIDTH);
-  const { userId, profile: me, isOnline, blocked, block, unblock } = useHub();
+  const { userId, profile: me, isOnline, blocked, unblock } = useHub();
   const id = route.params?.id ?? userId;
   const mine = id === userId;
   const [person, setPerson] = useState(mine ? me : null);
@@ -111,6 +112,7 @@ export default function HubProfileScreen({ navigation, route }) {
   const [grids, setGrids] = useState({});
   const [counts, setCounts] = useState({ posts: 0, reels: 0, tagged: 0 });
   const [dayOnes, setDayOnes] = useState([]);
+  const [blocking, setBlocking] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [open, setOpen] = useState(true);
   const [heroH, setHeroH] = useState(420);
@@ -209,11 +211,7 @@ export default function HubProfileScreen({ navigation, route }) {
     }
   };
 
-  const confirmBlock = () =>
-    Alert.alert(`Block ${person.display_name || `@${person.username}`}?`, "They won't be able to see your profile or message you, and they won't be told.", [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Block', style: 'destructive', onPress: () => block(id).catch((e) => Alert.alert('Block failed', e.message)) },
-    ]);
+  const confirmBlock = () => setBlocking(person);
 
   if (state !== 'ready' || !person) {
     return (
@@ -281,8 +279,8 @@ export default function HubProfileScreen({ navigation, route }) {
             </View>
             {star || dayOnes.length ? (
               <View style={styles.badges}>
-                {star ? <BoaStarBadge size={22} /> : null}
-                {dayOnes.length ? <DayOneBadge size={22} /> : null}
+                {star ? <BoaStarBadge size={18} /> : null}
+                {dayOnes.length ? <DayOneBadge size={18} /> : null}
               </View>
             ) : null}
             <Text style={styles.handle} numberOfLines={1}>
@@ -334,19 +332,14 @@ export default function HubProfileScreen({ navigation, route }) {
           {dayOnes.length ? (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dayOnes} testID="profile-day-ones">
               {dayOnes.map((d) => (
-                <View key={`${d.kind}:${d.item_id}`} style={[styles.dayOne, { maxWidth: Math.min(300, width - space.lg * 2) }]}>
-                  <LinearGradient colors={['rgba(246,211,138,0.16)', 'rgba(255,255,255,0.02)']} style={StyleSheet.absoluteFill} />
-                  <View style={styles.dayOneIcon}>
-                    <Ionicons name={d.kind === 'original' ? 'film' : 'radio'} size={15} color={colors.gold} />
-                  </View>
-                  <View style={{ flexShrink: 1 }}>
-                    <Text style={styles.dayOneTitle} numberOfLines={2}>
-                      {d.item_label || (d.kind === 'original' ? 'BOA Original' : 'Station')}
-                    </Text>
-                    <Text style={styles.dayOneRank} numberOfLines={1}>
-                      {placeLine(d.rank)}
-                    </Text>
-                  </View>
+                <View key={`${d.kind}:${d.item_id}`} style={[styles.dayOne, { maxWidth: Math.min(280, width - space.lg * 2) }]}>
+                  <Ionicons name={d.kind === 'original' ? 'film-outline' : 'radio-outline'} size={13} color={colors.gold} />
+                  <Text style={styles.dayOneTitle} numberOfLines={1}>
+                    {d.item_label || (d.kind === 'original' ? 'BOA Original' : 'Station')}
+                  </Text>
+                  <Text style={styles.dayOneRank} numberOfLines={1}>
+                    {placeLine(d.rank)}
+                  </Text>
                 </View>
               ))}
             </ScrollView>
@@ -367,6 +360,7 @@ export default function HubProfileScreen({ navigation, route }) {
         </View>
       </ScrollView>
       {mine ? <BoaCodeSheet open={codeOpen} onClose={() => setCodeOpen(false)} profile={person} /> : null}
+      <BlockSheet person={blocking} onClose={() => setBlocking(null)} />
       <ReportSheet target={reporting} onClose={(didBlock) => (setReporting(null), didBlock && navigation.goBack())} />
     </View>
   );
@@ -398,7 +392,7 @@ const styles = StyleSheet.create({
   statLabel: { fontFamily: fonts.medium, fontSize: 12, color: colors.textMuted, marginTop: 2 },
   nameRow: { marginTop: space.lg },
   name: { fontFamily: fonts.semibold, fontSize: 24, lineHeight: 29, letterSpacing: -0.8, color: colors.text },
-  badges: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: space.sm, marginTop: space.sm },
+  badges: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: space.sm, marginTop: space.sm + 2 },
   handle: { fontFamily: fonts.semibold, fontSize: 13.5, color: colors.textMuted, marginTop: space.sm },
   seen: { fontFamily: fonts.medium, color: colors.textFaint },
   roles: { fontFamily: fonts.mono, fontSize: 10.5, letterSpacing: 1.6, textTransform: 'uppercase', color: colors.gold, marginTop: space.md, lineHeight: 16 },
@@ -409,22 +403,20 @@ const styles = StyleSheet.create({
   actionPrimary: { backgroundColor: colors.gold, boxShadow: '0px 6px 20px rgba(226,168,75,0.35)' },
   actionGlass: { backgroundColor: 'rgba(18,18,22,0.7)', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.borderStrong },
   actionText: { fontFamily: fonts.semibold, fontSize: 14, flexShrink: 1 },
-  dayOnes: { paddingHorizontal: space.lg, gap: space.sm, paddingTop: space.lg },
+  // Slim glass chips, one line each: where you're a Day One and your place.
+  dayOnes: { paddingHorizontal: space.lg, gap: space.sm, paddingTop: space.md },
   dayOne: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: space.sm,
-    paddingLeft: space.sm,
-    paddingRight: space.lg,
-    paddingVertical: 10,
-    borderRadius: radius.lg,
-    overflow: 'hidden',
+    gap: 6,
+    height: 32,
+    paddingHorizontal: space.md,
+    borderRadius: radius.pill,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(246,211,138,0.45)',
-    backgroundColor: 'rgba(18,18,22,0.6)',
+    borderColor: 'rgba(246,211,138,0.4)',
+    backgroundColor: 'rgba(18,18,22,0.7)',
   },
-  dayOneIcon: { width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(226,168,75,0.14)' },
-  dayOneTitle: { fontFamily: fonts.semibold, fontSize: 13, lineHeight: 17, color: colors.text },
-  dayOneRank: { fontFamily: fonts.mono, fontSize: 9.5, letterSpacing: 1, color: '#F6D38A', marginTop: 2 },
+  dayOneTitle: { flexShrink: 1, fontFamily: fonts.semibold, fontSize: 12.5, color: colors.text },
+  dayOneRank: { flexShrink: 0, fontFamily: fonts.mono, fontSize: 9.5, letterSpacing: 0.8, color: '#F6D38A' },
   gridError: { textAlign: 'center', marginTop: space.xxl, paddingHorizontal: space.lg },
 });

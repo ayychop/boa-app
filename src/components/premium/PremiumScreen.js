@@ -1,30 +1,41 @@
 import { useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeIn, FadeInDown, ZoomIn } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { useUser } from '../../context/UserContext';
+import { usePremium, trialLeft } from '../../context/PremiumContext';
 import BoaLogo from '../BoaLogo';
 import { Button, Fog, GoldBadge, Slate, Viewfinder } from '../ui';
 import { colors, fonts, radius, space, type } from '../../theme';
 
-export const PRICE = '£2.99';
+import { PRICE } from './price';
+
+export { PRICE };
 
 const BENEFITS = [
+  { icon: 'videocam', title: 'Unlimited HD video calls', body: 'Face to face with anyone on the Hub, as long as you like.' },
+  { icon: 'sparkles', title: 'Exclusive filters', body: 'Skin Smoothing and Tone Enhancer, tuned so every skin tone stays true.' },
   { icon: 'heart', title: 'Save playlists & stations', body: 'Build your own library of stations and come back to it any time.' },
   { icon: 'ban', title: 'Ad-free', body: 'No interruptions between you and the music.' },
-  { icon: 'pulse', title: 'Hi-Fi audio', body: 'The highest-quality streams we can find, flagged Hi-Fi.' },
+  { icon: 'pulse', title: 'Hi-Fi audio', body: 'Bass, treble and spatial sound on every station, and the best streams we can find.' },
   { icon: 'flash', title: 'Early access', body: 'New BOA Originals and episodes before anyone else.' },
   { icon: 'cloud-download', title: 'Offline downloads', body: 'Take podcasts and episodes with you, no signal needed.' },
 ];
 
-/** Full-screen BOA Premium pitch + (local) subscribe. */
+/** Full-screen BOA Premium pitch, and where your trial or membership stands. */
 export default function PremiumScreen({ open, onClose }) {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
-  const { isPremium, subscribe, cancelPremium } = useUser();
+  const { hasPremium: isPremium, access, isAdmin } = usePremium();
   const [justJoined, setJustJoined] = useState(false);
+  const standing = isAdmin
+    ? 'BOA admin: everything is unlocked'
+    : access.status === 'active'
+      ? 'Your membership is active'
+      : access.status === 'trial'
+        ? `Free trial · ${trialLeft(access.trialEndsAt) ?? 'ending now'}`
+        : null;
   if (!open) return null;
 
   const close = () => {
@@ -70,7 +81,7 @@ export default function PremiumScreen({ open, onClose }) {
               <Animated.View entering={FadeInDown.springify().damping(18)}>
                 <View style={styles.titleRow}>
                   <Slate dot>BOA Premium</Slate>
-                  {isPremium && <GoldBadge label="ACTIVE" icon="checkmark" />}
+                  {isPremium && <GoldBadge label={access.status === 'trial' && !isAdmin ? 'TRIAL' : 'ACTIVE'} icon="checkmark" />}
                 </View>
                 <Text style={[type.display, styles.headline]}>
                   The <Text style={type.serif}>best</Text> of all networks.
@@ -94,10 +105,10 @@ export default function PremiumScreen({ open, onClose }) {
 
               {isPremium ? (
                 <>
-                  <Button label="You're a Premium member" icon="checkmark" variant="ghost" disabled style={{ marginTop: space.xl, alignSelf: 'stretch' }} />
-                  <Pressable onPress={cancelPremium} hitSlop={8} style={styles.fine} accessibilityRole="button">
-                    <Text style={styles.fineText}>Cancel Premium (demo)</Text>
-                  </Pressable>
+                  <Button label={standing ?? "You're a Premium member"} icon="checkmark" variant="ghost" disabled style={{ marginTop: space.xl, alignSelf: 'stretch' }} />
+                  {access.status === 'trial' && !isAdmin ? (
+                    <Text style={styles.fineText}>After the trial, BOA Premium is {PRICE}/month.</Text>
+                  ) : null}
                 </>
               ) : (
                 <Animated.View entering={FadeInDown.delay(420).springify().damping(18)}>
@@ -109,13 +120,15 @@ export default function PremiumScreen({ open, onClose }) {
                   <Button
                     label={`Subscribe for ${PRICE}/month`}
                     icon="diamond"
-                    onPress={() => {
-                      subscribe();
-                      setJustJoined(true);
-                    }}
+                    onPress={() =>
+                      // TODO: Google Play Billing / App Store checkout. Until
+                      // then a membership is switched on from the Admin Portal.
+                      Alert.alert('Checkout opens soon', `In-app payments aren't switched on in this build yet. BOA Premium will be ${PRICE}/month.`)
+                    }
                     style={{ alignSelf: 'stretch' }}
+                    testID="premium-subscribe"
                   />
-                  <Text style={styles.fineText}>Demo build: no payment is taken. Premium is switched on for this device only.</Text>
+                  <Text style={styles.fineText}>{access.status === 'expired' ? 'Your 2-day free trial has ended.' : 'Every new member gets a 2-day free trial.'}</Text>
                 </Animated.View>
               )}
             </View>

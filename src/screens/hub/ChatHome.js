@@ -66,7 +66,7 @@ function PersonCard({ person, online, onPress, index }) {
         <Text style={styles.personName} numberOfLines={1}>
           {nameOf(person)}
         </Text>
-        <Text style={styles.personRole} numberOfLines={1}>
+        <Text style={styles.personRole} numberOfLines={2}>
           {role ?? 'Creative'}
         </Text>
         {person.is_boa_star ? <BoaStarBadge size={18} style={{ marginTop: space.sm }} /> : null}
@@ -97,7 +97,7 @@ function TalentCard({ person, onPress, index }) {
           <Text style={styles.personName} numberOfLines={1}>
             {person.name}
           </Text>
-          <Text style={styles.personRole} numberOfLines={1}>
+          <Text style={styles.personRole} numberOfLines={2}>
             {person.role}
           </Text>
         </View>
@@ -114,10 +114,10 @@ function Tool({ icon, title, detail, onPress, testID }) {
       <View style={styles.toolIcon}>
         <Ionicons name={icon} size={20} color={colors.gold} />
       </View>
-      <Text style={styles.toolTitle} numberOfLines={1}>
+      <Text style={styles.toolTitle} numberOfLines={2}>
         {title}
       </Text>
-      <Text style={styles.toolDetail} numberOfLines={2}>
+      <Text style={styles.toolDetail} numberOfLines={3}>
         {detail}
       </Text>
     </Pressable>
@@ -200,11 +200,11 @@ export default function ChatHome({ navigation, bottomPadding }) {
               </Text>
               {profile?.is_boa_star || dayOnes.has(userId) ? (
                 <View style={{ flexDirection: 'row', gap: 6, marginTop: 6 }}>
-                  {profile?.is_boa_star ? <BoaStarBadge size={18} /> : null}
-                  {dayOnes.has(userId) ? <DayOneBadge size={18} /> : null}
+                  {profile?.is_boa_star ? <BoaStarBadge size={16} /> : null}
+                  {dayOnes.has(userId) ? <DayOneBadge size={16} /> : null}
                 </View>
               ) : null}
-              <Text style={styles.heroSub} numberOfLines={1}>
+              <Text style={styles.heroSub} numberOfLines={2}>
                 {unread ? `${unread} unread` : profile ? `Hi, ${profile.display_name || profile.username}` : ''}
               </Text>
             </View>
@@ -230,7 +230,7 @@ export default function ChatHome({ navigation, bottomPadding }) {
         {dayOneNews ? (
           <Animated.View entering={FadeInDown.springify().damping(16)} style={styles.dayOneNews} testID="day-one-news">
             <LinearGradient colors={['rgba(246,211,138,0.22)', 'rgba(255,255,255,0.02)']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
-            <DayOneBadge size={22} />
+            <DayOneBadge size={18} />
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text style={styles.dayOneTitle} numberOfLines={2}>
                 You're a Day One for {dayOneNews.label}
@@ -348,7 +348,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(18,18,22,0.6)',
   },
   personName: { fontFamily: fonts.semibold, fontSize: 14.5, color: colors.text, marginTop: space.md, maxWidth: 132, textAlign: 'center' },
-  personRole: { fontFamily: fonts.medium, fontSize: 12, color: colors.textMuted, marginTop: 2, textAlign: 'center' },
+  personRole: { fontFamily: fonts.medium, fontSize: 12, lineHeight: 16, color: colors.textMuted, marginTop: 2, textAlign: 'center' },
   badge: { marginTop: space.sm, paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.pill, backgroundColor: 'rgba(226,168,75,0.16)', borderWidth: 1, borderColor: 'rgba(226,168,75,0.5)' },
   badgeText: { fontFamily: fonts.semibold, fontSize: 10.5, color: colors.gold },
   talent: { width: 132, height: 188, borderRadius: radius.xl, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255,255,255,0.14)', backgroundColor: colors.surface },
@@ -369,7 +369,7 @@ const styles = StyleSheet.create({
   tool: { flex: 1, minWidth: 0, padding: space.md, borderRadius: radius.lg, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255,255,255,0.14)', backgroundColor: 'rgba(18,18,22,0.6)' },
   toolIcon: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.goldSoft, borderWidth: 1, borderColor: 'rgba(226,168,75,0.45)' },
   toolTitle: { fontFamily: fonts.semibold, fontSize: 14, color: colors.text, marginTop: space.md },
-  toolDetail: { fontFamily: fonts.medium, fontSize: 11.5, lineHeight: 15, color: colors.textMuted, marginTop: 2 },
+  toolDetail: { fontFamily: fonts.medium, fontSize: 12, lineHeight: 16, color: colors.textMuted, marginTop: 2 },
   dayOneNews: { flexDirection: 'row', alignItems: 'center', gap: space.md, marginHorizontal: space.lg, marginTop: space.xl, padding: space.md, borderRadius: radius.lg, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(246,211,138,0.55)', backgroundColor: 'rgba(18,18,22,0.7)', boxShadow: '0px 0px 24px rgba(246,211,138,0.2)' },
   dayOneTitle: { fontFamily: fonts.semibold, fontSize: 14.5, color: colors.text },
   dayOneBody: { fontFamily: fonts.medium, fontSize: 12, color: '#F6D38A', marginTop: 2 },

@@ -1,12 +1,14 @@
 import { supabase } from '../lib/supabase';
 import { CALL_FIELDS } from './casting';
+import { BLOCK_EVIDENCE_BUCKET, evidencePath } from './hub';
 
 // The Admin Portal's calls. Every one is refused by the database unless the
 // signed-in account is a BOA admin (public.is_admin(), in
 // supabase/migrations/20261025090000_casting_board_and_admin.sql), so the
 // app's own admin check only decides what to show.
 
-const USER_FIELDS = 'id, username, display_name, avatar_url, roles, is_boa_star, is_featured, banned_at, visible_on_hub, created_at';
+const USER_FIELDS =
+  'id, username, display_name, avatar_url, roles, is_boa_star, is_featured, banned_at, visible_on_hub, subscription_status, trial_start_date, created_at';
 
 function need() {
   if (!supabase) throw new Error('The Hub is not connected yet.');
@@ -42,6 +44,27 @@ export async function setReportStatus(id, status) {
 /** Bans (or lifts the ban on) an account. */
 export async function setBanned(userId, banned) {
   check(await need().from('profiles').update({ banned_at: banned ? new Date().toISOString() : null }).eq('id', userId));
+}
+
+/** Blocks, newest first, with the blocker's reason and screenshot. */
+export async function listBlocks() {
+  return check(
+    await need()
+      .from('blocks')
+      .select(
+        'blocker_id, blocked_id, block_reason, block_evidence_url, created_at, blocker:blocker_id (id, username, display_name), blocked:blocked_id (id, username, display_name, banned_at)',
+      )
+      .order('created_at', { ascending: false })
+      .limit(200),
+  );
+}
+
+/** A short-lived link to a block's screenshot (the bucket is private). */
+export async function evidenceLink(url) {
+  const path = evidencePath(url);
+  if (!path) return null;
+  const { data, error } = await need().storage.from(BLOCK_EVIDENCE_BUCKET).createSignedUrl(path, 600);
+  return error ? null : data?.signedUrl ?? null;
 }
 
 // --------------------------------------------------------- casting manager
@@ -81,6 +104,11 @@ export async function listUsers(query = '') {
 /** Badges a member as a BOA Star (or takes it away). */
 export async function setBoaStar(userId, star) {
   check(await need().from('profiles').update({ is_boa_star: star }).eq('id', userId));
+}
+
+/** BOA Premium by hand ('active'), or back to 'expired'. */
+export async function setSubscription(userId, status) {
+  check(await need().from('profiles').update({ subscription_status: status }).eq('id', userId));
 }
 
 /** Featured in the Chat Hub's Community Pulse. */

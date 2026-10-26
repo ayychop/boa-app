@@ -44,6 +44,7 @@ import { ZenProvider, useZen } from './src/context/ZenContext';
 import { WeatherProvider } from './src/context/WeatherContext';
 import { AlarmProvider, useAlarms } from './src/context/AlarmContext';
 import { HubProvider } from './src/context/HubContext';
+import { CallProvider } from './src/context/CallContext';
 import { currentTab, goToTab, navigationRef, openPage } from './src/navigation/ref';
 import { completeAuthLink, profileIdByUsername } from './src/api/hub';
 import OnboardingScreen from './src/screens/OnboardingScreen';
@@ -207,25 +208,28 @@ function TabBarBackground() {
 // (SafeBottomFloor).
 const ANDROID_BOTTOM_COMFORT = 10;
 
-// Seven tabs share the bar. Phones (the S26 Ultra, the Fold's cover screen)
-// get big, easy-to-hit icons and labels in a taller bar: 26 to 30pt icons
-// and 11.5 to 13pt labels. Tablets and unfolded phones have room to spare,
-// so they keep a slimmer bar.
+// Seven tabs share the bar. Phones scale everything to the width of one
+// tab's slot, so a standard phone (360 to 412pt) and the Fold's narrow
+// cover screen (about 344pt) each get icons and labels in proportion, in a
+// bar only as tall as they need. Tablets and unfolded phones have room to
+// spare, so they keep a slim bar.
 const TAB_COUNT = 7;
 export const TAB_BAR_HEIGHT = 66;
-export const TAB_BAR_HEIGHT_PHONE = 74;
-export const tabSizing = (slot, phone = false) =>
-  phone
-    ? {
-        icon: Math.round(Math.min(30, Math.max(26, slot * 0.5))),
-        label: slot < 54 ? 11.5 : slot < 62 ? 12.5 : 13,
-        height: TAB_BAR_HEIGHT_PHONE,
-      }
-    : {
-        icon: Math.round(Math.min(28, Math.max(24, slot * 0.44))),
-        label: slot < 54 ? 11 : slot < 70 ? 11.5 : 13,
-        height: TAB_BAR_HEIGHT,
-      };
+export const TAB_BAR_HEIGHT_PHONE = 64;
+const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+export const tabSizing = (slot, phone = false) => {
+  if (!phone) {
+    return {
+      icon: Math.round(Math.min(28, Math.max(24, slot * 0.44))),
+      label: slot < 54 ? 11 : slot < 70 ? 11.5 : 13,
+      height: TAB_BAR_HEIGHT,
+    };
+  }
+  const icon = Math.round(clamp(slot * 0.44, 22, 27));
+  const label = slot < 52 ? 11 : slot < 60 ? 11.5 : 12.5;
+  // Top padding, icon, label line and a little air under it.
+  return { icon, label, height: Math.min(TAB_BAR_HEIGHT_PHONE, Math.round(icon + label * 1.35 + 22)) };
+};
 
 // "BOA Originals" can't fit a phone's tab slot at a readable size, so
 // phones say "Originals" (screen readers still hear "BOA Originals").
@@ -501,9 +505,11 @@ function Root() {
                       <AlarmProvider>
                         <HubProvider>
                           <PremiumProvider>
-                            <FormsProvider>
-                              {booted ? <Gate /> : <Intro onDone={finishBoot} />}
-                            </FormsProvider>
+                            <CallProvider>
+                              <FormsProvider>
+                                {booted ? <Gate /> : <Intro onDone={finishBoot} />}
+                              </FormsProvider>
+                            </CallProvider>
                           </PremiumProvider>
                         </HubProvider>
                       </AlarmProvider>

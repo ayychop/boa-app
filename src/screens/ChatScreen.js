@@ -17,7 +17,8 @@ import { colors, space, type } from '../theme';
 export default function ChatScreen({ navigation }) {
   const insets = useSafeAreaInsets();
   const { stage, profile } = useHub();
-  const bottom = useBottomSpace(space.xxl);
+  // Extra room under the last conversation so nothing ends under the tab bar's blur.
+  const bottom = useBottomSpace(space.xxl + space.xl);
 
   // A suspended account: said plainly, with nothing it can no longer do.
   if (stage === 'ready' && profile?.banned_at) {

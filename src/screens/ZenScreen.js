@@ -43,6 +43,7 @@ import Grain from '../components/Grain';
 import StationLogo from '../components/StationLogo';
 import { PulseDot, Slate } from '../components/ui';
 import { colors, fonts, radius, space } from '../theme';
+import BoaLogo from '../components/BoaLogo';
 
 // Fades: slow and soft, like a room's lights dimming.
 const DIM = Easing.bezier(0.33, 0, 0.2, 1);
@@ -374,8 +375,10 @@ function Equalizer({ color = colors.gold }) {
 }
 
 // The clock, centred in the space it's given, with the date above it and
-// the minute sweep below; the group drifts slowly so nothing burns in.
-function Clock({ width, height, compact }) {
+// the minute sweep below; the group drifts slowly so nothing burns in. On
+// the screensaver (`signed`) a small, faint BOA wordmark sits under the
+// sweep, like a maker's mark on a watch dial, and drifts with it.
+function Clock({ width, height, compact, signed = false }) {
   const reduceMotion = useReducedMotion();
   const now = useMinute();
   const { time, period } = clockParts(now);
@@ -401,6 +404,11 @@ function Clock({ width, height, compact }) {
         ) : null}
       </View>
       <MinuteSweep now={now} width={Math.round(Math.min(clockSize * 1.8, width * 0.6))} />
+      {signed ? (
+        <View style={styles.mark} testID="zen-logo" accessibilityLabel="BOA Network" accessible>
+          <BoaLogo height={Math.round(Math.max(14, Math.min(clockSize * 0.13, 24)))} color="#E9BE6E" />
+        </View>
+      ) : null}
     </Animated.View>
   );
 }
@@ -795,7 +803,7 @@ function ZenRoom() {
 
       {/* Over the wake tap: the soundscape's button takes you into Zen. */}
       <View pointerEvents="box-none" style={[styles.clockArea, clockArea]}>
-        <Clock width={clockW} height={clockH} compact={short} />
+        <Clock width={clockW} height={clockH} compact={short} signed={ambient} />
         <NowLine sound={sound} withRadio={!radioCard} onOpenSound={ambient ? () => wake({ toControls: true }) : undefined} />
       </View>
 
@@ -934,6 +942,8 @@ const styles = StyleSheet.create({
   digits: { flexDirection: 'row', justifyContent: 'center' },
   clock: { fontFamily: fonts.extralight, color: colors.text, fontVariant: ['tabular-nums'], textAlign: 'center' },
   period: { position: 'absolute', left: '100%', marginLeft: space.sm, fontFamily: fonts.serif, color: colors.gold },
+  // Faint enough to read as part of the dial, not a logo on top of it.
+  mark: { marginTop: space.lg, opacity: 0.3 },
   sweep: { height: 2, marginTop: space.md, borderRadius: 1, backgroundColor: 'rgba(243,239,232,0.12)', justifyContent: 'center' },
   sweepFill: { position: 'absolute', left: 0, height: 2, borderRadius: 1, backgroundColor: 'rgba(226,168,75,0.75)' },
   bead: { position: 'absolute', left: 0, width: 6, height: 6, borderRadius: 3, backgroundColor: colors.gold },

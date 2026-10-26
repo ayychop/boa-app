@@ -341,6 +341,22 @@ export async function listFeatured({ limit = 12, excludeId } = {}) {
  * Whether you're a BOA admin. The database decides (your confirmed sign-in
  * email is in its admin list); the app never holds that list.
  */
+/**
+ * Your BOA Premium standing, from the database: { status: 'trial' |
+ * 'active' | 'expired', hasAccess, isAdmin, trialEndsAt }. Admins always
+ * have access. Signed out, or unreachable: no access.
+ */
+export async function getPremiumAccess() {
+  const { data, error } = await need().rpc('premium_access');
+  if (error || !data) return { status: 'expired', hasAccess: false, isAdmin: false, trialEndsAt: null };
+  return {
+    status: data.status ?? 'expired',
+    hasAccess: data.has_access === true,
+    isAdmin: data.is_admin === true,
+    trialEndsAt: data.trial_ends_at ?? null,
+  };
+}
+
 export async function amIAdmin() {
   const { data, error } = await need().rpc('is_admin');
   if (error) return false;
@@ -349,8 +365,62 @@ export async function amIAdmin() {
 
 // ---------------------------------------------------------- block, report
 
-export async function blockUser(myId, otherId) {
-  check(await need().from('blocks').upsert({ blocker_id: myId, blocked_id: otherId }, { onConflict: 'blocker_id,blocked_id' }));
+/** Why someone's being blocked: kept with the block for BOA moderators. */
+export const BLOCK_REASONS = [
+  { id: 'harassment', label: 'Harassment' },
+  { id: 'spam', label: 'Spam' },
+  { id: 'scam', label: 'Scam' },
+  { id: 'inappropriate', label: 'Inappropriate' },
+  { id: 'fake', label: 'Fake account' },
+  { id: 'other', label: 'Something else' },
+];
+
+export const BLOCK_EVIDENCE_BUCKET = 'block-evidence';
+const MAX_EVIDENCE_BYTES = 10 * 1024 * 1024;
+
+/**
+ * Uploads a screenshot for a block to your folder in the private evidence
+ * bucket and returns its https:// address (only you and BOA admins can
+ * open it; admins get a signed link from evidencePath()).
+ */
+export async function uploadBlockEvidence(myId, asset) {
+  const sb = need();
+  const type = asset?.mimeType || 'image/jpeg';
+  if (!/^image\//.test(type)) throw new Error('Choose a screenshot (a photo), not a video.');
+  const ext = type.includes('png') ? 'png' : type.includes('webp') ? 'webp' : 'jpg';
+  const path = `${myId}/block-${Date.now()}.${ext}`;
+  let body;
+  try {
+    body = await readFileBytes(asset.uri);
+  } catch {
+    throw new Error('That screenshot could not be read from your phone.');
+  }
+  if (body.byteLength > MAX_EVIDENCE_BYTES) throw new Error('That screenshot is over 10 MB. Choose a smaller one.');
+  const res = await sb.storage.from(BLOCK_EVIDENCE_BUCKET).upload(path, body, { contentType: type, upsert: false });
+  if (res?.error) throw new Error(`Couldn't upload the screenshot. ${res.error.message || ''}`.trim());
+  // The bucket is private, so this address only opens with a signed link;
+  // it's kept as the permanent record of where the file is.
+  const url = sb.storage.from(BLOCK_EVIDENCE_BUCKET).getPublicUrl(path).data.publicUrl;
+  assertCloudUrl(url, 'That screenshot');
+  return url;
+}
+
+/** The storage path inside the evidence bucket, from its https:// address. */
+export function evidencePath(url) {
+  const m = /\/storage\/v1\/object\/(?:public|sign|authenticated)?\/?block-evidence\/([^?]+)/.exec(url ?? '');
+  return m ? decodeURIComponent(m[1]) : null;
+}
+
+export async function blockUser(myId, otherId, { reason = null, evidenceUrl = null } = {}) {
+  if (evidenceUrl) assertCloudUrl(evidenceUrl, 'That screenshot');
+  check(
+    await need()
+      .from('blocks')
+      .upsert(
+        { blocker_id: myId, blocked_id: otherId, block_reason: reason?.trim()?.slice(0, 500) || null, block_evidence_url: evidenceUrl || null },
+        { onConflict: 'blocker_id,blocked_id' },
+      ),
+  );
 }
 
 export async function unblockUser(myId, otherId) {

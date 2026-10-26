@@ -8,6 +8,7 @@ import { BlurTargetView } from 'expo-blur';
 import * as ImagePicker from 'expo-image-picker';
 import Animated, { withSpring, withTiming } from 'react-native-reanimated';
 import { useHub } from '../../context/HubContext';
+import { useCallMaybe } from '../../context/CallContext';
 import { supabase } from '../../lib/supabase';
 import { ownChannel } from '../../lib/realtime';
 import {
@@ -180,6 +181,7 @@ function Thread({ navigation, route }) {
   const insets = useSafeAreaInsets();
   const id = route.params?.id;
   const { userId, isOnline, blocked, unblock } = useHub();
+  const calls = useCallMaybe();
   const [conv, setConv] = useState(null);
   const [messages, setMessages] = useState([]);
   const [state, setState] = useState('loading'); // loading | ready | error
@@ -546,6 +548,7 @@ function Thread({ navigation, route }) {
       onBack={() => navigation.goBack()}
       onProfile={conv && other ? () => navigation.navigate('HubProfile', { id: conv.otherId }) : null}
       onVibe={() => setPicking(true)}
+      onCall={calls && other && !isBlocked ? () => calls.startCall({ ...other, id: conv.otherId }) : null}
       onLayout={(e) => setHeaderH(e.nativeEvent.layout.height)}
     />
   );

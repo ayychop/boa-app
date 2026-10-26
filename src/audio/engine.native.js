@@ -3,6 +3,7 @@ import { createAudioPlayer, requestNotificationPermissionsAsync } from 'expo-aud
 import { ensureAudioSession } from './session';
 import { splitTrack } from '../utils/track';
 import * as focus from './focus';
+import * as eq from './eq';
 
 export { splitTrack };
 
@@ -118,6 +119,10 @@ function getPlayer() {
         // Next/previous from the lock screen, notification, headset or car.
         player.addListener('remoteNextTrack', () => remote?.next?.());
         player.addListener('remotePreviousTrack', () => remote?.previous?.());
+        // BOA Hi-Fi's bass, treble and spatial attach to this player's sound.
+        try {
+          eq.setSession(player.audioSessionId);
+        } catch {}
         // Back in the app while waiting to reconnect: try straight away.
         AppState.addEventListener('change', (next) => {
           if (next !== 'active') return;

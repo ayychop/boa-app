@@ -1,0 +1,7 @@
+{
+  "name": "boa-eq",
+  "version": "1.0.0",
+  "private": true,
+  "main": "index.js",
+  "description": "BOA Hi-Fi: bass, treble and spatial sound on the radio player (Android audio effects)."
+}
