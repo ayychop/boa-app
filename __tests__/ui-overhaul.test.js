@@ -111,6 +111,65 @@ describe('12 chat vibes and Custom', () => {
   });
 });
 
+describe('the preview cards', () => {
+  const { StyleSheet } = require('react-native');
+  const mountPicker = () => render(<VibePicker value="noir" onChange={() => {}} />);
+
+  test('Turntable spins its record in the card, and it is the only card that moves', async () => {
+    const reanimated = require('react-native-reanimated');
+    const repeat = jest.spyOn(reanimated, 'withRepeat');
+    await mountPicker();
+    expect(screen.getByTestId('chat-vibe-turntable-preview')).toContainElement(screen.getByTestId('vibe-preview-vinyl'));
+    // One endless animation in the whole row: the record turning.
+    expect(repeat).toHaveBeenCalledTimes(1);
+    repeat.mockRestore();
+  });
+
+  test("each card's mock bubbles are the theme's real bubbles, text colour included", async () => {
+    await mountPicker();
+    for (const v of VIBES) {
+      const card = screen.getByTestId(`chat-vibe-${v.id}-preview`);
+      const texts = screen.getAllByText('You up?').filter((t) => card.props.children && containsNode(card, t));
+      expect(texts).toHaveLength(1);
+      expect(StyleSheet.flatten(texts[0].props.style).color).toBe(v.theirsText);
+      const mine = screen.getAllByText('Pull up').find((t) => containsNode(card, t));
+      expect(StyleSheet.flatten(mine.props.style).color).toBe(v.mineText);
+    }
+    // Midnight's text glows.
+    const midnight = screen.getAllByText('You up?').find((t) => containsNode(screen.getByTestId('chat-vibe-midnight-preview'), t));
+    expect(StyleSheet.flatten(midnight.props.style).textShadowRadius).toBeGreaterThan(0);
+  });
+
+  test('Cinema has heavy film grain in its card; Street Luxury and Afro-Futurism draw bold patterns', async () => {
+    await mountPicker();
+    const cinema = screen.getByTestId('chat-vibe-cinema-preview');
+    const hasImage = (n) => typeof n === 'object' && n !== null && (n.type === 'Image' || n.props?.source != null || (n.children ?? []).some(hasImage));
+    expect(hasImage(cinema)).toBe(true);
+    const src = fs.readFileSync(path.join(__dirname, '../src/components/chat/VibeTexture.js'), 'utf8');
+    expect(src).toMatch(/opacity=\{mini \? 0\.45/); // the grain, held still in the card
+    expect(src).toMatch(/id = mini \? 'weave-mini'/);
+    expect(src).toMatch(/id = mini \? 'geo-mini'/);
+  });
+
+  test('all twelve look different: no two share a backdrop, and two are light themes', () => {
+    const looks = VIBES.map((v) => `${v.mesh.join()}|${v.texture ?? ''}`);
+    expect(new Set(looks).size).toBe(VIBES.length);
+    const mids = VIBES.map((v) => rgbOf(v.mesh[1]).rgb);
+    // Every pair of backdrops visibly apart in colour, or told apart by a texture.
+    for (let i = 0; i < VIBES.length; i++)
+      for (let j = i + 1; j < VIBES.length; j++) {
+        const d = Math.hypot(...mids[i].map((c, k) => c - mids[j][k]));
+        if (d < 24) expect(VIBES[i].texture ?? 'none').not.toBe(VIBES[j].texture ?? 'none');
+      }
+    expect(VIBES.filter((v) => v.light).map((v) => v.id)).toEqual(['y2k', 'minimalist']);
+  });
+});
+
+function containsNode(root, node) {
+  if (root === node) return true;
+  return (root.children ?? []).some((c) => typeof c === 'object' && containsNode(c, node));
+}
+
 describe('copy and assets', () => {
   const read = (dir) =>
     fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? read(path.join(dir, e.name)) : /\.(js|ts|tsx)$/.test(e.name) ? [fs.readFileSync(path.join(dir, e.name), 'utf8')] : []));

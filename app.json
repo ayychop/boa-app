@@ -68,9 +68,10 @@
         {
           "android": {
             "kotlinVersion": "2.0.21",
-            "enableProguardInReleaseBuilds": false,
-            "enableR8InReleaseBuilds": false,
-            "enableMinifyInReleaseBuilds": false,
+            "enableProguardInReleaseBuilds": true,
+            "enableR8InReleaseBuilds": true,
+            "enableMinifyInReleaseBuilds": true,
+            "extraProguardRules": "# BOA HUB: R8 renames and shrinks everything not kept below. React Native, Expo modules (ours included), Agora, Firebase and Reanimated ship their own consumer rules; these cover the gaps.\n# Readable crash stack traces, without real source file names.\n-keepattributes SourceFile,LineNumberTable,*Annotation*\n-renamesourcefileattribute SourceFile\n# jail-monkey (device integrity TurboModule, looked up by name).\n-keep class com.gantix.JailMonkey.** { *; }\n# Agora video calls: the SDK and its React bridge call into each other by name.\n-keep class io.agora.** { *; }\n-dontwarn io.agora.**\n# WebView JavaScript bridges (YouTube player, web content).\n-keepclassmembers class * { @android.webkit.JavascriptInterface <methods>; }\n# Optional TLS and annotation classes that libraries reference but don't need.\n-dontwarn org.conscrypt.**\n-dontwarn org.bouncycastle.**\n-dontwarn org.openjsse.**\n-dontwarn javax.annotation.**\n-dontwarn com.google.errorprone.annotations.**",
             "usesCleartextTraffic": true
           }
         }

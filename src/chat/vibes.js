@@ -48,6 +48,8 @@ function vibe(v) {
     // ink: the colour of the UI chrome's text and icons (header name, back
     // arrow, composer field). White on the dark vibes, dark on a light one.
     ink: '#F3EFE8',
+    // inkMuted: secondary text (status line, times on their bubbles).
+    inkMuted: v.light ? 'rgba(17,17,19,0.58)' : 'rgba(243,239,232,0.6)',
     ...v,
   };
 }
@@ -201,23 +203,32 @@ export const VIBES = [
   vibe({
     id: 'y2k',
     label: 'Y2K Luxe',
-    detail: 'Hot pink and chrome',
-    mesh: ['#F04FA8', '#6A1F62', '#C4CCDD'],
+    detail: 'Bright bubblegum pink and chrome',
+    // A light vibe: bright pink to silver, nothing like the dark ones.
+    mesh: ['#FFC2E4', '#FF8FCB', '#E6EAF3'],
     lights: [
-      light('a', '#FF6FC0', 1.7, [0.12, 0.45], [0.1, 0.26], [0.7, 0.95], 13000),
-      light('b', '#E4E9F4', 1.4, [0.88, 0.6], [0.78, 0.6], [0.4, 0.6], 18000),
-      light('c', '#C68CFF', 1.1, [0.9, 0.7], [0.35, 0.5], [0.35, 0.5], 21000),
+      light('a', '#FFFFFF', 1.5, [0.12, 0.45], [0.1, 0.26], [0.45, 0.7], 13000),
+      light('b', '#FF5FB3', 1.4, [0.88, 0.6], [0.78, 0.6], [0.35, 0.55], 18000),
+      light('c', '#DCE3F2', 1.1, [0.9, 0.7], [0.35, 0.5], [0.4, 0.6], 21000),
     ],
-    veil: 'rgba(40,6,32,0.12)',
-    accent: '#FF8AC8',
-    mine: ['rgba(255,214,236,0.98)', 'rgba(255,140,200,0.97)', 'rgba(224,90,170,0.96)'],
-    mineText: '#2A0618',
-    mineEdge: 'rgba(240,244,252,0.95)',
-    mineGlow: '0px 0px 16px rgba(255,95,179,0.55)',
-    theirs: ['rgba(235,240,250,0.3)', 'rgba(235,240,250,0.06)'],
-    theirsFill: 'rgba(70,16,60,0.88)',
-    theirsEdge: 'rgba(235,240,250,0.6)',
-    theirsText: '#FFF0F8',
+    veil: 'rgba(255,255,255,0)',
+    light: true,
+    ink: '#3A0A26',
+    accent: '#C2187F',
+    accentSoft: 'rgba(194,24,127,0.12)',
+    accentEdge: 'rgba(194,24,127,0.6)',
+    // Yours: hot pink candy with white text. Theirs: polished chrome.
+    mine: ['rgba(238,70,160,0.98)', 'rgba(194,24,127,0.98)', 'rgba(160,14,104,0.98)'],
+    mineText: '#FFFFFF',
+    mineMeta: 'rgba(255,255,255,0.75)',
+    mineEdge: 'rgba(255,255,255,0.95)',
+    mineGlow: '0px 0px 14px rgba(255,95,179,0.6)',
+    theirs: ['rgba(255,255,255,0.95)', 'rgba(205,212,228,0.9)'],
+    theirsFill: 'rgba(236,239,246,0.96)',
+    theirsEdge: 'rgba(255,255,255,1)',
+    theirsText: '#3A0A26',
+    bar: 'rgba(255,214,236,0.85)',
+    stars: { max: 0, deep: false },
     texture: 'chrome',
   }),
   vibe({

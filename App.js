@@ -45,6 +45,7 @@ import { WeatherProvider } from './src/context/WeatherContext';
 import { AlarmProvider, useAlarms } from './src/context/AlarmContext';
 import { HubProvider } from './src/context/HubContext';
 import { CallProvider } from './src/context/CallContext';
+import { reportDeviceThreats } from './src/security/integrity';
 import { currentTab, goToTab, navigationRef, openPage } from './src/navigation/ref';
 import { completeAuthLink, profileIdByUsername } from './src/api/hub';
 import OnboardingScreen from './src/screens/OnboardingScreen';
@@ -460,6 +461,10 @@ function AppFallback({ error, retry }) {
 const publicHandle = Platform.OS === 'web' && typeof window !== 'undefined' ? profileHandleFromPath(window.location.pathname) : null;
 
 export default function App() {
+  // Root, hooks, emulators and debuggers: logged once per launch, nothing blocked yet (SECURITY.md).
+  useEffect(() => {
+    reportDeviceThreats().catch(() => {});
+  }, []);
   const [fontsLoaded, fontError] = useFonts({
     Manrope_200ExtraLight,
     Manrope_300Light,

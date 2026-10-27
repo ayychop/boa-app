@@ -35,22 +35,26 @@ function useBreath(ms, lo, hi, still) {
 }
 
 // Turntable: a record turning, half off the bottom right of the screen.
-function Vinyl({ width, height, accent, still }) {
-  const r = width * 0.78;
+function Vinyl({ width, height, accent, still, mini }) {
+  // In the thread it's half off the bottom right; in a preview card the
+  // whole record sits in frame, top right, and turns faster.
+  const r = mini ? height * 0.46 : width * 0.78;
   const size = r * 2;
-  const spin = useSpin(16000, still);
+  const spin = useSpin(mini ? 4000 : 16000, still);
+  const left = mini ? width - r * 1.55 : width * 0.78 - r;
+  const top = mini ? -r * 0.35 : height * 0.74 - r;
   const grooves = [];
   for (let g = r * 0.36; g < r * 0.98; g += Math.max(3, r / 46)) grooves.push(g);
   return (
-    <Animated.View style={[{ position: 'absolute', width: size, height: size, left: width * 0.78 - r, top: height * 0.74 - r }, spin]}>
+    <Animated.View style={[{ position: 'absolute', width: size, height: size, left, top }, spin]} testID={mini ? 'vibe-preview-vinyl' : undefined}>
       <Svg width={size} height={size}>
-        <Circle cx={r} cy={r} r={r} fill="rgba(0,0,0,0.42)" />
+        <Circle cx={r} cy={r} r={r} fill={mini ? 'rgba(0,0,0,0.85)' : 'rgba(0,0,0,0.42)'} />
         {grooves.map((g, i) => (
           <Circle key={g} cx={r} cy={r} r={g} stroke={i % 7 === 0 ? 'rgba(255,255,255,0.09)' : 'rgba(255,255,255,0.035)'} strokeWidth={1} fill="none" />
         ))}
         {/* Light catching the grooves: arcs, so the turning shows. */}
         <Circle cx={r} cy={r} r={r * 0.7} stroke="rgba(255,240,210,0.16)" strokeWidth={r * 0.5} strokeDasharray={`${r * 0.35} ${r * 4}`} fill="none" />
-        <Circle cx={r} cy={r} r={r * 0.3} fill={accent} fillOpacity={0.28} />
+        <Circle cx={r} cy={r} r={r * 0.3} fill={accent} fillOpacity={mini ? 0.9 : 0.28} />
         <Circle cx={r} cy={r} r={r * 0.3} stroke={accent} strokeOpacity={0.5} strokeWidth={1.5} fill="none" />
         <Path d={`M ${r - r * 0.18} ${r - r * 0.05} L ${r + r * 0.18} ${r - r * 0.05}`} stroke={accent} strokeOpacity={0.45} strokeWidth={2} />
         <Circle cx={r} cy={r} r={Math.max(3, r * 0.025)} fill="rgba(0,0,0,0.8)" />
@@ -60,37 +64,59 @@ function Vinyl({ width, height, accent, still }) {
 }
 
 // Street Luxury: a fine gold lattice, a monogram weave in the dark.
-function GoldWeave({ width, height, still }) {
-  const shine = useBreath(6000, 0.6, 1, still);
+// Bold in a preview card; in the thread it sits back far enough for text.
+function GoldWeave({ width, height, still, mini }) {
+  const shine = useBreath(6000, 0.75, 1, still);
+  const k = mini ? 1 : 0.5;
+  const tile = mini ? 18 : 34;
+  const h = tile / 2;
+  const id = mini ? 'weave-mini' : 'weave';
   return (
     <Animated.View style={[StyleSheet.absoluteFill, shine]}>
       <Svg width={width} height={height}>
         <Defs>
-          <Pattern id="weave" width="34" height="34" patternUnits="userSpaceOnUse">
-            <Path d="M0 17 L17 0 L34 17 L17 34 Z" stroke="#E2A84B" strokeOpacity={0.09} strokeWidth={0.8} fill="none" />
-            <Circle cx="17" cy="17" r="1.4" fill="#F6D38A" fillOpacity={0.14} />
+          <Pattern id={id} width={tile} height={tile} patternUnits="userSpaceOnUse">
+            <Path d={`M0 ${h} L${h} 0 L${tile} ${h} L${h} ${tile} Z`} stroke="#E2A84B" strokeOpacity={0.55 * k} strokeWidth={mini ? 0.9 : 1.1} fill="#E2A84B" fillOpacity={0.06 * k} />
+            <Path d={`M${h} ${h * 0.45} L${h * 1.55} ${h} L${h} ${h * 1.55} L${h * 0.45} ${h} Z`} fill="#F6D38A" fillOpacity={0.45 * k} />
+            <Circle cx="0" cy="0" r={mini ? 1 : 1.6} fill="#F6D38A" fillOpacity={0.7 * k} />
           </Pattern>
         </Defs>
-        <Rect width={width} height={height} fill="url(#weave)" />
+        <Rect width={width} height={height} fill={`url(#${id})`} />
       </Svg>
-      <LinearGradient colors={['rgba(246,211,138,0)', 'rgba(246,211,138,0.07)', 'rgba(246,211,138,0)']} start={{ x: 0, y: 0.2 }} end={{ x: 1, y: 0.8 }} style={StyleSheet.absoluteFill} />
+      {/* A band of gold foil catching the light. */}
+      <LinearGradient
+        colors={['rgba(246,211,138,0)', `rgba(246,211,138,${0.28 * k})`, 'rgba(246,211,138,0)']}
+        locations={[0.25, 0.45, 0.65]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
     </Animated.View>
   );
 }
 
 // Afro-Futurism: tribal geometry, zigzags and triangles in gold and violet.
-function Geometric({ width, height }) {
+// Bold in a preview card; in the thread it sits back far enough for text.
+function Geometric({ width, height, mini }) {
+  const k = mini ? 1 : 0.45;
+  const id = mini ? 'geo-mini' : 'geo';
+  // The tile drawn at half size in a card, so the pattern repeats enough to read.
+  const t = mini ? 0.5 : 1;
+  const T = 56 * t;
   return (
     <Svg width={width} height={height} style={StyleSheet.absoluteFill}>
       <Defs>
-        <Pattern id="geo" width="56" height="56" patternUnits="userSpaceOnUse">
-          <Path d="M0 14 L7 7 L14 14 L21 7 L28 14 L35 7 L42 14 L49 7 L56 14" stroke="#F2C14E" strokeOpacity={0.12} strokeWidth={1} fill="none" />
-          <Path d="M14 42 L21 30 L28 42 Z M42 42 L49 30 L56 42 Z M0 42 L7 30 L14 42 Z" stroke="#B57BFF" strokeOpacity={0.12} strokeWidth={1} fill="none" />
-          <Line x1="0" y1="50" x2="56" y2="50" stroke="#F2C14E" strokeOpacity={0.07} strokeWidth={1} />
-          <Circle cx="35" cy="36" r="1.5" fill="#F2C14E" fillOpacity={0.16} />
+        <Pattern id={id} width={T} height={T} patternUnits="userSpaceOnUse">
+          <G scale={t}>
+            <Path d="M0 14 L7 7 L14 14 L21 7 L28 14 L35 7 L42 14 L49 7 L56 14" stroke="#F2C14E" strokeOpacity={0.75 * k} strokeWidth={2} fill="none" />
+            <Path d="M14 42 L21 28 L28 42 Z M42 42 L49 28 L56 42 Z M0 42 L7 28 L14 42 Z" fill="#B57BFF" fillOpacity={0.4 * k} stroke="#D9B8FF" strokeOpacity={0.6 * k} strokeWidth={1.2} />
+            <Path d="M28 42 L35 28 L42 42 Z" fill="#F2C14E" fillOpacity={0.45 * k} />
+            <Line x1="0" y1="50" x2="56" y2="50" stroke="#F2C14E" strokeOpacity={0.5 * k} strokeWidth={2} />
+            <Circle cx="35" cy="21" r="2.5" fill="#F2C14E" fillOpacity={0.8 * k} />
+          </G>
         </Pattern>
       </Defs>
-      <Rect width={width} height={height} fill="url(#geo)" />
+      <Rect width={width} height={height} fill={`url(#${id})`} />
     </Svg>
   );
 }
@@ -143,11 +169,21 @@ function Film({ width, height, still, mini }) {
   const flicker = useBreath(140, 0, 0.022, still);
   return (
     <View style={StyleSheet.absoluteFill}>
-      {mini ? null : <Grain width={width} height={height} opacity={0.12} running={!still} />}
+      {/* Heavy grain; held still in a preview card (one textured tile, cheap). */}
+      <Grain width={width} height={height} opacity={mini ? 0.45 : 0.16} running={!still && !mini} />
       <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: '#FFFFFF' }, flicker]} />
       <Svg width={width} height={height} style={StyleSheet.absoluteFill}>
         <Line x1={width * 0.23} y1="0" x2={width * 0.235} y2={height} stroke="#FFFFFF" strokeOpacity={0.06} strokeWidth={1} />
         <Line x1={width * 0.71} y1={height * 0.1} x2={width * 0.705} y2={height * 0.7} stroke="#FFFFFF" strokeOpacity={0.05} strokeWidth={0.8} />
+        {/* A preview card is a frame of film: sprocket holes top and bottom. */}
+        {mini
+          ? Array.from({ length: Math.ceil(width / 12) }, (_, i) => (
+              <G key={i}>
+                <Rect x={i * 12 + 3} y={3} width={6} height={5} rx={1} fill="#F2F2F2" fillOpacity={0.55} />
+                <Rect x={i * 12 + 3} y={height - 8} width={6} height={5} rx={1} fill="#F2F2F2" fillOpacity={0.55} />
+              </G>
+            ))
+          : null}
       </Svg>
       <LinearGradient colors={['rgba(0,0,0,0.35)', 'rgba(0,0,0,0)', 'rgba(0,0,0,0)', 'rgba(0,0,0,0.4)']} locations={[0, 0.18, 0.8, 1]} style={StyleSheet.absoluteFill} />
     </View>

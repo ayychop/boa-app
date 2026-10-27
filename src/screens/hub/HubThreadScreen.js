@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Keyboard, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
+import { setStatusBarStyle } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurTargetView } from 'expo-blur';
@@ -134,7 +135,7 @@ function Bubble({ message, mine, seen, fresh, vibe, onLongPress, onOpenMedia, on
         {(!media && !voice && !once) || (caption && !once) ? (
           <Text style={[styles.body, { color: mine ? vibe.mineText : vibe.theirsText }, !mine && vibe.theirsGlow && { textShadowColor: 'rgba(201,214,255,0.7)', textShadowRadius: 8 }, media && { marginTop: space.sm, paddingHorizontal: space.xs }]}>{message.body}</Text>
         ) : null}
-        <Text style={[styles.meta, mine && { color: vibe.mineMeta }, media && { paddingHorizontal: space.xs }]}>
+        <Text style={[styles.meta, mine ? { color: vibe.mineMeta } : vibe.light && { color: vibe.inkMuted }, media && { paddingHorizontal: space.xs }]}>
           {left ? (
             <>
               <Ionicons name="timer-outline" size={9} /> {left} ·{' '}
@@ -152,7 +153,7 @@ function Bubble({ message, mine, seen, fresh, vibe, onLongPress, onOpenMedia, on
  * The live line under their name, most telling first: typing, then what
  * they're playing, then "Online in the Hub", then when they were last about.
  */
-function HeaderStatus({ person, online, typing, accent }) {
+function HeaderStatus({ person, online, typing, accent, ink, muted }) {
   if (typing) {
     return (
       <View style={styles.status} testID="thread-status-typing">
@@ -166,13 +167,13 @@ function HeaderStatus({ person, online, typing, accent }) {
     return (
       <View style={styles.status} testID="thread-status-online">
         <PulseDot color={colors.live} size={6} />
-        <Text style={[styles.statusText, { color: colors.text }]}>Online in the Hub</Text>
+        <Text style={[styles.statusText, { color: ink ?? colors.text }]}>Online in the Hub</Text>
       </View>
     );
   }
   const seen = lastSeen(person?.last_seen_at, false);
   return seen ? (
-    <Text style={[styles.statusText, styles.statusFaint]} testID="thread-status-seen">
+    <Text style={[styles.statusText, styles.statusFaint, muted && { color: muted }]} testID="thread-status-seen">
       {seen}
     </Text>
   ) : null;
@@ -213,6 +214,14 @@ function Thread({ navigation, route }) {
     setVibe(id);
     if (chatTheme) setChatTheme?.(null)?.catch?.(() => {});
   };
+  // A light vibe gets dark status bar icons; the app's light ones come back on leaving.
+  const lightVibe = !!vibe.light;
+  useFocusEffect(
+    useCallback(() => {
+      setStatusBarStyle(lightVibe ? 'dark' : 'light');
+      return () => setStatusBarStyle('light');
+    }, [lightVibe]),
+  );
   const pickCustom = (hex) => {
     setCustomColor(hex);
     if (chatTheme) setChatTheme?.(null)?.catch?.(() => {});
@@ -566,7 +575,7 @@ function Thread({ navigation, route }) {
           </View>
         ) : null
       }
-      status={other ? <HeaderStatus person={other} online={online} typing={theyType} accent={vibe.accent} /> : null}
+      status={other ? <HeaderStatus person={other} online={online} typing={theyType} accent={vibe.accent} ink={vibe.ink} muted={vibe.light ? vibe.inkMuted : null} /> : null}
       onBack={() => navigation.goBack()}
       onProfile={conv && other ? () => navigation.navigate('HubProfile', { id: conv.otherId }) : null}
       onVibe={() => setPicking(true)}
@@ -652,7 +661,7 @@ function Thread({ navigation, route }) {
               ListFooterComponent={older === 'loading' ? <ActivityIndicator color={vibe.accent} style={{ margin: space.lg }} /> : null}
               ListEmptyComponent={
                 <View style={styles.empty}>
-                  <Text style={[type.bodyMuted, { textAlign: 'center' }]}>Say hello to {name}.</Text>
+                  <Text style={[type.bodyMuted, { textAlign: 'center' }, vibe.light && { color: vibe.inkMuted }]}>Say hello to {name}.</Text>
                 </View>
               }
             />

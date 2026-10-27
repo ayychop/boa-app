@@ -119,8 +119,17 @@ test('the vibe button opens the picker; Neon turns the backdrop blue and violet 
   expect(screen.getByTestId('chat-vibe-sheet')).toBeOnTheScreen();
   await user.press(screen.getByTestId('chat-vibe-neon'));
   await flush();
-  expect(screen.getByTestId('chat-mesh-neon')).toBeOnTheScreen();
+  // Neon is drawn at once, at full strength, under the fading Noir: it never
+  // waits on an animation to appear (a stalled fade left Android flat black).
+  const current = screen.getByTestId('chat-ambient-current');
+  expect(current).toContainElement(screen.getByTestId('chat-mesh-neon'));
+  expect(StyleSheet.flatten(current.props.style).opacity).toBeUndefined();
+  expect(screen.getByTestId('chat-ambient-leaving')).toContainElement(screen.getByTestId('chat-mesh-noir'));
+  // Even with the animation frozen, a plain timer takes Noir away.
+  await act(async () => jest.advanceTimersByTime(600));
+  expect(screen.queryByTestId('chat-ambient-leaving')).toBeNull();
   expect(screen.queryByTestId('chat-mesh-noir')).toBeNull();
+  expect(screen.getByTestId('chat-mesh-neon')).toBeOnTheScreen();
   expect(screen.getByTestId('chat-vibe-neon-selected')).toBeOnTheScreen();
   expect(await AsyncStorage.getItem('boa:chat-vibe:v1')).toBe('neon');
 });

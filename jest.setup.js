@@ -360,3 +360,23 @@ jest.mock('expo-screen-capture', () => ({
   preventScreenCaptureAsync: jest.fn(async () => {}),
   allowScreenCaptureAsync: jest.fn(async () => {}),
 }));
+
+// Device integrity checks (src/security/integrity.js): a clean phone unless a test says otherwise.
+jest.mock('jail-monkey', () => {
+  const no = () => jest.fn(() => false);
+  return {
+    __esModule: true,
+    default: {
+      isJailBroken: no(),
+      hookDetected: no(),
+      canMockLocation: no(),
+      trustFall: no(),
+      isOnExternalStorage: no(),
+      AdbEnabled: no(),
+      isDebuggedMode: jest.fn(async () => false),
+      isDevelopmentSettingsMode: jest.fn(async () => false),
+      jailBrokenMessage: jest.fn(() => ''),
+    },
+  };
+});
+jest.mock('expo-device', () => ({ isDevice: true }));

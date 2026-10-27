@@ -1,6 +1,6 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
-import Animated, { Easing, FadeIn, FadeOut, interpolate, useAnimatedStyle, useReducedMotion, useSharedValue } from 'react-native-reanimated';
+import Animated, { Easing, interpolate, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
 import Grain from '../Grain';
@@ -102,32 +102,70 @@ function Light({ light, width, height, still }) {
   );
 }
 
+/** One vibe's whole backdrop: mesh, lights, veil, texture, stars and grain. */
+function Scene({ vibe, width, height, still }) {
+  return (
+    <>
+      <LinearGradient colors={vibe.mesh} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} testID={`chat-mesh-${vibe.id}`} />
+      {vibe.lights.map((l) => (
+        <Light key={`${vibe.id}-${l.id}`} light={l} width={width} height={height} still={still} />
+      ))}
+      {/* A veil keeps the lights behind the words, never over them. */}
+      <View style={[StyleSheet.absoluteFill, { backgroundColor: vibe.veil }]} />
+      <VibeTexture vibe={vibe} width={width} height={height} still={still} />
+      {Array.from({ length: STAR_SETS }, (_, set) => (
+        <StarSet key={set} stars={STARS.filter((s) => s.set === set)} set={set} width={width} height={height} still={still} max={vibe.stars.max} />
+      ))}
+      {vibe.stars.deep ? <StarSet stars={DEEP_STARS} set={STAR_SETS} width={width} height={height} still={still} max={vibe.stars.max} /> : null}
+      {vibe.grain === false ? null : <Grain width={width} height={height} opacity={0.07} running={!still} />}
+    </>
+  );
+}
+
+/** How long the old vibe takes to fade off the new one. */
+export const VIBE_FADE_MS = 450;
+const lookOf = (v) => `${v.id}-${v.customColor ?? ''}`;
+
+// The vibe being replaced, laid over the new one and fading out. The new
+// vibe underneath is already fully drawn, so if this fade never runs (a
+// stalled layout animation on Android left the thread flat before), the
+// timer still takes this layer away and the new vibe is simply there.
+function Leaving({ vibe, width, height, onDone }) {
+  const o = useSharedValue(1);
+  useEffect(() => {
+    o.value = withTiming(0, { duration: VIBE_FADE_MS, easing: Easing.out(Easing.quad) });
+    const t = setTimeout(onDone, VIBE_FADE_MS + 50);
+    return () => clearTimeout(t);
+  }, [o, onDone]);
+  const style = useAnimatedStyle(() => ({ opacity: o.value }));
+  return (
+    <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, style]} testID="chat-ambient-leaving">
+      <Scene vibe={vibe} width={width} height={height} still />
+    </Animated.View>
+  );
+}
+
 /**
  * The chat thread's living backdrop in the chosen vibe: a three-tone mesh,
  * the drifting lights, a veil, the stars and a film grain. Render it first,
  * behind everything. The mesh's middle tone is also its plain fill, so the
- * screen is never black while the gradient draws.
+ * screen is never black while the gradient draws. The current vibe is never
+ * waiting on an animation to become visible: it's drawn at full opacity
+ * from its first frame, with the old one fading away on top.
  */
 export default function AmbientGlow({ vibe = vibeById() }) {
   const { width, height } = useWindowDimensions();
   const still = useReducedMotion();
+  const [shown, setShown] = useState({ vibe, leaving: null });
+  // A new vibe: swap during render, so there's no frame of the wrong one.
+  if (lookOf(shown.vibe) !== lookOf(vibe)) setShown({ vibe, leaving: still ? null : shown.vibe });
+  const [done] = useState(() => () => setShown((s) => ({ ...s, leaving: null })));
   return (
     <View pointerEvents="none" style={[styles.fill, { backgroundColor: vibe.mesh[1] }]} testID="chat-ambient">
-      {/* Keyed by the look, so a new vibe crossfades in over the old one. */}
-      <Animated.View key={`${vibe.id}-${vibe.customColor ?? ''}`} entering={FadeIn.duration(450)} exiting={FadeOut.duration(450)} style={StyleSheet.absoluteFill}>
-        <LinearGradient colors={vibe.mesh} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} testID={`chat-mesh-${vibe.id}`} />
-        {vibe.lights.map((l) => (
-          <Light key={`${vibe.id}-${l.id}`} light={l} width={width} height={height} still={still} />
-        ))}
-        {/* A veil keeps the lights behind the words, never over them. */}
-        <View style={[StyleSheet.absoluteFill, { backgroundColor: vibe.veil }]} />
-        <VibeTexture vibe={vibe} width={width} height={height} still={still} />
-        {Array.from({ length: STAR_SETS }, (_, set) => (
-          <StarSet key={set} stars={STARS.filter((s) => s.set === set)} set={set} width={width} height={height} still={still} max={vibe.stars.max} />
-        ))}
-        {vibe.stars.deep ? <StarSet stars={DEEP_STARS} set={STAR_SETS} width={width} height={height} still={still} max={vibe.stars.max} /> : null}
-        {vibe.grain === false ? null : <Grain width={width} height={height} opacity={0.07} running={!still} />}
-      </Animated.View>
+      <View key={lookOf(vibe)} style={StyleSheet.absoluteFill} testID="chat-ambient-current">
+        <Scene vibe={vibe} width={width} height={height} still={still} />
+      </View>
+      {shown.leaving ? <Leaving key={lookOf(shown.leaving)} vibe={shown.leaving} width={width} height={height} onDone={done} /> : null}
     </View>
   );
 }
