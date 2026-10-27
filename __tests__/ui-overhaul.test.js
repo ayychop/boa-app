@@ -123,8 +123,8 @@ describe('copy and assets', () => {
     expect(card).toMatch(/function CinematicBackdrop/);
     expect(fs.existsSync(path.join(__dirname, '../assets/images/casting-on-set.jpg'))).toBe(false);
   });
-  test('preview builds raise the build number, so What\'s New sees each one', () => {
-    const eas = require('../eas.json');
-    expect(eas.build.preview.android.autoIncrement).toBe(true);
+  test("this release is a new version, so What's New shows once on it", () => {
+    // EAS's robot token can't raise preview build numbers, so a release is announced by bumping app.json's version.
+    expect(require('../app.json').expo.version).toBe('1.2.0');
   });
 });

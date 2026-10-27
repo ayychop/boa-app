@@ -5,10 +5,10 @@ import * as Application from 'expo-application';
 //
 // An update is any build this phone hasn't opened before: the app's
 // version (app.json, via expo-constants) plus its build number
-// (expo-application; EAS raises it on every build). So every new build
-// shows the modal once, even when only the build number moved. A fresh
-// install skips it (they get the vibe check and the welcome tour instead).
-// To announce a release, replace `notes`.
+// (expo-application). So a new version, or a new build number, shows the
+// modal once. A fresh install skips it (they get the vibe check and the
+// welcome tour instead). To announce a release, replace `notes` and bump
+// `version` in app.json: preview builds keep the same build number.
 
 export type PatchNote = {
   /** An Ionicons name. */
