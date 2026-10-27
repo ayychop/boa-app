@@ -36,7 +36,6 @@ $$;
 
 grant execute on function public.call_inbox_owner(text) to authenticated;
 
-alter table realtime.messages enable row level security;
 
 drop policy if exists "call inbox: listen to your own" on realtime.messages;
 create policy "call inbox: listen to your own" on realtime.messages
