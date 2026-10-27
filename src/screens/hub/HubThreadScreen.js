@@ -40,8 +40,6 @@ import AmbientGlow from '../../components/chat/AmbientGlow';
 import Composer from '../../components/chat/Composer';
 import TypingIndicator, { TypingDots } from '../../components/chat/TypingIndicator';
 import ThreadHeader from '../../components/chat/ThreadHeader';
-import VibePicker from '../../components/chat/VibePicker';
-import BottomSheet from '../../components/BottomSheet';
 import useChatVibe, { vibeById } from '../../chat/vibes';
 import { withChatTheme } from '../../chat/bubbleTheme';
 import { MediaTile, MediaViewer, VoiceNote } from '../../components/chat/media';
@@ -183,7 +181,7 @@ function HeaderStatus({ person, online, typing, accent, ink, muted }) {
 function Thread({ navigation, route }) {
   const insets = useSafeAreaInsets();
   const id = route.params?.id;
-  const { userId, isOnline, blocked, unblock, chatTheme, setChatTheme } = useHub();
+  const { userId, isOnline, blocked, unblock, chatTheme } = useHub();
   const calls = useCallMaybe();
   const [conv, setConv] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -200,20 +198,13 @@ function Thread({ navigation, route }) {
   const [once, setOnce] = useState(null);
   const [keyboard, setKeyboard] = useState(false);
   const [theyType, setTheyType] = useState(false);
-  const [picking, setPicking] = useState(false);
   // The header and composer float over the conversation on glass, so the
   // list keeps their heights clear at its ends.
   const [headerH, setHeaderH] = useState(insets.top + 60);
   const [composerH, setComposerH] = useState(64);
-  const { vibe: chatVibe, setVibe, customColor, setCustomColor } = useChatVibe();
+  const { vibe: chatVibe } = useChatVibe();
   // Your own bubbles in your Chat Appearance colour, if you've chosen one.
   const vibe = useMemo(() => withChatTheme(chatVibe, chatTheme), [chatVibe, chatTheme]);
-  // Picking a vibe shows that vibe whole: its own bubbles take over from a
-  // Chat Appearance colour, which would otherwise paint every vibe the same.
-  const pickVibe = (id) => {
-    setVibe(id);
-    if (chatTheme) setChatTheme?.(null)?.catch?.(() => {});
-  };
   // A light vibe gets dark status bar icons; the app's light ones come back on leaving.
   const lightVibe = !!vibe.light;
   useFocusEffect(
@@ -222,10 +213,6 @@ function Thread({ navigation, route }) {
       return () => setStatusBarStyle('light');
     }, [lightVibe]),
   );
-  const pickCustom = (hex) => {
-    setCustomColor(hex);
-    if (chatTheme) setChatTheme?.(null)?.catch?.(() => {});
-  };
   // What the glass blurs on Android: the backdrop and the messages.
   const behind = useRef(null);
   const alive = useRef(true);
@@ -578,21 +565,10 @@ function Thread({ navigation, route }) {
       status={other ? <HeaderStatus person={other} online={online} typing={theyType} accent={vibe.accent} ink={vibe.ink} muted={vibe.light ? vibe.inkMuted : null} /> : null}
       onBack={() => navigation.goBack()}
       onProfile={conv && other ? () => navigation.navigate('HubProfile', { id: conv.otherId }) : null}
-      onVibe={() => setPicking(true)}
       onCall={calls && other && !isBlocked ? () => calls.startCall({ ...other, id: conv.otherId }) : null}
       callState={calls?.callPrep}
       onLayout={(e) => setHeaderH(e.nativeEvent.layout.height)}
     />
-  );
-
-  const picker = (
-    <BottomSheet open={picking} onClose={() => setPicking(false)} dragAnywhere={false}>
-      <View style={styles.sheet} testID="chat-vibe-sheet">
-        <Text style={styles.sheetKicker}>Chat vibe</Text>
-        <Text style={[type.bodyMuted, { marginBottom: space.lg }]}>How your conversations look. Applies to every chat on this phone.</Text>
-        <VibePicker value={vibe.id} onChange={pickVibe} customColor={customColor} onCustomColor={pickCustom} />
-      </View>
-    </BottomSheet>
   );
 
   // Layers, back to front: the backdrop and the messages (together, the
@@ -619,7 +595,6 @@ function Thread({ navigation, route }) {
           </View>
         </BlurTargetView>
         {header}
-        {picker}
       </View>
     );
   }
@@ -696,7 +671,6 @@ function Thread({ navigation, route }) {
       <MediaViewer item={viewing} onClose={() => setViewing(null)} />
       <SendMediaSheet file={picked} viewOnce={viewOnce} onViewOnce={setViewOnce} onCancel={() => setPicked(null)} onSend={sendPicked} />
       <ReportSheet target={reporting} onClose={(didBlock) => (setReporting(null), didBlock && navigation.goBack())} />
-      {picker}
       <ViewOnceViewer item={once} onClose={closeOnce} />
     </View>
   );
@@ -748,8 +722,6 @@ const styles = StyleSheet.create({
   fill: { flex: 1 },
   list: { zIndex: 1 },
   floating: { position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 2 },
-  sheet: { paddingHorizontal: space.lg, paddingBottom: space.sm },
-  sheetKicker: { fontFamily: fonts.stamp, fontSize: 11, letterSpacing: 2.4, textTransform: 'uppercase', color: colors.textMuted, marginBottom: space.xs },
   bubbleRow: { flexDirection: 'row', marginVertical: 3 },
   bubble: {
     maxWidth: '80%',

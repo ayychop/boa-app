@@ -217,7 +217,6 @@ export default function ChatHome({ navigation, bottomPadding }) {
                   </View>
                 ) : null}
               </View>
-              <IconButton icon="settings-outline" label="Chat settings" onPress={() => navigation.navigate('HubSettings')} testID="chat-settings" />
               <IconButton icon="search" label="Find talent" onPress={() => navigation.navigate('HubDirectory')} />
             </View>
           </View>

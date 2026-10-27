@@ -22,6 +22,12 @@ data class AutoPlayback(
   val artist: String? = null,
   val artwork: String? = null,
   val canStep: Boolean = false,
+  // Whether the station is in your favourites; null hides the heart (no
+  // Premium, the app not open, or not a station).
+  val favourite: Boolean? = null,
+  // Whether you've fired (hyped) the station today; null hides the fire
+  // (not signed in, the app not open, or not a station).
+  val hyped: Boolean? = null,
 )
 
 /**

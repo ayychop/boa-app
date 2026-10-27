@@ -117,6 +117,56 @@ describe('the car now playing screen', () => {
     await engine.pause();
     expect(mockNative.setPlayback.mock.calls.length).toBe(count);
   });
+
+  test('no heart without favourites attached (no Premium, or the app not open)', async () => {
+    car.start();
+    car.handle({ action: 'play', mediaId: AFRO[0].id });
+    await engine.pause();
+    expect(mockNative.setPlayback.mock.calls.at(-1)[0].favourite).toBeNull();
+  });
+
+  test("the heart saves and unsaves the station that's on, and shows its state at once", async () => {
+    car.start();
+    car.handle({ action: 'play', mediaId: AFRO[0].id });
+    await engine.pause();
+    const saved = new Set();
+    const favs = { isSaved: (id) => saved.has(id), toggle: jest.fn((s) => (saved.has(s.id) ? saved.delete(s.id) : saved.add(s.id))) };
+    const detach = car.attachFavourites(favs);
+    expect(mockNative.setPlayback.mock.calls.at(-1)[0].favourite).toBe(false);
+    car.handle({ action: 'favourite', mediaId: AFRO[0].id });
+    expect(favs.toggle).toHaveBeenCalledWith(AFRO[0]);
+    expect(mockNative.setPlayback.mock.calls.at(-1)[0].favourite).toBe(true);
+    car.handle({ action: 'favourite', mediaId: AFRO[0].id });
+    expect(mockNative.setPlayback.mock.calls.at(-1)[0].favourite).toBe(false);
+    // A stale tap for a station that's no longer on does nothing.
+    car.handle({ action: 'favourite', mediaId: AFRO[1].id });
+    expect(favs.toggle).toHaveBeenCalledTimes(2);
+    detach();
+    expect(mockNative.setPlayback.mock.calls.at(-1)[0].favourite).toBeNull();
+  });
+
+  test('the fire hypes the station once a day, lights at once, and is hidden when not signed in', async () => {
+    car.start();
+    car.handle({ action: 'play', mediaId: AFRO[0].id });
+    await engine.pause();
+    expect(mockNative.setPlayback.mock.calls.at(-1)[0].hyped).toBeNull();
+    const fired = new Set();
+    const hype = { hyped: (id) => fired.has(id), fire: jest.fn((s) => fired.add(s.id)) };
+    const detach = car.attachHype(hype);
+    expect(mockNative.setPlayback.mock.calls.at(-1)[0].hyped).toBe(false);
+    car.handle({ action: 'fire', mediaId: AFRO[0].id });
+    expect(hype.fire).toHaveBeenCalledWith(AFRO[0]);
+    expect(mockNative.setPlayback.mock.calls.at(-1)[0].hyped).toBe(true);
+    // Already fired today: a second tap does nothing.
+    car.handle({ action: 'fire', mediaId: AFRO[0].id });
+    // A stale tap for a station that's no longer on does nothing.
+    car.handle({ action: 'fire', mediaId: AFRO[1].id });
+    expect(hype.fire).toHaveBeenCalledTimes(1);
+    // Fire and heart are separate: the fire never touches favourites.
+    expect(mockNative.setPlayback.mock.calls.at(-1)[0].favourite).toBeNull();
+    detach();
+    expect(mockNative.setPlayback.mock.calls.at(-1)[0].hyped).toBeNull();
+  });
 });
 
 describe('the Android build', () => {

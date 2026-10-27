@@ -18,6 +18,7 @@ import useProfileUpdates from '../../hooks/useProfileUpdates';
 import BlockSheet from '../../components/hub/BlockSheet';
 import ReportSheet from '../../components/hub/ReportSheet';
 import BoaCodeSheet from '../../components/hub/BoaCode';
+import ChatVibeSheet from '../../components/chat/ChatVibeSheet';
 import { GridEmpty, PostGrid, ProfileTabs } from '../../components/profile/PostGrid';
 import Favourites from '../../components/profile/Favourites';
 import { GoldBadge, Tappable } from '../../components/ui';
@@ -117,6 +118,7 @@ export default function HubProfileScreen({ navigation, route }) {
   const [open, setOpen] = useState(true);
   const [heroH, setHeroH] = useState(420);
   const [codeOpen, setCodeOpen] = useState(false);
+  const [vibeOpen, setVibeOpen] = useState(false);
 
   // Whether they take messages from you (their privacy setting): asked of
   // the database, which never says why.
@@ -313,6 +315,7 @@ export default function HubProfileScreen({ navigation, route }) {
                 <>
                   <Action label="Edit profile" icon="create-outline" onPress={() => navigation.navigate('HubSettings')} testID="profile-edit" />
                   <Action label="Splits" icon="pie-chart-outline" onPress={() => navigation.navigate('HubSplits')} testID="profile-splits" />
+                  <Action label="Chat vibe" icon="color-palette-outline" onPress={() => setVibeOpen(true)} testID="profile-chat-vibe" />
                 </>
               ) : isBlocked ? (
                 <Action label="Unblock" icon="lock-open-outline" onPress={() => unblock(id).catch(() => {})} />
@@ -360,6 +363,7 @@ export default function HubProfileScreen({ navigation, route }) {
         </View>
       </ScrollView>
       {mine ? <BoaCodeSheet open={codeOpen} onClose={() => setCodeOpen(false)} profile={person} /> : null}
+      {mine ? <ChatVibeSheet open={vibeOpen} onClose={() => setVibeOpen(false)} /> : null}
       <BlockSheet person={blocking} onClose={() => setBlocking(null)} />
       <ReportSheet target={reporting} onClose={(didBlock) => (setReporting(null), didBlock && navigation.goBack())} />
     </View>

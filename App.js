@@ -39,6 +39,7 @@ import { MediaProvider } from './src/context/MediaContext';
 import { FormsProvider } from './src/context/FormsContext';
 import { UserProvider, useUser } from './src/context/UserContext';
 import { PremiumProvider } from './src/context/PremiumContext';
+import CarActions from './src/components/CarActions';
 import { SleepTimerProvider } from './src/context/SleepTimerContext';
 import { ZenProvider, useZen } from './src/context/ZenContext';
 import { WeatherProvider } from './src/context/WeatherContext';
@@ -523,6 +524,7 @@ function Root() {
                       <AlarmProvider>
                         <HubProvider>
                           <PremiumProvider>
+                            <CarActions />
                             <CallProvider>
                               <FormsProvider>
                                 {booted ? <Gate /> : <Intro onDone={finishBoot} />}

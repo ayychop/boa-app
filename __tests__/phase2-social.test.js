@@ -211,6 +211,9 @@ describe('the Hub profile', () => {
     expect(navigation.navigate).toHaveBeenCalledWith('HubSplits');
     await user.press(screen.getByTestId('profile-edit'));
     expect(navigation.navigate).toHaveBeenCalledWith('HubSettings');
+    expect(screen.queryByTestId('chat-vibe-sheet')).toBeNull();
+    await user.press(screen.getByTestId('profile-chat-vibe'));
+    expect(screen.getByTestId('chat-vibe-sheet')).toBeOnTheScreen();
     await user.press(screen.getByTestId('post-tile-p2'));
     expect(navigation.navigate).toHaveBeenCalledWith('HubPost', { post: REEL });
   });

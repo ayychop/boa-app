@@ -12,10 +12,12 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 import { featuredProduction, productions, talent } from '../data/boaContent';
 import { podcasts } from '../data/podcasts';
 import { fetchTier1Stations, GENRES } from '../api/radio';
-import { listTrending } from '../api/trending';
+import { catalogue as curatedStations, listTrending } from '../api/trending';
+import { rankByHype, stationHype } from '../api/hype';
 import { usePlayer } from '../context/PlayerContext';
 import { useMedia } from '../context/MediaContext';
 import { useForms } from '../context/FormsContext';
@@ -173,6 +175,12 @@ function TrendingStation({ station, onPress, live }) {
       <Text style={styles.stationName} numberOfLines={1}>
         {station.name}
       </Text>
+      {station.hype ? (
+        <View style={styles.hype} accessibilityLabel={`${station.hype} hype`} testID={`hype-${station.id}`}>
+          <Ionicons name="flame" size={11} color={colors.gold} />
+          <Text style={styles.hypeText}>{station.hype}</Text>
+        </View>
+      ) : null}
     </Tappable>
   );
 }
@@ -193,12 +201,14 @@ export default function HomeScreen({ navigation }) {
   // The stations BOA's admins pick (Admin Portal, Radio), in their order.
   // With none picked (or offline), curated Tier 1: premium R&B / Hip Hop
   // that's been test-played and streams directly in the app, so the first
-  // tap always just plays.
+  // tap always just plays. Hype (fires from the car) ranks the row, and
+  // can bring a hyped station from BOA's curated catalogue into it.
   useEffect(() => {
     let alive = true;
     listTrending()
       .catch(() => [])
       .then((picked) => (picked.length ? picked : fetchTier1Stations({ limit: 5 })))
+      .then(async (picked) => rankByHype(picked, await stationHype().catch(() => new Map()), curatedStations()))
       .then((s) => alive && setTrending(s))
       .catch(() => alive && setTrending([]));
     return () => {
@@ -417,6 +427,8 @@ const styles = StyleSheet.create({
   liveDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: colors.live },
   liveText: { fontFamily: fonts.mono, fontSize: 9, letterSpacing: 1.2, color: colors.live },
   stationName: { fontFamily: fonts.semibold, fontSize: 12.5, color: colors.text, marginTop: 10, maxWidth: 104 },
+  hype: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 3 },
+  hypeText: { fontFamily: fonts.mono, fontSize: 10, letterSpacing: 0.6, color: colors.gold },
   person: { width: 104, alignItems: 'center' },
   tuning: { height: 120, alignItems: 'center', justifyContent: 'center', gap: space.md },
   podcast: { width: 148 },

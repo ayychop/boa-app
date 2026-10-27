@@ -157,6 +157,30 @@ class BoaAutoService : MediaBrowserServiceCompat() {
       PlaybackStateCompat.Builder()
         .setActions(actions)
         .setState(state, PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN, 1f)
+        .apply {
+          // The heart: filled when the station is a favourite, so a tap shows at once.
+          val favourite = p.favourite
+          if (favourite != null && p.mediaId != null) {
+            addCustomAction(
+              PlaybackStateCompat.CustomAction.Builder(
+                ACTION_FAVOURITE,
+                if (favourite) "Remove from favourites" else "Add to favourites",
+                if (favourite) R.drawable.boa_auto_heart_filled else R.drawable.boa_auto_heart
+              ).build()
+            )
+          }
+          // The fire: Hype, once a day. Lit once you've fired this station today.
+          val hyped = p.hyped
+          if (hyped != null && p.mediaId != null) {
+            addCustomAction(
+              PlaybackStateCompat.CustomAction.Builder(
+                ACTION_FIRE,
+                if (hyped) "Hyped today" else "Hype this station",
+                if (hyped) R.drawable.boa_auto_fire_filled else R.drawable.boa_auto_fire
+              ).build()
+            )
+          }
+        }
         .apply { if (state == PlaybackStateCompat.STATE_ERROR) setErrorMessage(PlaybackStateCompat.ERROR_CODE_APP_ERROR, "Couldn't reach this station") }
         .build()
     )
@@ -196,6 +220,13 @@ class BoaAutoService : MediaBrowserServiceCompat() {
 
     override fun onSkipToPrevious() = BoaAutoBridge.dispatch(this@BoaAutoService, "previous")
 
+    override fun onCustomAction(action: String?, extras: Bundle?) {
+      when (action) {
+        ACTION_FAVOURITE -> BoaAutoBridge.dispatch(this@BoaAutoService, "favourite", BoaAutoStore.playback.mediaId)
+        ACTION_FIRE -> BoaAutoBridge.dispatch(this@BoaAutoService, "fire", BoaAutoStore.playback.mediaId)
+      }
+    }
+
     // "Hey Google, play Afrobeats on BOA HUB": a station by name, else the
     // genre's first station, else carry on.
     override fun onPlayFromSearch(query: String?, extras: Bundle?) {
@@ -209,6 +240,8 @@ class BoaAutoService : MediaBrowserServiceCompat() {
     private const val ROOT = "boa:root"
     private const val MORE = "boa:more"
     private const val NOW_PLAYING_URI = "boa://now-playing"
+    private const val ACTION_FAVOURITE = "boa:favourite"
+    private const val ACTION_FIRE = "boa:fire"
     private const val CATALOGUE_WAIT_MS = 10_000L
 
     // Android Auto's browse hints (androidx.media's MediaConstants).

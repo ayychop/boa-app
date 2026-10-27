@@ -14,16 +14,16 @@ export function setCatalogue(catalogue) {
   } catch {}
 }
 
-/** What's on, for the car's now playing screen and controls. */
-export function setPlayback({ status, mediaId = null, title = null, artist = null, artwork = null, canStep = false }) {
+/** What's on, for the car's now playing screen and controls. favourite and hyped null hide the heart and the fire. */
+export function setPlayback({ status, mediaId = null, title = null, artist = null, artwork = null, canStep = false, favourite = null, hyped = null }) {
   try {
-    native?.setPlayback(status, mediaId, title, artist, artwork, !!canStep);
+    native?.setPlayback(status, mediaId, title, artist, artwork, !!canStep, favourite === null ? null : !!favourite, hyped === null ? null : !!hyped);
   } catch {}
 }
 
 /**
  * Taps on the car screen: { action, mediaId }, where action is play,
- * resume, pause, next, previous or catalogue. Returns an unsubscribe.
+ * resume, pause, next, previous, favourite, fire or catalogue. Returns an unsubscribe.
  */
 export function addCommandListener(fn) {
   if (!native) return () => {};

@@ -14,6 +14,9 @@ import { GENRES } from '../api/radio';
 // them up when the app is opened (takeBoot).
 
 let player = null; // { play(item, list), next, previous } from PlayerContext
+let favourites = null; // { isSaved(id), toggle(item) }, while the app is open with Premium
+let hype = null; // { hyped(id), fire(item) }, while the app is open and signed in
+let lastState = { status: 'idle' };
 let boot = null; // { item, list } played before the app was opened
 let started = false;
 let lastSent = null;
@@ -84,6 +87,20 @@ export function handle({ action, mediaId } = {}) {
     }
     case 'pause':
       return engine.pause();
+    case 'favourite': {
+      // The heart on the car's now playing screen: the station that's on.
+      const playing = engine.getCurrent();
+      if (!favourites || playing?.kind !== 'radio' || playing.id !== mediaId) return;
+      favourites.toggle(playing);
+      return sync(lastState);
+    }
+    case 'fire': {
+      // The fire: Hype for the station that's on, once a day.
+      const playing = engine.getCurrent();
+      if (!hype || playing?.kind !== 'radio' || playing.id !== mediaId || hype.hyped(playing.id)) return;
+      hype.fire(playing);
+      return sync(lastState);
+    }
     case 'next':
       return step(1);
     case 'previous':
@@ -94,6 +111,7 @@ export function handle({ action, mediaId } = {}) {
 
 // What's on, for the car's now playing screen.
 function sync(state) {
+  lastState = state;
   const item = engine.getCurrent();
   const meta = item ? engine.lockScreenMetadata?.(item) : null;
   const next = {
@@ -103,6 +121,8 @@ function sync(state) {
     artist: meta?.artist ?? null,
     artwork: meta?.artworkUrl ?? item?.logo ?? null,
     canStep: item?.kind === 'radio' && (player ? player.canStep() : (boot?.list?.length ?? 0) > 1),
+    favourite: item?.kind === 'radio' && favourites ? favourites.isSaved(item.id) : null,
+    hyped: item?.kind === 'radio' && hype ? hype.hyped(item.id) : null,
   };
   const key = JSON.stringify(next);
   if (key === lastSent) return;
@@ -132,6 +152,36 @@ export function attachPlayer(handlers) {
   };
 }
 
+/**
+ * Your saved stations, for the car's heart: { isSaved(id), toggle(item) }.
+ * Attached while the app is open and you have Premium (saving stations is
+ * a Premium feature); without it the car shows no heart. Returns a detach.
+ */
+export function attachFavourites(handlers) {
+  favourites = handlers;
+  sync(lastState);
+  return () => {
+    if (favourites !== handlers) return;
+    favourites = null;
+    sync(lastState);
+  };
+}
+
+/**
+ * Hype, for the car's fire: { hyped(id), fire(item) }, where hyped says
+ * you've already fired this station today. Attached while the app is open
+ * and you're signed in; without it the car shows no fire. Returns a detach.
+ */
+export function attachHype(handlers) {
+  hype = handlers;
+  sync(lastState);
+  return () => {
+    if (hype !== handlers) return;
+    hype = null;
+    sync(lastState);
+  };
+}
+
 /** What the car played before the app was opened, once (PlayerContext). */
 export function takeBoot() {
   const b = boot;
@@ -142,6 +192,9 @@ export function takeBoot() {
 /** Test hook: forget everything. */
 export function reset() {
   player = null;
+  favourites = null;
+  hype = null;
+  lastState = { status: 'idle' };
   boot = null;
   started = false;
   lastSent = null;

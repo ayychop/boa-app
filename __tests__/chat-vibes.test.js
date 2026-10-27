@@ -6,6 +6,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StyleSheet, View } from 'react-native';
 import { resetChatVibe, VIBES } from '../src/chat/vibes';
 import VibePicker from '../src/components/chat/VibePicker';
+import ChatVibeSheet from '../src/components/chat/ChatVibeSheet';
 import useChatVibe from '../src/chat/vibes';
 
 
@@ -110,12 +111,24 @@ beforeEach(async () => {
   resetChatVibe();
 });
 
-test('the vibe button opens the picker; Neon turns the backdrop blue and violet at once, and is saved', async () => {
-  const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+// The vibe is picked from your profile now, not from inside a thread.
+test('the thread has no vibe button of its own', async () => {
   await open(AMA);
-  expect(screen.getByTestId('chat-mesh-noir')).toBeOnTheScreen();
-  await user.press(screen.getByRole('button', { name: 'Chat vibe' }));
+  expect(screen.queryByRole('button', { name: 'Chat vibe' })).toBeNull();
+  expect(screen.queryByTestId('chat-vibe-sheet')).toBeNull();
+});
+
+test('a pick in the vibe sheet turns an open thread blue and violet at once, and is saved', async () => {
+  const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+  hub.getConversation.mockResolvedValue(conv(AMA));
+  await render(
+    <NavigationContainer>
+      <HubThreadScreen navigation={navigation} route={{ params: { id: 'conv-1' } }} />
+      <ChatVibeSheet open onClose={() => {}} />
+    </NavigationContainer>,
+  );
   await flush();
+  expect(screen.getByTestId('chat-mesh-noir')).toBeOnTheScreen();
   expect(screen.getByTestId('chat-vibe-sheet')).toBeOnTheScreen();
   await user.press(screen.getByTestId('chat-vibe-neon'));
   await flush();
