@@ -12,9 +12,10 @@ import { usePremium } from '../../context/PremiumContext';
 import { haptics } from '../../utils/haptics';
 import { colors, fonts, radius, space, type } from '../../theme';
 
-// Slider position (-1..1) as the gain it means on a phone: +/-12 dB.
+// Slider position (-1..1) as the gain it means on most phones: the codec's
+// full +/-15 dB (modules/boa-eq runs each phone to its own limit).
 const db = (v) => {
-  const n = Math.round(v * 12);
+  const n = Math.round(v * 15);
   return n === 0 ? '0 dB' : `${n > 0 ? '+' : ''}${n} dB`;
 };
 
@@ -35,7 +36,7 @@ function Band({ label, hint, value, onChange, locked, testID }) {
         style={styles.slider}
         minimumValue={-1}
         maximumValue={1}
-        step={1 / 12}
+        step={1 / 15}
         value={value}
         disabled={locked}
         onValueChange={onChange}

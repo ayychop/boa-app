@@ -16,6 +16,7 @@ export const switchCamera = () => {};
 export const setPrivacy = () => {};
 export const setBeauty = () => {};
 export const setBrightness = () => {};
+export const setContrast = () => {};
 export const cameraFacing = () => 'front';
 export const onFacing = () => () => {};
 export const LocalVideo = () => null;

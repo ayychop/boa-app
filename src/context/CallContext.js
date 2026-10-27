@@ -127,9 +127,10 @@ export function CallProvider({ children }) {
     media.setBeauty(next);
   }, []);
 
-  // Brightness while the slider moves: straight to the camera, nothing saved
-  // or re-rendered until it's let go (setBeauty then).
+  // Brightness and Contrast while their sliders move: straight to the camera,
+  // nothing saved or re-rendered until they're let go (setBeauty then).
   const previewBrightness = useCallback((v) => media.setBrightness(v), []);
+  const previewContrast = useCallback((v) => media.setContrast(v), []);
 
   // Every call starts full screen.
   const callId = call?.id ?? null;
@@ -568,6 +569,7 @@ export function CallProvider({ children }) {
       beauty,
       setBeauty,
       previewBrightness,
+      previewContrast,
       facing,
       selfHidden,
       setSelfHidden,
@@ -591,6 +593,7 @@ export function CallProvider({ children }) {
       beauty,
       setBeauty,
       previewBrightness,
+      previewContrast,
       facing,
       selfHidden,
       setSelfHidden,

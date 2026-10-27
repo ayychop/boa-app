@@ -237,7 +237,7 @@ describe('Agora video calls', () => {
     const from = AsyncStorage.setItem.mock.calls.length;
     const saves = () => AsyncStorage.setItem.mock.calls.slice(from).filter(([k, v]) => k === 'boa.call.beauty' && JSON.parse(v).brightness !== 0.5);
     await act(async () => slider.props.onValueChange(1));
-    // The platform's own range: up to +14 on Android, +5 on iOS.
+    // The platform's whole range: up to +20 on Android, +8 on iOS.
     const { exposureOf } = require('../src/calls/beauty');
     const os = require('react-native').Platform.OS === 'ios' ? 'ios' : 'android';
     expect(engine.setCameraExposureFactor).toHaveBeenLastCalledWith(exposureOf(1, os));
@@ -249,6 +249,18 @@ describe('Agora video calls', () => {
     expect(JSON.parse(saves().at(-1)[1])).toEqual(expect.objectContaining({ brightness: 0.75, v: 2 }));
     await user.press(screen.getByTestId('call-brightness-auto'));
     expect(engine.setCameraExposureFactor).toHaveBeenLastCalledWith(0);
+
+    // Contrast, right beside it: the tone curve reaches the camera as a LUT while it moves, saved when let go.
+    const contrast = screen.getByTestId('call-contrast');
+    expect(screen.getByTestId('call-contrast-value')).toHaveTextContent('Normal');
+    await act(async () => contrast.props.onValueChange(1));
+    expect(screen.getByTestId('call-contrast-value')).toHaveTextContent('+100');
+    await act(async () => jest.advanceTimersByTime(120));
+    expect(engine.setFilterEffectOptions).toHaveBeenLastCalledWith(true, expect.objectContaining({ path: expect.stringMatching(/-b0-c10-/), strength: 1 }), 2);
+    await act(async () => contrast.props.onSlidingComplete(0.25));
+    expect(JSON.parse(AsyncStorage.setItem.mock.calls.filter(([k]) => k === 'boa.call.beauty').at(-1)[1])).toEqual(expect.objectContaining({ contrast: 0.25 }));
+    await user.press(screen.getByTestId('call-contrast-auto'));
+    expect(screen.getByTestId('call-contrast-value')).toHaveTextContent('Normal');
     await user.press(screen.getByRole('button', { name: 'Close filters' }));
 
     // One tap on the strip changes the look.
@@ -687,9 +699,9 @@ describe('the call presets', () => {
     expect(toAgora({ preset: 'glow', brightness: 0, enabled: true }).beauty.lighteningContrastLevel).toBe(0);
     // Auto in the middle; strong at the ends, Android's range bigger than iOS's.
     expect(toAgora({ preset: 'natural', brightness: 0.5 }).exposure.factor).toBe(0);
-    expect(toAgora({ preset: 'natural', brightness: 1 }).exposure.factor).toBe(14);
-    expect(toAgora({ preset: 'natural', brightness: 0 }).exposure.factor).toBe(-14);
-    expect(toAgora({ preset: 'natural', brightness: 1 }, { os: 'ios' }).exposure.factor).toBe(5);
+    expect(toAgora({ preset: 'natural', brightness: 1 }).exposure.factor).toBe(20);
+    expect(toAgora({ preset: 'natural', brightness: 0 }).exposure.factor).toBe(-20);
+    expect(toAgora({ preset: 'natural', brightness: 1 }, { os: 'ios' }).exposure.factor).toBe(8);
     // A camera without exposure: Brightness above Auto lifts the lightening instead, still capped.
     const noExposure = toAgora({ preset: 'natural', brightness: 1 }, { exposure: false });
     expect(noExposure.exposure.factor).toBe(0);

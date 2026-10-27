@@ -1,7 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { Image, Platform, StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
+import Svg, { ClipPath, Defs, G, LinearGradient as SvgGradient, Rect, Stop, Text as SvgText } from 'react-native-svg';
+import Animated, { Easing, useAnimatedProps, useReducedMotion, useSharedValue, withDelay, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
 import { Fog, Slate } from './ui';
 import { withAlpha } from '../utils/color';
 import { colors, fonts } from '../theme';
@@ -12,6 +14,62 @@ function initials(name) {
     .map((w) => w[0])
     .slice(0, 2)
     .join('');
+}
+
+const AnimatedRect = Animated.createAnimatedComponent(Rect);
+// The sheen: one sweep across the letters, then a rest before the next.
+const SWEEP_MS = 1500;
+const REST_MS = 2800;
+
+/**
+ * The initials in BOA gold, with a band of light that sweeps across the
+ * letters like a star catching a spotlight. It's drawn in the letters
+ * themselves (a gold gradient and the band, clipped to the text), so it
+ * never spills onto the frame. Each person starts at a slightly different
+ * moment, so a row of them shimmers in turn. Still gold with reduced motion.
+ */
+function StarInitials({ text, width, height, fontSize, delay = 0 }) {
+  const id = useId().replace(/:/g, '');
+  const reduce = useReducedMotion();
+  const band = width * 0.42;
+  const sweep = useSharedValue(0);
+  useEffect(() => {
+    if (reduce) return;
+    sweep.value = withDelay(
+      delay,
+      withRepeat(withSequence(withTiming(1, { duration: SWEEP_MS, easing: Easing.inOut(Easing.quad) }), withDelay(REST_MS, withTiming(0, { duration: 0 }))), -1, false),
+    );
+  }, [reduce, delay, sweep]);
+  const sheen = useAnimatedProps(() => ({ x: -band + sweep.value * (width + band) }));
+  // Capitals sit centred when the baseline is half their cap height below
+  // the middle; the italic leans right, so it's nudged back a touch.
+  const x = width / 2 - fontSize * 0.03;
+  const y = height / 2 + fontSize * 0.34;
+  return (
+    <Svg width={width} height={height} pointerEvents="none">
+      <Defs>
+        <SvgGradient id={`gold${id}`} x1="0" y1="0" x2="0.35" y2="1">
+          <Stop offset="0" stopColor="#FBE3A6" />
+          <Stop offset="0.45" stopColor={colors.gold} />
+          <Stop offset="1" stopColor={colors.goldDeep} />
+        </SvgGradient>
+        <SvgGradient id={`sheen${id}`} x1="0" y1="0" x2="1" y2="0.25">
+          <Stop offset="0" stopColor="#FFF8E6" stopOpacity="0" />
+          <Stop offset="0.5" stopColor="#FFF8E6" stopOpacity="0.95" />
+          <Stop offset="1" stopColor="#FFF8E6" stopOpacity="0" />
+        </SvgGradient>
+        <ClipPath id={`letters${id}`}>
+          <SvgText x={x} y={y} fontSize={fontSize} fontFamily={fonts.serif} letterSpacing={-1} textAnchor="middle">
+            {text}
+          </SvgText>
+        </ClipPath>
+      </Defs>
+      <G clipPath={`url(#letters${id})`}>
+        <Rect x={0} y={0} width={width} height={height} fill={`url(#gold${id})`} />
+        {reduce ? null : <AnimatedRect animatedProps={sheen} x={-band} y={0} width={band} height={height} fill={`url(#sheen${id})`} />}
+      </G>
+    </Svg>
+  );
 }
 
 /**
@@ -67,10 +125,14 @@ export default function Headshot({ person, width, ratio = 4 / 5, round = false, 
             style={StyleSheet.absoluteFill}
           />
           <Fog opacity={0.32} variant={person.name.length} />
-          <View style={[styles.center, caption && !round && { paddingBottom: plate + 8 }]}>
-            <Text style={[styles.initials, { color: person.tint, fontSize: width * (round ? 0.42 : 0.34) }]}>
-              {initials(person.name)}
-            </Text>
+          <View style={[styles.center, caption && !round && { paddingBottom: plate + 8 }]} accessible accessibilityLabel={initials(person.name)}>
+            <StarInitials
+              text={initials(person.name)}
+              width={width}
+              height={caption && !round ? Math.max(0, height - plate - 8) : height}
+              fontSize={width * (round ? 0.42 : 0.34)}
+              delay={(person.name.length % 7) * 260}
+            />
           </View>
           {label && !round && <Slate style={styles.tag}>Headshot · 4:5</Slate>}
         </>
@@ -88,7 +150,6 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   center: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center' },
-  initials: { fontFamily: fonts.serif, letterSpacing: -1, opacity: 0.9 },
   tag: { position: 'absolute', top: 12, left: 12, opacity: 0.55 },
   glass: {
     position: 'absolute',

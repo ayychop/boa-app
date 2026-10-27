@@ -2,7 +2,7 @@ import { Alert, Linking, PermissionsAndroid, Platform } from 'react-native';
 import { createAgoraRtcEngine, MediaSourceType, RtcSurfaceView, RtcTextureView } from 'react-native-agora';
 import { fetchToken } from './token';
 import { toAgora } from './beauty';
-import { lutPath } from './luts';
+import { lutPath, toneLutPath } from './luts';
 import { decodeMessage, encodePrivacy } from './privacy';
 import { AINS_BALANCED, AUDIO, AUDIO_PROCESSING, CAPTURE, DENOISER, ENCODER, LOW_LIGHT, MIRROR_OFF, MIRROR_ON, PREVIEW, STABILIZATION_OFF, VIDEO_SCENARIO } from './quality';
 
@@ -32,6 +32,9 @@ let session = null; // { channel, token, uid, camera, mic, joined, live, speaker
 // the camera's filters and exposure when it reopens at a new size, which
 // it does when a call steps up from the ringing preview to HD.
 let look = null;
+// While a tone slider moves, the LUT for its new step is written at most this often.
+const TONE_EVERY_MS = 90;
+let toneTimer = null;
 // Which way the camera faces: front is mirrored in your preview, back isn't.
 let facing = 'front';
 const facingListeners = new Set();
@@ -139,26 +142,39 @@ function exposureSupported() {
 }
 
 /**
- * Applies the call look (src/calls/beauty.js: a preset and Brightness) to
- * your camera, before it's encoded, so they see what you see. In order:
- * the grade, colour, beauty, then the camera's exposure. Each call's result
- * is logged: a refusal shows up as Agora's error code.
+ * The LUT: the preset's grade, with the Brightness and Contrast curve
+ * drawn into it once either slider is off the middle (filters off, the
+ * curve alone). Returns Agora's code.
+ */
+function applyGrade(f, t) {
+  const toned = t.brightness !== 0 || t.contrast !== 0;
+  if (!f.enabled && !toned) return engine.setFilterEffectOptions?.(false, { strength: 0 }, PRIMARY_CAMERA) ?? null;
+  try {
+    const opts = toned ? { path: toneLutPath(f.enabled ? f.lut : null, f.strength, t.brightness, t.contrast), strength: 1 } : { path: lutPath(f.lut), strength: f.strength };
+    return engine.setFilterEffectOptions?.(true, opts, PRIMARY_CAMERA) ?? null;
+  } catch (err) {
+    console.warn('[call] grade not written', f.lut, err?.message ?? err);
+    return null;
+  }
+}
+
+/**
+ * Applies the call look (src/calls/beauty.js: a preset, Brightness and
+ * Contrast) to your camera, before it's encoded, so they see what you see.
+ * In order: the grade and tone, colour, beauty, then the camera's
+ * exposure. Each call's result is logged: a refusal shows up as Agora's
+ * error code.
  */
 export function setBeauty(beauty) {
   look = beauty;
+  clearTimeout(toneTimer);
+  toneTimer = null;
   if (!engine) return;
   const os = Platform.OS === 'ios' ? 'ios' : 'android';
   const exposure = exposureSupported();
-  const { beauty: b, colorEnhance: c, filter: f, exposure: e } = toAgora(beauty, { os, exposure });
+  const { beauty: b, colorEnhance: c, filter: f, exposure: e, tone: t } = toAgora(beauty, { os, exposure });
   const codes = { grade: null, colour: null, beauty: null, exposure: null };
-  if (!f.enabled) codes.grade = engine.setFilterEffectOptions?.(false, { strength: 0 }, PRIMARY_CAMERA) ?? null;
-  else {
-    try {
-      codes.grade = engine.setFilterEffectOptions?.(true, { path: lutPath(f.lut), strength: f.strength }, PRIMARY_CAMERA) ?? null;
-    } catch (err) {
-      console.warn('[call] grade not written', f.lut, err?.message ?? err);
-    }
-  }
+  codes.grade = applyGrade(f, t);
   codes.colour = engine.setColorEnhanceOptions(c.enabled, c, PRIMARY_CAMERA);
   codes.beauty = engine.setBeautyEffectOptions(b.enabled, b, PRIMARY_CAMERA);
   if (exposure) codes.exposure = engine.setCameraExposureFactor?.(e.factor) ?? null;
@@ -166,10 +182,21 @@ export function setBeauty(beauty) {
   else console.log('[call] filters', beauty?.preset, { exposure: e.factor, codes });
 }
 
+// The tone curve's LUT for the look now, once per TONE_EVERY_MS while a slider moves.
+function scheduleTone() {
+  if (toneTimer) return;
+  toneTimer = setTimeout(() => {
+    toneTimer = null;
+    if (!engine || !look) return;
+    const { filter: f, tone: t } = toAgora(look, { exposure: exposureSupported() });
+    applyGrade(f, t);
+  }, TONE_EVERY_MS);
+}
+
 /**
- * Brightness alone, while the slider moves: only the camera's exposure (or,
- * where there's none, the lightening), nothing written to disk and no grade
- * reloaded, so it can follow a finger smoothly.
+ * Brightness while the slider moves: the camera's exposure at once (or,
+ * where there's none, the lightening), then the tone curve a moment
+ * later. Nothing is saved until it's let go (setBeauty).
  */
 export function setBrightness(brightness) {
   if (!look) return;
@@ -183,6 +210,14 @@ export function setBrightness(brightness) {
     const { beauty: b } = toAgora(next, { os, exposure: false });
     engine.setBeautyEffectOptions(b.enabled, b, PRIMARY_CAMERA);
   }
+  scheduleTone();
+}
+
+/** Contrast while the slider moves: the tone curve, as often as TONE_EVERY_MS allows. */
+export function setContrast(contrast) {
+  if (!look) return;
+  look = { ...look, contrast };
+  if (engine) scheduleTone();
 }
 
 /** The camera opened again (a new size, a flip, back on): the look goes back on. */

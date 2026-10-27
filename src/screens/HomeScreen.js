@@ -324,7 +324,7 @@ export default function HomeScreen({ navigation }) {
               accessibilityLabel={`${person.name}, ${person.role}`}
             >
               <Headshot person={person} width={96} round />
-              <Text style={styles.personName} numberOfLines={1}>
+              <Text style={styles.personName} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
                 {person.name}
               </Text>
               <Text style={styles.personRole} numberOfLines={1}>

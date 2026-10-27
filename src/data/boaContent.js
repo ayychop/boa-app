@@ -92,7 +92,7 @@ export const showreel = {
 // The site has no headshots yet (headshot: null).
 export const talent = [
   { id: 'sabeian-gilzene', name: 'Sabeian Gilzene', role: 'Actor & Model', ratio: 3 / 4, tint: '#E2A84B' },
-  { id: 'jeremy-owusu', name: 'Jeremy Owusu', role: 'Actor & Model', ratio: 2 / 3, tint: '#D9D4C8' },
+  { id: 'jeremy-owusu', name: 'Jeremy Benson', role: 'Actor & Model', ratio: 2 / 3, tint: '#D9D4C8' },
   { id: 'ngor-yel', name: 'Ngor Yel', role: 'Actor & Model', ratio: 2 / 3, tint: '#D9D4C8' },
   { id: 'tobi-adeyemi', name: 'Tobi Adeyemi', role: 'Model', ratio: 5 / 7, tint: '#9BB36A' },
   { id: 'chan-yel', name: 'Chan Yel', role: 'Actor & Model', ratio: 4 / 5, tint: '#E08AA0' },

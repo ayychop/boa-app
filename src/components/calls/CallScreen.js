@@ -22,7 +22,7 @@ import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import Slider from '@react-native-community/slider';
 import { useCall, END_REASONS } from '../../context/CallContext';
-import { PRESETS, brightnessLabel, presetById } from '../../calls/beauty';
+import { PRESETS, brightnessLabel, contrastLabel, presetById } from '../../calls/beauty';
 import { LocalVideo, RemoteVideo } from '../../calls/media';
 import { haptics } from '../../utils/haptics';
 import { SPRING, usePress } from '../../utils/motion';
@@ -43,8 +43,10 @@ const DOCK_PAD = space.lg;
 const DOCK_GAP = 14;
 const WIDE = 600; // unfolded: every control in one row
 const PILL_ROOM = 44; // the privacy pill, when it's showing
-// Brightness reaches the camera at most this often while the slider moves (about 30 a second).
-const BRIGHTNESS_EVERY_MS = 33;
+// Brightness and Contrast reach the camera at most this often while a slider moves (about 30 a second).
+const TONE_EVERY_MS = 33;
+// From this panel width Brightness and Contrast sit side by side; narrower, one above the other.
+const TONE_SIDE_BY_SIDE = 420;
 const SHRINK_SIZE = 40;
 // Each preset's swatch: a hint of its grade.
 const PRESET_SWATCH = {
@@ -163,15 +165,20 @@ function CallButton({ icon, label, caption, onPress, on = false, onColor, tone, 
 }
 
 /**
- * Brightness: the camera's exposure. The slider runs on its own while your
- * finger is on it (nothing re-renders the call), sends the exposure straight
- * to the camera about 30 times a second, and saves where you let go.
+ * Brightness (the camera's exposure and a tone curve) or Contrast (the tone
+ * curve). The slider runs on its own while your finger is on it (nothing
+ * re-renders the call), sends each move straight to the camera about 30
+ * times a second, and saves where you let go.
  */
-function BrightnessSlider({ value, enabled, onPreview, onCommit }) {
+function ToneSlider({ kind, value, enabled, onPreview, onCommit, style }) {
+  const bright = kind === 'brightness';
+  const name = bright ? 'Brightness' : 'Contrast';
+  const middle = bright ? 'Auto' : 'Normal';
+  const label = bright ? brightnessLabel : contrastLabel;
   const [shown, setShown] = useState(value);
   const dragging = useRef(false);
   const last = useRef(0);
-  // A change from elsewhere (Auto, a saved value) moves it, unless you're holding it.
+  // A change from elsewhere (the reset, a saved value) moves it, unless you're holding it.
   useEffect(() => {
     if (!dragging.current) setShown(value);
   }, [value]);
@@ -179,7 +186,7 @@ function BrightnessSlider({ value, enabled, onPreview, onCommit }) {
     dragging.current = true;
     setShown(v);
     const now = Date.now();
-    if (now - last.current >= BRIGHTNESS_EVERY_MS) {
+    if (now - last.current >= TONE_EVERY_MS) {
       last.current = now;
       onPreview(v);
     }
@@ -192,12 +199,14 @@ function BrightnessSlider({ value, enabled, onPreview, onCommit }) {
     onCommit(v);
   };
   return (
-    <View style={[styles.filter, !enabled && { opacity: 0.4 }]}>
+    <View style={[styles.filter, !enabled && { opacity: 0.4 }, style]}>
       <View style={styles.filterHead}>
-        <Ionicons name="sunny-outline" size={16} color={colors.gold} />
-        <Text style={styles.filterLabel}>Brightness</Text>
-        <Text style={styles.filterValue} testID="call-brightness-value">
-          {brightnessLabel(shown)}
+        <Ionicons name={bright ? 'sunny-outline' : 'contrast-outline'} size={16} color={colors.gold} />
+        <Text style={styles.filterLabel} numberOfLines={1}>
+          {name}
+        </Text>
+        <Text style={styles.filterValue} testID={`call-${kind}-value`}>
+          {label(shown)}
         </Text>
         {Math.abs(shown - 0.5) > 0.005 ? (
           <Pressable
@@ -205,18 +214,18 @@ function BrightnessSlider({ value, enabled, onPreview, onCommit }) {
             disabled={!enabled}
             hitSlop={8}
             accessibilityRole="button"
-            accessibilityLabel="Brightness back to Auto"
+            accessibilityLabel={`${name} back to ${middle}`}
             style={styles.auto}
-            testID="call-brightness-auto"
+            testID={`call-${kind}-auto`}
           >
-            <Text style={styles.autoText}>Auto</Text>
+            <Text style={styles.autoText}>{bright ? 'Auto' : 'Reset'}</Text>
           </Pressable>
         ) : null}
       </View>
       <View style={styles.sliderRow}>
-        <Ionicons name="moon-outline" size={14} color={colors.textMuted} />
+        <Ionicons name={bright ? 'moon-outline' : 'remove-circle-outline'} size={14} color={colors.textMuted} />
         <View style={{ flex: 1 }}>
-          {/* Auto, in the middle. */}
+          {/* The middle: the camera's own. */}
           <View pointerEvents="none" style={styles.sliderMid} />
           <Slider
             style={{ height: 40 }}
@@ -230,17 +239,18 @@ function BrightnessSlider({ value, enabled, onPreview, onCommit }) {
             minimumTrackTintColor={colors.gold}
             maximumTrackTintColor="rgba(243,239,232,0.18)"
             thumbTintColor={colors.gold}
-            accessibilityLabel="Brightness"
-            testID="call-brightness"
+            accessibilityLabel={name}
+            testID={`call-${kind}`}
           />
         </View>
-        <Ionicons name="sunny" size={16} color={colors.gold} />
+        <Ionicons name={bright ? 'sunny' : 'add-circle'} size={16} color={colors.gold} />
       </View>
     </View>
   );
 }
 
-function BeautyPanel({ beauty, setBeauty, previewBrightness, onClose, width, maxHeight }) {
+function BeautyPanel({ beauty, setBeauty, previewBrightness, previewContrast, onClose, width, maxHeight }) {
+  const side = width >= TONE_SIDE_BY_SIDE;
   return (
     <Animated.View entering={FadeInDown.springify().damping(18)} exiting={FadeOutDown.duration(160)} style={[styles.panel, { width }]} testID="call-filters">
       <Glass tint="rgba(10,10,12,0.82)" />
@@ -255,7 +265,7 @@ function BeautyPanel({ beauty, setBeauty, previewBrightness, onClose, width, max
       </View>
       <Text style={styles.panelNote}>Done by the camera itself in 1080p, before your video is sent. What you see is what they see (your preview is mirrored; they see you the right way round).</Text>
       <ScrollView style={{ maxHeight: maxHeight }} showsVerticalScrollIndicator={false}>
-        {/* Six looks, one tap each: a swatch of the grade, its name and what it does. */}
+        {/* Six looks, one tap each: just the name, gold when it's on. */}
         <View style={[styles.presetGrid, !beauty.enabled && { opacity: 0.4 }]} accessibilityRole="radiogroup" testID="call-presets">
           {PRESETS.map((p) => {
             const on = beauty.preset === p.id;
@@ -270,13 +280,10 @@ function BeautyPanel({ beauty, setBeauty, previewBrightness, onClose, width, max
                 accessibilityRole="radio"
                 accessibilityState={{ selected: on, disabled: !beauty.enabled }}
                 accessibilityLabel={`${p.label}: ${p.detail}`}
-                style={[styles.preset, on && styles.presetOn]}
+                style={({ pressed }) => [styles.preset, on && styles.presetOn, pressed && { opacity: 0.7 }]}
                 testID={`call-preset-${p.id}`}
               >
-                <LinearGradient colors={PRESET_SWATCH[p.id]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.presetSwatch}>
-                  <Ionicons name={p.icon} size={18} color={p.id === 'bw' ? '#111' : '#fff'} />
-                </LinearGradient>
-                <Text style={[styles.presetLabel, on && { color: colors.gold }]} numberOfLines={1}>
+                <Text style={[styles.presetLabel, on && styles.presetLabelOn]} numberOfLines={1}>
                   {p.label}
                 </Text>
               </Pressable>
@@ -284,7 +291,10 @@ function BeautyPanel({ beauty, setBeauty, previewBrightness, onClose, width, max
           })}
         </View>
         <Text style={styles.presetDetail}>{presetById(beauty.preset).detail}</Text>
-        <BrightnessSlider value={beauty.brightness ?? 0.5} enabled onPreview={previewBrightness} onCommit={(v) => setBeauty({ brightness: v })} />
+        <View style={[styles.tones, side && styles.tonesSide]}>
+          <ToneSlider kind="brightness" value={beauty.brightness ?? 0.5} enabled onPreview={previewBrightness} onCommit={(v) => setBeauty({ brightness: v })} style={side && styles.toneSide} />
+          <ToneSlider kind="contrast" value={beauty.contrast ?? 0.5} enabled onPreview={previewContrast} onCommit={(v) => setBeauty({ contrast: v })} style={side && styles.toneSide} />
+        </View>
       </ScrollView>
     </Animated.View>
   );
@@ -522,6 +532,7 @@ export default function CallScreen({ me }) {
     beauty,
     setBeauty,
     previewBrightness,
+    previewContrast,
     facing,
     selfHidden,
     setSelfHidden,
@@ -731,6 +742,7 @@ export default function CallScreen({ me }) {
                         beauty={beauty}
                         setBeauty={setBeauty}
                         previewBrightness={previewBrightness}
+                        previewContrast={previewContrast}
                         onClose={() => setFiltersOpen(false)}
                         width={panelWidth}
                         maxHeight={Math.max(180, height - dockH - insets.top - insets.bottom - 260)}
@@ -1235,17 +1247,21 @@ const styles = StyleSheet.create({
   // Three to a row: big enough to hit at arm's length.
   preset: {
     width: '31.5%',
+    minHeight: 44,
     alignItems: 'center',
-    gap: 6,
-    paddingVertical: space.sm,
-    borderRadius: radius.lg,
+    justifyContent: 'center',
+    paddingHorizontal: space.sm,
+    borderRadius: radius.pill,
     borderWidth: 1.5,
     borderColor: 'rgba(243,239,232,0.12)',
     backgroundColor: 'rgba(243,239,232,0.05)',
   },
   presetOn: { borderColor: colors.gold, backgroundColor: 'rgba(226,168,75,0.14)' },
-  presetSwatch: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
-  presetLabel: { fontFamily: fonts.semibold, fontSize: 13, color: colors.text },
+  presetLabel: { fontFamily: fonts.semibold, fontSize: 14, color: colors.text, letterSpacing: -0.2 },
+  presetLabelOn: { color: colors.gold },
+  tones: { marginTop: space.xs },
+  tonesSide: { flexDirection: 'row', gap: space.lg },
+  toneSide: { flex: 1 },
   presetDetail: { fontFamily: fonts.medium, fontSize: 12, color: colors.textMuted, marginTop: space.sm, textAlign: 'center' },
   filterHead: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   filterLabel: {

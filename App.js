@@ -46,6 +46,7 @@ import { WeatherProvider } from './src/context/WeatherContext';
 import { AlarmProvider, useAlarms } from './src/context/AlarmContext';
 import { HubProvider } from './src/context/HubContext';
 import { CallProvider } from './src/context/CallContext';
+import CallWakeUpPrompt from './src/components/calls/CallWakeUpPrompt';
 import { reportDeviceThreats } from './src/security/integrity';
 import { currentTab, goToTab, navigationRef, openPage } from './src/navigation/ref';
 import { completeAuthLink, profileIdByUsername } from './src/api/hub';
@@ -536,6 +537,7 @@ function Root() {
                         <HubProvider>
                           <PremiumProvider>
                             <CarActions />
+                            <CallWakeUpPrompt />
                             <CallProvider>
                               <FormsProvider>
                                 {booted ? <Gate /> : <Intro onDone={finishBoot} />}
