@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "763778318226",
+    "project_id": "boa-hub-5aab4",
+    "storage_bucket": "boa-hub-5aab4.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:763778318226:android:95eb7de4eef64c8dee4b4b",
+        "android_client_info": {
+          "package_name": "com.boanets.boahub"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDvnoEFrUniA6NtteEE5rbNdQ4qg4KH3Hw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
