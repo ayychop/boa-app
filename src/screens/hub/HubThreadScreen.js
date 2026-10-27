@@ -583,8 +583,8 @@ function Thread({ navigation, route }) {
   if (state !== 'ready') {
     return (
       <View style={[styles.screen, { backgroundColor: vibe.mesh[1] }]} testID="hub-thread">
+        <AmbientGlow vibe={vibe} />
         <BlurTargetView ref={behind} style={StyleSheet.absoluteFill} collapsable={false}>
-          <AmbientGlow vibe={vibe} />
           <View style={{ paddingTop: headerH }}>
             {state === 'loading' ? (
               <ActivityIndicator color={vibe.accent} style={{ marginTop: space.xxxl }} />
@@ -606,11 +606,16 @@ function Thread({ navigation, route }) {
 
   return (
     <View style={[styles.screen, { backgroundColor: vibe.mesh[1] }]} testID="hub-thread">
+      {/* The vibe's backdrop is drawn under the blur target, not inside it:
+          inside expo-blur's BlurTarget, phones showed only the flat fill,
+          never the lights or texture. The glass still shows it through
+          its tint; it blurs the messages. Full screen, outside the
+          keyboard's reach. */}
+      <AmbientGlow vibe={vibe} />
       <KeyboardAvoidingView style={styles.fill} behavior={keyboardBehavior()} testID="hub-thread-keyboard">
         {/* The keyboard shortens this; the floating layers sit inside it. */}
         <View style={styles.fill}>
           <BlurTargetView ref={behind} style={StyleSheet.absoluteFill} collapsable={false} testID="hub-thread-behind">
-            <AmbientGlow vibe={vibe} />
             <FlatList
               ref={list}
               inverted

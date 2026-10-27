@@ -1,0 +1,19 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <!-- The car permissions (parking brake and gear, speed, GPS) are added
+     to the car build only, by plugins/withAutomotiveVideo.js, so the phone
+     build's permission list never changes. -->
+  <application>
+    <!-- The car's APIs. Not required, so phones (which don't have it) still install. -->
+    <uses-library android:name="android.car" android:required="false" />
+
+    <!-- The parked-only player. Deliberately NOT distraction optimised (no
+         distractionOptimized meta-data): the car itself covers it with its
+         blocking screen while driving, on top of our own checks. -->
+    <activity
+      android:name="expo.modules.boacarvideo.CarVideoActivity"
+      android:exported="false"
+      android:theme="@style/Theme.AppCompat.NoActionBar"
+      android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|uiMode|density"
+      android:launchMode="singleTop" />
+  </application>
+</manifest>

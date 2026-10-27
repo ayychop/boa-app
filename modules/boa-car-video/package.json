@@ -1,0 +1,7 @@
+{
+  "name": "boa-car-video",
+  "version": "1.0.0",
+  "private": true,
+  "main": "index.js",
+  "description": "BOA Originals on the car's screen (Android Automotive OS), parked only: a Media3 player that stops the picture the moment the car moves."
+}

@@ -14,10 +14,18 @@ import { callFromPush, ringNotification } from './incoming';
 
 export const CALL_PUSH_TASK = 'boa-call-push';
 
+//
+// On Android the task gets FCM's message, { data: { body, dataString, ... },
+// notification: null, ... }: the call is in data, not at the top. (Reading
+// the top level was why a phone in a pocket never rang.)
 TaskManager.defineTask(CALL_PUSH_TASK, async ({ data, error }) => {
-  if (error) return;
+  if (error) {
+    console.warn('[call] push task error', error?.message ?? error);
+    return;
+  }
   if (AppState.currentState === 'active') return;
-  const call = callFromPush(data?.notification?.request?.content?.data ?? data);
+  const call = callFromPush(data?.notification?.request?.content?.data ?? data?.data ?? data);
+  console.log('[call] push task', call ? `ringing ${call.callId}` : 'not a call');
   if (call) await ringNotification(call);
 });
 

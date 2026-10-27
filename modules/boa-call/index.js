@@ -52,6 +52,38 @@ export async function openFullScreenSettings() {
   } catch {}
 }
 
+/** Whether Android leaves the app alone in the background (not battery optimised). True without the module. */
+export function isIgnoringBatteryOptimizations() {
+  try {
+    return native?.isIgnoringBatteryOptimizations ? !!native.isIgnoringBatteryOptimizations() : true;
+  } catch {
+    return true;
+  }
+}
+
+/** Asks Android to stop battery-optimising the app (or opens the list where it's done). */
+export async function openBatterySettings() {
+  try {
+    await native?.openBatterySettings?.();
+  } catch {}
+}
+
+/** Whether the app may display over other apps. True without the module. */
+export function canDrawOverlays() {
+  try {
+    return native?.canDrawOverlays ? !!native.canDrawOverlays() : true;
+  } catch {
+    return true;
+  }
+}
+
+/** Opens "Display over other apps" for the app. */
+export async function openOverlaySettings() {
+  try {
+    await native?.openOverlaySettings?.();
+  } catch {}
+}
+
 /** Stops showing over the lock screen (a call opened the app there, and it's over). */
 export async function leaveLockScreen() {
   try {

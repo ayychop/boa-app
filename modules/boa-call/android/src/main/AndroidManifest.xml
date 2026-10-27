@@ -3,6 +3,13 @@
        grants it by default only to calling apps, and Play asks for a
        declaration of it (Policy > App content > Full-screen intent). -->
   <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+  <!-- So a call's push isn't held back and its ring dropped (asked for in
+       src/calls/wakeUp.js). Play allows it for apps whose calls must ring
+       in real time; it asks for a declaration of that. -->
+  <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+  <!-- Display over other apps: some phones (Xiaomi, Oppo, Vivo) won't open
+       a call's full screen from the background without it. -->
+  <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
   <application>
     <receiver android:name="expo.modules.boacall.CallDeclineReceiver" android:exported="false" />
   </application>

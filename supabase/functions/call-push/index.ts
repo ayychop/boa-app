@@ -33,8 +33,8 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 // Call ids are UUIDs (src/context/CallContext.js); allow the older format too.
 const CHANNEL = /^[A-Za-z0-9-]{16,64}$/;
 const RINGTONES = ['hiphop', 'rnb', 'afrobeats', 'bashment'];
-// A call rings for 45 seconds (RING_MS); a push that arrives later is useless.
-const RING_SECONDS = 45;
+// A call rings for 30 seconds (RING_MS); a push that arrives later is useless.
+const RING_SECONDS = 30;
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -46,6 +46,9 @@ Deno.serve(async (req) => {
     console.error('[call-push]', status, error, detail ?? '');
     return json({ error }, status);
   };
+  // Every step logs, so a call that never rang can be traced in the
+  // function's logs (Supabase dashboard > Edge Functions > call-push > Logs).
+  console.log('[call-push] request', req.method);
   try {
     if (req.method !== 'POST') return refuse(405, 'POST only');
     const auth = req.headers.get('Authorization') ?? '';
@@ -57,6 +60,7 @@ Deno.serve(async (req) => {
     let to: string, callId: string;
     try {
       const body = await req.json();
+      console.log('[call-push] payload', { caller: me.user.id, body });
       to = String(body?.to ?? '');
       callId = String(body?.callId ?? '');
     } catch (err) {
@@ -65,15 +69,24 @@ Deno.serve(async (req) => {
     if (!UUID.test(to) || to === me.user.id) return refuse(400, 'bad recipient', to);
     if (!CHANNEL.test(callId)) return refuse(400, 'bad call', callId);
 
-    const [{ data: from }, { data: them }, { data: blocked }, { data: tokens }] = await Promise.all([
+    const [{ data: from }, { data: them }, { data: blocked }, { data: tokens, error: tokenError }] = await Promise.all([
       admin.from('profiles').select('id, username, display_name, avatar_url, banned_at').eq('id', me.user.id).maybeSingle(),
       admin.from('profiles').select('ringtone_preference').eq('id', to).maybeSingle(),
       admin.rpc('is_blocked', { a: me.user.id, b: to }),
-      admin.from('push_tokens').select('token, platform').eq('user_id', to),
+      admin.from('push_tokens').select('token, platform, updated_at').eq('user_id', to),
     ]);
+    console.log('[call-push] target', { to, callId, tokens: tokens ?? [], tokenError: tokenError?.message ?? null });
     if (!from || from.banned_at) return refuse(403, "This account can't make calls.", { user: me.user.id });
-    if (blocked) return json({ skipped: 'blocked' });
-    if (!tokens?.length) return json({ skipped: 'no phones' });
+    if (blocked) {
+      console.log('[call-push] skipped: blocked', { from: me.user.id, to });
+      return json({ skipped: 'blocked' });
+    }
+    if (!tokens?.length) {
+      // Their phone never registered (notifications refused, or no Firebase
+      // in the build): nothing can wake it.
+      console.warn('[call-push] skipped: no push token for user', to);
+      return json({ skipped: 'no phones' });
+    }
 
     const name = from.display_name?.trim() || (from.username ? `@${from.username}` : 'BOA HUB member');
     const ringtone = RINGTONES.includes(them?.ringtone_preference) ? them!.ringtone_preference : RINGTONES[0];
@@ -105,6 +118,8 @@ Deno.serve(async (req) => {
       body: JSON.stringify(pushes),
     });
     const result = await res.json().catch(() => null);
+    // Expo's verdict per phone: { status: 'ok', id } or { status: 'error', message, details }.
+    console.log('[call-push] expo response', res.status, JSON.stringify(result));
 
     // Phones that uninstalled the app: forget their tokens.
     const gone = (result?.data ?? [])

@@ -40,21 +40,35 @@ function Vinyl({ width, height, accent, still, mini }) {
   // whole record sits in frame, top right, and turns faster.
   const r = mini ? height * 0.46 : width * 0.78;
   const size = r * 2;
-  const spin = useSpin(mini ? 4000 : 16000, still);
+  const spin = useSpin(mini ? 4000 : 12000, still);
   const left = mini ? width - r * 1.55 : width * 0.78 - r;
   const top = mini ? -r * 0.35 : height * 0.74 - r;
   const grooves = [];
   for (let g = r * 0.36; g < r * 0.98; g += Math.max(3, r / 46)) grooves.push(g);
+  // In the thread the record is 1.5 screens wide, and Android draws an SVG
+  // into a bitmap its full size (some 35 MB on a big phone). Drawn at half
+  // size and scaled up it's a quarter of that, and still soft enough to sit
+  // behind the chat.
+  const k = mini ? 1 : 0.5;
   return (
     <Animated.View style={[{ position: 'absolute', width: size, height: size, left, top }, spin]} testID={mini ? 'vibe-preview-vinyl' : undefined}>
-      <Svg width={size} height={size}>
-        <Circle cx={r} cy={r} r={r} fill={mini ? 'rgba(0,0,0,0.85)' : 'rgba(0,0,0,0.42)'} />
+      <Svg
+        width={size * k}
+        height={size * k}
+        viewBox={`0 0 ${size} ${size}`}
+        style={k === 1 ? null : { position: 'absolute', left: (size * (1 - k)) / 2, top: (size * (1 - k)) / 2, transform: [{ scale: 1 / k }] }}
+      >
+        {/* In the thread the record is a shade lighter than the near-black
+            backdrop, with a warm rim, so it reads as a record (black on
+            black, it was there and turning but nobody could see it). */}
+        <Circle cx={r} cy={r} r={r} fill={mini ? 'rgba(0,0,0,0.85)' : '#1C1814'} fillOpacity={mini ? 1 : 0.92} />
+        {mini ? null : <Circle cx={r} cy={r} r={r - 1} stroke={accent} strokeOpacity={0.22} strokeWidth={2} fill="none" />}
         {grooves.map((g, i) => (
-          <Circle key={g} cx={r} cy={r} r={g} stroke={i % 7 === 0 ? 'rgba(255,255,255,0.09)' : 'rgba(255,255,255,0.035)'} strokeWidth={1} fill="none" />
+          <Circle key={g} cx={r} cy={r} r={g} stroke={i % 7 === 0 ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.065)'} strokeWidth={1} fill="none" />
         ))}
-        {/* Light catching the grooves: arcs, so the turning shows. */}
-        <Circle cx={r} cy={r} r={r * 0.7} stroke="rgba(255,240,210,0.16)" strokeWidth={r * 0.5} strokeDasharray={`${r * 0.35} ${r * 4}`} fill="none" />
-        <Circle cx={r} cy={r} r={r * 0.3} fill={accent} fillOpacity={mini ? 0.9 : 0.28} />
+        {/* Light catching the grooves: two arcs opposite each other, so the turning shows. */}
+        <Circle cx={r} cy={r} r={r * 0.7} stroke="rgba(255,236,200,0.22)" strokeWidth={r * 0.5} strokeDasharray={`${r * 0.35} ${r * 1.85}`} fill="none" />
+        <Circle cx={r} cy={r} r={r * 0.3} fill={accent} fillOpacity={mini ? 0.9 : 0.5} />
         <Circle cx={r} cy={r} r={r * 0.3} stroke={accent} strokeOpacity={0.5} strokeWidth={1.5} fill="none" />
         <Path d={`M ${r - r * 0.18} ${r - r * 0.05} L ${r + r * 0.18} ${r - r * 0.05}`} stroke={accent} strokeOpacity={0.45} strokeWidth={2} />
         <Circle cx={r} cy={r} r={Math.max(3, r * 0.025)} fill="rgba(0,0,0,0.8)" />

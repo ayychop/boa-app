@@ -8,7 +8,7 @@ import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import Slider from '@react-native-community/slider';
 import { useCall, END_REASONS } from '../../context/CallContext';
-import { FILTERS, describeParts } from '../../calls/beauty';
+import { PRESETS, describeParts, presetById } from '../../calls/beauty';
 import { LocalVideo, RemoteVideo } from '../../calls/media';
 import { haptics } from '../../utils/haptics';
 import { SPRING, usePress } from '../../utils/motion';
@@ -29,6 +29,15 @@ const DOCK_PAD = space.lg;
 const DOCK_GAP = 14;
 const WIDE = 600; // unfolded: every control in one row
 const PILL_ROOM = 44; // the privacy pill, when it's showing
+// Each preset's swatch: a hint of its grade.
+const PRESET_SWATCH = {
+  natural: ['#C9A27E', '#8A6A50'],
+  studio: ['#F4F1EC', '#A9B4C2'],
+  golden: ['#F6D38A', '#C9822E'],
+  cinematic: ['#1E5A64', '#E08A3C'],
+  glow: ['#FFC9D6', '#E89AB0'],
+  bw: ['#F2F2F2', '#3A3A3A'],
+};
 
 const clock = (ms) => {
   const s = Math.max(0, Math.floor(ms / 1000));
@@ -139,30 +148,56 @@ function BeautyPanel({ beauty, setBeauty, onClose, width, maxHeight }) {
       </View>
       <Text style={styles.panelNote}>Done by the camera itself in 1080p, before your video is sent. What you see is what they see.</Text>
       <ScrollView style={{ maxHeight: maxHeight }} showsVerticalScrollIndicator={false}>
-        {FILTERS.map((f) => (
-          <View key={f.id} style={[styles.filter, !beauty.enabled && { opacity: 0.4 }]}>
-            <View style={styles.filterHead}>
-              <Ionicons name={f.icon} size={16} color={colors.gold} />
-              <Text style={styles.filterLabel}>{f.label}</Text>
-              <Text style={styles.filterValue}>{Math.round(beauty[f.id] * 100)}%</Text>
-            </View>
-            <Text style={styles.filterDetail}>{f.detail}</Text>
-            <Slider
-              style={{ height: 36, marginHorizontal: -4 }}
-              minimumValue={0}
-              maximumValue={1}
-              step={0.05}
-              value={beauty[f.id]}
-              disabled={!beauty.enabled}
-              onValueChange={(v) => setBeauty({ [f.id]: v })}
-              minimumTrackTintColor={colors.gold}
-              maximumTrackTintColor="rgba(243,239,232,0.18)"
-              thumbTintColor={colors.gold}
-              accessibilityLabel={f.label}
-              testID={`call-filter-${f.id}`}
-            />
+        {/* Six looks, one tap each: a swatch of the grade, its name and what it does. */}
+        <View style={[styles.presetGrid, !beauty.enabled && { opacity: 0.4 }]} accessibilityRole="radiogroup" testID="call-presets">
+          {PRESETS.map((p) => {
+            const on = beauty.preset === p.id;
+            return (
+              <Pressable
+                key={p.id}
+                onPress={() => {
+                  haptics.selection();
+                  setBeauty({ preset: p.id });
+                }}
+                disabled={!beauty.enabled}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: on, disabled: !beauty.enabled }}
+                accessibilityLabel={`${p.label}: ${p.detail}`}
+                style={[styles.preset, on && styles.presetOn]}
+                testID={`call-preset-${p.id}`}
+              >
+                <LinearGradient colors={PRESET_SWATCH[p.id]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.presetSwatch}>
+                  <Ionicons name={p.icon} size={18} color={p.id === 'bw' ? '#111' : '#fff'} />
+                </LinearGradient>
+                <Text style={[styles.presetLabel, on && { color: colors.gold }]} numberOfLines={1}>
+                  {p.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+        <Text style={styles.presetDetail}>{presetById(beauty.preset).detail}</Text>
+        <View style={[styles.filter, !beauty.enabled && { opacity: 0.4 }]}>
+          <View style={styles.filterHead}>
+            <Ionicons name="sunny-outline" size={16} color={colors.gold} />
+            <Text style={styles.filterLabel}>Brightness</Text>
+            <Text style={styles.filterValue}>{Math.round((beauty.brightness ?? 0) * 100)}%</Text>
           </View>
-        ))}
+          <Slider
+            style={{ height: 36, marginHorizontal: -4 }}
+            minimumValue={0}
+            maximumValue={1}
+            step={0.05}
+            value={beauty.brightness ?? 0}
+            disabled={!beauty.enabled}
+            onValueChange={(v) => setBeauty({ brightness: v })}
+            minimumTrackTintColor={colors.gold}
+            maximumTrackTintColor="rgba(243,239,232,0.18)"
+            thumbTintColor={colors.gold}
+            accessibilityLabel="Brightness"
+            testID="call-brightness"
+          />
+        </View>
       </ScrollView>
     </Animated.View>
   );
@@ -384,52 +419,164 @@ export default function CallScreen({ me }) {
             >
               <Incoming peer={peer} status={status} width={width} onAccept={accept} onDecline={decline} />
             </View>
-          ) : theirs ? (
-            <Animated.View entering={FadeIn.duration(300)} style={[styles.liveHead, { top, maxWidth: width - pip.width - space.lg * 3 }]}>
-              <BlurView intensity={40} tint="dark" blurMethod="dimezisBlurView" style={StyleSheet.absoluteFill} />
-              <View style={styles.liveDot} />
-              <View style={{ flexShrink: 1 }}>
-                <Text style={styles.liveName} numberOfLines={1} testID="call-name">
-                  {peer.name}
-                </Text>
-                <Text style={styles.liveClock} testID="call-status">
-                  {status}
-                </Text>
-              </View>
-            </Animated.View>
           ) : (
-            <>
-              <View style={[styles.top, { paddingTop: insets.top + space.lg }]}>
-                <View style={styles.brandRow}>
-                  <Text style={styles.brand}>BOA VIDEO</Text>
-                  <GoldBadge label="HD" />
-                </View>
-              </View>
-              <View style={[styles.center, { marginTop: height * 0.08 }]}>
-                <View style={{ alignItems: 'center', justifyContent: 'center' }}>
-                  {phase === 'ringing' ? (
-                    <>
-                      <Ripple size={avatar} />
-                      <Ripple size={avatar} delay={800} />
-                    </>
-                  ) : null}
-                  <View style={styles.avatarRing}>
-                    <Avatar uri={peer.avatar_url} name={peer.name} size={avatar} ring />
+            // One column, top to bottom: the brand, the caller (centred in
+            // all the room there is), the filter chips, then the dock. Nothing
+            // is pinned to an edge, so no dead space and nothing overlaps.
+            <View
+              style={[
+                StyleSheet.absoluteFill,
+                {
+                  paddingBottom: insets.bottom + (phase === 'ended' ? space.xl : space.lg),
+                },
+              ]}
+              pointerEvents="box-none"
+            >
+              {theirs ? (
+                <Animated.View entering={FadeIn.duration(300)} style={[styles.liveHead, { top, maxWidth: width - pip.width - space.lg * 3 }]}>
+                  <BlurView intensity={40} tint="dark" blurMethod="dimezisBlurView" style={StyleSheet.absoluteFill} />
+                  <View style={styles.liveDot} />
+                  <View style={{ flexShrink: 1 }}>
+                    <Text style={styles.liveName} numberOfLines={1} testID="call-name">
+                      {peer.name}
+                    </Text>
+                    <Text style={styles.liveClock} testID="call-status">
+                      {status}
+                    </Text>
                   </View>
+                </Animated.View>
+              ) : (
+                <>
+                  <View style={[styles.top, { paddingTop: insets.top + space.lg }]}>
+                    <View style={styles.brandRow}>
+                      <Text style={styles.brand}>BOA VIDEO</Text>
+                      <GoldBadge label="HD" />
+                    </View>
+                  </View>
+                  <View style={styles.center} pointerEvents="none">
+                    <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+                      {phase === 'ringing' ? (
+                        <>
+                          <Ripple size={avatar} />
+                          <Ripple size={avatar} delay={800} />
+                        </>
+                      ) : null}
+                      <View style={styles.avatarRing}>
+                        <Avatar uri={peer.avatar_url} name={peer.name} size={avatar} ring />
+                      </View>
+                    </View>
+                    <Text style={styles.name} numberOfLines={2} testID="call-name">
+                      {peer.name}
+                    </Text>
+                    <Animated.Text key={phase} entering={FadeIn.duration(250)} style={[styles.status, phase === 'ended' && { color: colors.textMuted }]} testID="call-status">
+                      {status}
+                    </Animated.Text>
+                    {note ? (
+                      <Text style={styles.pending} testID="call-video-note">
+                        {note}
+                      </Text>
+                    ) : null}
+                  </View>
+                </>
+              )}
+              {/* Over their video the picture is the middle: keep the dock at the bottom. */}
+              {theirs ? <View style={{ flex: 1 }} pointerEvents="none" /> : null}
+
+              {phase !== 'ended' ? (
+                <View style={styles.bottom} pointerEvents="box-none" onLayout={(e) => setDockH(e.nativeEvent.layout.height)}>
+                  {/* The filters panel opens above the dock, over the caller, without moving anything. */}
+                  {filtersOpen ? (
+                    <View style={styles.panelWrap} pointerEvents="box-none">
+                      <BeautyPanel
+                        beauty={beauty}
+                        setBeauty={setBeauty}
+                        onClose={() => setFiltersOpen(false)}
+                        width={panelWidth}
+                        maxHeight={Math.max(180, height - dockH - insets.top - insets.bottom - 260)}
+                      />
+                    </View>
+                  ) : null}
+                  {!filtersOpen && !controlsHidden ? (
+                    <Animated.View entering={FadeIn.duration(200)} style={[styles.filterRow, { width: dockWidth }]} testID="call-filter-line">
+                      {describeParts(beauty).map((p) => (
+                        <View key={p.id} style={styles.filterChip}>
+                          <Text style={styles.filterChipLabel}>{p.label}</Text>
+                          {p.value ? <Text style={styles.filterChipValue}>{p.value}</Text> : null}
+                        </View>
+                      ))}
+                    </Animated.View>
+                  ) : null}
+                  <Animated.View entering={SlideInDown.springify().damping(SPRING.damping).stiffness(SPRING.stiffness)} style={{ width: dockWidth }}>
+                    <Animated.View style={[styles.dock, dockStyle]} pointerEvents={controlsHidden ? 'none' : 'auto'} testID="call-controls">
+                      <View style={styles.dockGlass}>
+                        <BlurView intensity={60} tint="dark" blurMethod="dimezisBlurView" style={StyleSheet.absoluteFill} />
+                        <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(14,14,18,0.86)' }]} />
+                      </View>
+                      <Pressable onPress={hideControls} hitSlop={10} accessibilityRole="button" accessibilityLabel="Hide controls" style={styles.dockHandle} testID="call-hide-controls">
+                        <View style={styles.grabber} />
+                      </Pressable>
+                      <View style={[styles.dockGrid, { gap: DOCK_GAP }]}>
+                        <CallButton
+                          size={button}
+                          caption={controls.muted ? 'Unmute' : 'Mute'}
+                          icon={controls.muted ? 'mic-off' : 'mic'}
+                          label={controls.muted ? 'Unmute' : 'Mute'}
+                          on={controls.muted}
+                          onPress={() => toggle('muted')}
+                          testID="call-mute"
+                        />
+                        <CallButton
+                          size={button}
+                          caption="Camera"
+                          icon={controls.cameraOff ? 'videocam-off' : 'videocam'}
+                          label={controls.cameraOff ? 'Camera on' : 'Camera off'}
+                          on={controls.cameraOff}
+                          onPress={() => toggle('cameraOff')}
+                          testID="call-camera"
+                        />
+                        <CallButton size={button} caption="Flip" icon="camera-reverse" label="Switch camera" onPress={flipCamera} testID="call-flip" />
+                        <CallButton size={button} caption="Filters" icon="sparkles" label="Filters" on={filtersOpen} onPress={() => setFiltersOpen((o) => !o)} testID="call-filters-button" />
+                        <CallButton
+                          size={button}
+                          caption="Privacy"
+                          icon={controls.privacy ? 'shield-checkmark' : 'shield-outline'}
+                          label={controls.privacy ? 'Privacy Mode on' : 'Privacy Mode off'}
+                          on={controls.privacy}
+                          onColor={colors.gold}
+                          onPress={() => toggle('privacy')}
+                          testID="call-privacy"
+                        />
+                        <CallButton
+                          size={button}
+                          caption={controls.speaker ? 'Speaker' : 'Phone'}
+                          icon={controls.speaker ? 'volume-high' : 'ear'}
+                          label={controls.speaker ? 'Speaker' : 'Phone'}
+                          onPress={() => toggle('speaker')}
+                          testID="call-speaker"
+                        />
+                        <CallButton
+                          size={button}
+                          width={wide ? undefined : button * 2 + DOCK_GAP}
+                          caption="End"
+                          icon="call"
+                          label="End"
+                          tone={RED}
+                          glow="0px 0px 22px rgba(255,59,78,0.55)"
+                          onPress={hangUp}
+                          testID="call-end"
+                        />
+                      </View>
+                    </Animated.View>
+                    {/* Controls tucked away: one small glass button brings them back. */}
+                    {controlsHidden ? (
+                      <Animated.View entering={FadeIn.delay(120).duration(200)} exiting={FadeOut.duration(120)} style={styles.showWrap}>
+                        <CallButton size={56} icon="chevron-up" label="Show controls" onPress={showControls} testID="call-show-controls" />
+                      </Animated.View>
+                    ) : null}
+                  </Animated.View>
                 </View>
-                <Text style={styles.name} numberOfLines={2} testID="call-name">
-                  {peer.name}
-                </Text>
-                <Animated.Text key={phase} entering={FadeIn.duration(250)} style={[styles.status, phase === 'ended' && { color: colors.textMuted }]} testID="call-status">
-                  {status}
-                </Animated.Text>
-                {note ? (
-                  <Text style={styles.pending} testID="call-video-note">
-                    {note}
-                  </Text>
-                ) : null}
-              </View>
-            </>
+              ) : null}
+            </View>
           )}
 
           {theyrePrivate ? (
@@ -464,100 +611,6 @@ export default function CallScreen({ me }) {
               ) : null}
             </SelfView>
           ) : null}
-
-          {!incoming && phase !== 'ended' ? (
-            <View style={[styles.bottom, { paddingBottom: insets.bottom + space.lg }]} pointerEvents="box-none">
-              {filtersOpen ? (
-                <BeautyPanel
-                  beauty={beauty}
-                  setBeauty={setBeauty}
-                  onClose={() => setFiltersOpen(false)}
-                  width={panelWidth}
-                  maxHeight={Math.max(180, height - dockH - insets.top - insets.bottom - 260)}
-                />
-              ) : null}
-              {/* One block from ringing to connected: the readout and the dock
-                  move together and nothing remounts when the call connects. */}
-              <Animated.View entering={SlideInDown.springify().damping(SPRING.damping).stiffness(SPRING.stiffness)} style={{ width: dockWidth }}>
-                {!filtersOpen && !controlsHidden ? (
-                  <View style={styles.filterRow} testID="call-filter-line">
-                    {describeParts(beauty).map((p) => (
-                      <View key={p.id} style={styles.filterChip}>
-                        <Text style={styles.filterChipLabel}>{p.label}</Text>
-                        {p.value ? <Text style={styles.filterChipValue}>{p.value}</Text> : null}
-                      </View>
-                    ))}
-                  </View>
-                ) : null}
-                <Animated.View style={[styles.dock, dockStyle]} pointerEvents={controlsHidden ? 'none' : 'auto'} onLayout={(e) => setDockH(e.nativeEvent.layout.height)} testID="call-controls">
-                  <View style={styles.dockGlass}>
-                    <BlurView intensity={60} tint="dark" blurMethod="dimezisBlurView" style={StyleSheet.absoluteFill} />
-                    <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(14,14,18,0.86)' }]} />
-                  </View>
-                  <Pressable onPress={hideControls} hitSlop={10} accessibilityRole="button" accessibilityLabel="Hide controls" style={styles.dockHandle} testID="call-hide-controls">
-                    <View style={styles.grabber} />
-                  </Pressable>
-                  <View style={[styles.dockGrid, { gap: DOCK_GAP }]}>
-                    <CallButton
-                      size={button}
-                      caption={controls.muted ? 'Unmute' : 'Mute'}
-                      icon={controls.muted ? 'mic-off' : 'mic'}
-                      label={controls.muted ? 'Unmute' : 'Mute'}
-                      on={controls.muted}
-                      onPress={() => toggle('muted')}
-                      testID="call-mute"
-                    />
-                    <CallButton
-                      size={button}
-                      caption="Camera"
-                      icon={controls.cameraOff ? 'videocam-off' : 'videocam'}
-                      label={controls.cameraOff ? 'Camera on' : 'Camera off'}
-                      on={controls.cameraOff}
-                      onPress={() => toggle('cameraOff')}
-                      testID="call-camera"
-                    />
-                    <CallButton size={button} caption="Flip" icon="camera-reverse" label="Switch camera" onPress={flipCamera} testID="call-flip" />
-                    <CallButton size={button} caption="Filters" icon="sparkles" label="Filters" on={filtersOpen} onPress={() => setFiltersOpen((o) => !o)} testID="call-filters-button" />
-                    <CallButton
-                      size={button}
-                      caption="Privacy"
-                      icon={controls.privacy ? 'shield-checkmark' : 'shield-outline'}
-                      label={controls.privacy ? 'Privacy Mode on' : 'Privacy Mode off'}
-                      on={controls.privacy}
-                      onColor={colors.gold}
-                      onPress={() => toggle('privacy')}
-                      testID="call-privacy"
-                    />
-                    <CallButton
-                      size={button}
-                      caption={controls.speaker ? 'Speaker' : 'Phone'}
-                      icon={controls.speaker ? 'volume-high' : 'ear'}
-                      label={controls.speaker ? 'Speaker' : 'Phone'}
-                      onPress={() => toggle('speaker')}
-                      testID="call-speaker"
-                    />
-                    <CallButton
-                      size={button}
-                      width={wide ? undefined : button * 2 + DOCK_GAP}
-                      caption="End"
-                      icon="call"
-                      label="End"
-                      tone={RED}
-                      glow="0px 0px 22px rgba(255,59,78,0.55)"
-                      onPress={hangUp}
-                      testID="call-end"
-                    />
-                  </View>
-                </Animated.View>
-                {/* Controls tucked away: one small glass button brings them back. */}
-                {controlsHidden ? (
-                  <Animated.View entering={FadeIn.delay(120).duration(200)} exiting={FadeOut.duration(120)} style={styles.showWrap}>
-                    <CallButton size={56} icon="chevron-up" label="Show controls" onPress={showControls} testID="call-show-controls" />
-                  </Animated.View>
-                ) : null}
-              </Animated.View>
-            </View>
-          ) : null}
         </View>
       </GestureHandlerRootView>
     </Modal>
@@ -579,7 +632,13 @@ const styles = StyleSheet.create({
     letterSpacing: 3,
     color: 'rgba(246,211,138,0.9)',
   },
-  center: { alignItems: 'center', paddingHorizontal: space.xl },
+  // Everything between the brand and the chips: the caller sits in the middle of it.
+  center: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: space.xl,
+  },
   ripple: { position: 'absolute', borderWidth: 1.5, borderColor: colors.gold },
   pulseRing: {
     position: 'absolute',
@@ -734,22 +793,26 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(5,5,6,0.7)',
   },
   bottom: {
+    alignItems: 'center',
+    paddingHorizontal: space.lg,
+  },
+  // Above the dock, the panel's bottom on the dock's top.
+  panelWrap: {
     position: 'absolute',
     left: 0,
     right: 0,
-    bottom: 0,
+    bottom: '100%',
     alignItems: 'center',
-    paddingHorizontal: space.lg,
-    gap: space.md,
+    paddingBottom: space.md,
   },
-  // The filter readout: chips in a row, 40px clear of the dock.
+  // The filter readout: chips in a row, just above the dock.
   filterRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'center',
     alignItems: 'center',
     gap: space.sm,
-    marginBottom: 40,
+    marginBottom: space.md,
   },
   filterChip: {
     flexDirection: 'row',
@@ -836,6 +899,22 @@ const styles = StyleSheet.create({
     marginTop: space.xs,
   },
   filter: { marginTop: space.md },
+  presetGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: space.sm, marginTop: space.md },
+  // Three to a row: big enough to hit at arm's length.
+  preset: {
+    width: '31.5%',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: space.sm,
+    borderRadius: radius.lg,
+    borderWidth: 1.5,
+    borderColor: 'rgba(243,239,232,0.12)',
+    backgroundColor: 'rgba(243,239,232,0.05)',
+  },
+  presetOn: { borderColor: colors.gold, backgroundColor: 'rgba(226,168,75,0.14)' },
+  presetSwatch: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  presetLabel: { fontFamily: fonts.semibold, fontSize: 13, color: colors.text },
+  presetDetail: { fontFamily: fonts.medium, fontSize: 12, color: colors.textMuted, marginTop: space.sm, textAlign: 'center' },
   filterHead: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   filterLabel: {
     flex: 1,
@@ -848,11 +927,5 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.gold,
     fontVariant: ['tabular-nums'],
-  },
-  filterDetail: {
-    fontFamily: fonts.medium,
-    fontSize: 11.5,
-    color: colors.textFaint,
-    marginTop: 2,
   },
 });

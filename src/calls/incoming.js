@@ -17,7 +17,7 @@ import { callChannel } from '../chat/notifications';
 // channel, and tapping it opens the call screen.
 
 // How long a call rings before it's a missed call.
-export const RING_MS = 45000;
+export const RING_MS = 30000;
 
 /** The link that opens a call; action 'accept' answers it too. */
 export function callLink({ callId, from, sentAt }, action) {
@@ -58,6 +58,8 @@ const parse = (v) => {
  */
 export function callFromPush(data) {
   let d = data ?? {};
+  // The background task gets FCM's whole message, the call one level down in data.
+  if (d.type !== 'call' && d.data && typeof d.data === 'object') d = d.data;
   if (d.dataString) d = parse(d.dataString) ?? {};
   if (d.type !== 'call' && d.body) d = parse(d.body) ?? d;
   if (d.type !== 'call' || !d.callId) return null;

@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import Animated, { Easing, interpolate, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
-import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
 import Grain from '../Grain';
 import VibeTexture from './VibeTexture';
 import { startLoop } from '../../utils/loop';
@@ -69,6 +68,16 @@ function StarSet({ stars, set, width, height, still, max }) {
   );
 }
 
+// A light's soft glow: the view's own radial gradient, drawn natively. (An
+// SVG gradient here was a full-size bitmap per light, up to 1.7 screens
+// wide: some 35 MB each on a big phone, and on the Fold the lights never
+// showed. A background gradient costs nothing to keep.)
+const hexA = (hex, a) => {
+  const n = parseInt(String(hex).slice(1, 7), 16);
+  return Number.isNaN(n) ? `rgba(255,255,255,${a})` : `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+};
+export const glowOf = (color) => `radial-gradient(circle closest-side, ${hexA(color, 0.85)} 0%, ${hexA(color, 0.3)} 45%, ${hexA(color, 0)} 100%)`;
+
 function Light({ light, width, height, still }) {
   const t = useSharedValue(0);
   useEffect(() => {
@@ -86,20 +95,7 @@ function Light({ light, width, height, still }) {
       { scale: interpolate(t.value, [0, 1], [1, 1.12]) },
     ],
   }));
-  return (
-    <Animated.View style={[styles.light, { width: size, height: size }, style]} testID={`chat-ambient-${light.id}`}>
-      <Svg width={size} height={size}>
-        <Defs>
-          <RadialGradient id={`ambient-${light.id}`} cx="50%" cy="50%" r="50%">
-            <Stop offset="0" stopColor={light.color} stopOpacity={0.85} />
-            <Stop offset="0.45" stopColor={light.color} stopOpacity={0.3} />
-            <Stop offset="1" stopColor={light.color} stopOpacity={0} />
-          </RadialGradient>
-        </Defs>
-        <Rect width={size} height={size} fill={`url(#ambient-${light.id})`} />
-      </Svg>
-    </Animated.View>
-  );
+  return <Animated.View style={[styles.light, { width: size, height: size, backgroundImage: glowOf(light.color) }, style]} testID={`chat-ambient-${light.id}`} />;
 }
 
 /** One vibe's whole backdrop: mesh, lights, veil, texture, stars and grain. */

@@ -1,7 +1,8 @@
 import { Alert, Linking, PermissionsAndroid, Platform } from 'react-native';
-import { createAgoraRtcEngine, RtcSurfaceView, RtcTextureView } from 'react-native-agora';
+import { createAgoraRtcEngine, MediaSourceType, RtcSurfaceView, RtcTextureView } from 'react-native-agora';
 import { fetchToken } from './token';
 import { toAgora } from './beauty';
+import { lutPath } from './luts';
 import { decodeMessage, encodePrivacy } from './privacy';
 import { AINS_BALANCED, AUDIO, AUDIO_PROCESSING, CAPTURE, DENOISER, ENCODER, LOW_LIGHT, PREVIEW, STABILIZATION_OFF, VIDEO_SCENARIO } from './quality';
 
@@ -20,6 +21,10 @@ import { AINS_BALANCED, AUDIO, AUDIO_PROCESSING, CAPTURE, DENOISER, ENCODER, LOW
 export const available = true;
 
 let engine = null;
+// Agora's video filters extension (beauty, colour enhancement, LUT grades),
+// and the camera they apply to.
+const CLEAR_VISION = { provider: 'agora_video_filters_clear_vision', extension: 'clear_vision' };
+const PRIMARY_CAMERA = MediaSourceType?.PrimaryCameraSource ?? 2;
 let engineAppId = null;
 let session = null; // { channel, token, uid, camera, mic, joined, live, speaker, privacy, streamId, handler, timer }
 // Tokens fetched ahead of time, by channel: { pass, at }.
@@ -88,6 +93,11 @@ function setup(appId) {
   }
   engineAppId = appId;
   // Sound and picture both on before anything joins.
+  // The filters (beauty, colour, the presets' grades) all run in Agora's
+  // Clear Vision extension, which is off until it's switched on: without
+  // this every filter call was accepted and did nothing.
+  const vision = engine.enableExtension?.(CLEAR_VISION.provider, CLEAR_VISION.extension, true, PRIMARY_CAMERA);
+  if (vision !== 0) console.warn('[call] Clear Vision not enabled', vision);
   engine.enableAudio();
   engine.enableVideo();
   engine.setAudioProfile(AUDIO.profile, AUDIO.scenario);
@@ -110,12 +120,29 @@ function setup(appId) {
   return engine;
 }
 
-/** Applies BOA Filters (src/calls/beauty.js) to your camera. */
+/**
+ * Applies the call look (src/calls/beauty.js: a preset and Brightness) to
+ * your camera, before it's encoded, so they see what you see. Each call's
+ * result is logged: a refusal shows up as Agora's error code.
+ */
 export function setBeauty(beauty) {
   if (!engine) return;
-  const { beauty: b, colorEnhance: c } = toAgora(beauty);
-  engine.setBeautyEffectOptions(b.enabled, b);
-  engine.setColorEnhanceOptions(c.enabled, c);
+  const { beauty: b, colorEnhance: c, filter: f } = toAgora(beauty);
+  const codes = {
+    beauty: engine.setBeautyEffectOptions(b.enabled, b, PRIMARY_CAMERA),
+    colour: engine.setColorEnhanceOptions(c.enabled, c, PRIMARY_CAMERA),
+    grade: null,
+  };
+  if (!f.enabled) codes.grade = engine.setFilterEffectOptions?.(false, { strength: 0 }, PRIMARY_CAMERA) ?? null;
+  else {
+    try {
+      codes.grade = engine.setFilterEffectOptions?.(true, { path: lutPath(f.lut), strength: f.strength }, PRIMARY_CAMERA) ?? null;
+    } catch (err) {
+      console.warn('[call] grade not written', f.lut, err?.message ?? err);
+    }
+  }
+  if (Object.values(codes).some((v) => v != null && v !== 0)) console.warn('[call] filters refused', codes);
+  else console.log('[call] filters', beauty?.preset, codes);
 }
 
 /** The call's token: the one fetched ahead if it's still fresh, else a new one. */
@@ -226,8 +253,7 @@ export async function join(channel, opts, attempt = 0) {
       const msg = decodeMessage(data);
       if (msg?.type === 'privacy') onEvent({ remotePrivacy: !!msg.active });
     },
-    onRemoteVideoStateChanged: (_c, remoteUid, state) =>
-      onEvent({ remoteUid, remoteVideo: state !== REMOTE_STOPPED && state !== REMOTE_FAILED }),
+    onRemoteVideoStateChanged: (_c, remoteUid, state) => onEvent({ remoteUid, remoteVideo: state !== REMOTE_STOPPED && state !== REMOTE_FAILED }),
     onConnectionStateChanged: (_c, state, reason) => {
       console.log('[call] connection state', { state, reason });
       if (state === CONNECTION_RECONNECTING) onEvent({ status: 'reconnecting' });
@@ -236,8 +262,7 @@ export async function join(channel, opts, attempt = 0) {
           reset();
           onEvent({ status: 'failed', error: `connection ${reason}` });
         } else fail(`connection ${reason}`);
-      }
-      else if (state === CONNECTION_CONNECTED) onEvent({ status: 'connected' });
+      } else if (state === CONNECTION_CONNECTED) onEvent({ status: 'connected' });
     },
     // Sound: what each side's audio is doing, and where it's playing.
     onLocalAudioStateChanged: (_c, state, reason) => console.log('[call] local audio', { state, reason }),

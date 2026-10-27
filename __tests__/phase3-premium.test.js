@@ -116,12 +116,26 @@ describe('Hi-Fi audio', () => {
     eq.setSession(42);
     eq.setAllowed(false);
     eq.setSettings({ bass: 3, treble: -0.5, spatial: true });
-    expect(eq.getSettings()).toEqual({ bass: 1, treble: -0.5, spatial: true });
+    expect(eq.getSettings()).toEqual({ bass: 1, treble: -0.5, spatial: true, boost: false });
     expect(eqNative.apply).toHaveBeenLastCalledWith(42, eq.FLAT);
     eq.setAllowed(true);
-    expect(eqNative.apply).toHaveBeenLastCalledWith(42, { bass: 1, treble: -0.5, spatial: true });
+    expect(eqNative.apply).toHaveBeenLastCalledWith(42, { bass: 1, treble: -0.5, spatial: true, boost: false });
     eq.setSettings(eq.PRESETS.find((p) => p.id === 'bass').settings);
     expect(eq.presetOf(eq.getSettings())).toBe('bass');
+  });
+
+  test('Bass Boost: a preset and a switch, reaching the native effects (BassBoost and LoudnessEnhancer)', () => {
+    eq.setSession(42);
+    eq.setAllowed(true);
+    eq.setSettings(eq.PRESETS.find((p) => p.id === 'boost').settings);
+    expect(eq.presetOf(eq.getSettings())).toBe('boost');
+    expect(eqNative.apply).toHaveBeenLastCalledWith(42, expect.objectContaining({ bass: 1, boost: true }));
+    eq.setSettings({ boost: false });
+    expect(eq.presetOf(eq.getSettings())).toBeNull();
+    const kt = require('fs').readFileSync(require('path').join(__dirname, '../modules/boa-eq/android/src/main/java/expo/modules/boaeq/BoaEqModule.kt'), 'utf8');
+    expect(kt).toMatch(/LoudnessEnhancer\(sessionId\)/);
+    expect(kt).toMatch(/setTargetGain\(BOOST_GAIN_MILLIBELS\)/);
+    eq.setSettings(eq.FLAT);
   });
 
   test('locked behind "Unlock with BOA Premium" without access', async () => {
@@ -151,27 +165,22 @@ describe('Hi-Fi audio', () => {
 describe('beauty filters', () => {
   const { toAgora, describe: describeBeauty } = require('../src/calls/beauty');
 
-  test('five native filters, each capped so no face is ever washed out', () => {
-    const { FILTERS, fromStored } = require('../src/calls/beauty');
-    expect(FILTERS.map((f) => f.label)).toEqual(['Brightness', 'Smooth Skin', 'Tone', 'Clarity', 'Saturation']);
-    const max = toAgora({ studio: 1, flawless: 1, glow: 1, clarity: 1, saturation: 1, enabled: true });
-    expect(max.beauty).toEqual(expect.objectContaining({ lighteningContrastLevel: 2, lighteningLevel: 0.2, smoothnessLevel: 0.5, rednessLevel: 0.3, sharpnessLevel: 0.8 }));
-    expect(max.colorEnhance).toEqual({ enabled: true, strengthLevel: 0.7, skinProtectLevel: 1 });
-    // Each slider drives only its own setting.
-    expect(toAgora({ studio: 0.5 }).beauty).toEqual(expect.objectContaining({ enabled: true, lighteningLevel: 0.1, smoothnessLevel: 0, rednessLevel: 0, sharpnessLevel: 0 }));
-    expect(toAgora({ flawless: 0.5 }).beauty).toEqual(expect.objectContaining({ lighteningLevel: 0, smoothnessLevel: 0.25, rednessLevel: 0, sharpnessLevel: 0.1 }));
-    expect(toAgora({ glow: 0.5 }).beauty).toEqual(expect.objectContaining({ lighteningLevel: 0, smoothnessLevel: 0, rednessLevel: 0.15 }));
-    // Clarity: sharpening and contrast, so tattoos and hairlines stay crisp.
-    expect(toAgora({ clarity: 0.4 }).beauty).toEqual(expect.objectContaining({ enabled: true, sharpnessLevel: 0.28, lighteningContrastLevel: 1, smoothnessLevel: 0 }));
-    expect(toAgora({ clarity: 1 }).beauty.lighteningContrastLevel).toBe(2);
-    // Saturation: Agora's colour enhancement, with skin protected.
-    expect(toAgora({ saturation: 0.5 })).toEqual({ beauty: expect.objectContaining({ enabled: false }), colorEnhance: { enabled: true, strengthLevel: 0.35, skinProtectLevel: 1 } });
-    const off = toAgora({ studio: 1, flawless: 1, glow: 1, clarity: 1, saturation: 1, enabled: false });
-    expect(off.beauty.enabled).toBe(false);
-    expect(off.colorEnhance.enabled).toBe(false);
-    expect(describeBeauty({ studio: 0.5, flawless: 0.4, glow: 0, clarity: 0.6, saturation: 0.35, enabled: true })).toBe('Bright 50% · Smooth 40% · Clarity 60% · Colour 35%');
-    // Settings saved before the renames keep their strengths: smoothing is Smooth Skin, the old Tone Enhancer is Saturation.
-    expect(fromStored({ smoothing: 0.7, tone: 0.2, enabled: false })).toEqual({ studio: 0.4, flawless: 0.7, glow: 0.3, clarity: 0.6, saturation: 0.2, enabled: false });
+  test('six presets and Brightness, each capped so no face is ever washed out', () => {
+    const { PRESETS, fromStored } = require('../src/calls/beauty');
+    for (const p of PRESETS) {
+      const { beauty, colorEnhance } = toAgora({ preset: p.id, brightness: 1, enabled: true });
+      expect(beauty.smoothnessLevel).toBeLessThanOrEqual(0.5);
+      expect(beauty.rednessLevel).toBeLessThanOrEqual(0.3);
+      expect(beauty.sharpnessLevel).toBeLessThanOrEqual(0.8);
+      expect(beauty.lighteningLevel).toBeLessThanOrEqual(0.5);
+      expect(colorEnhance.strengthLevel).toBeLessThanOrEqual(0.7);
+      expect(colorEnhance.skinProtectLevel).toBe(1);
+    }
+    expect(describeBeauty({ preset: 'cinematic', brightness: 0.4, enabled: true })).toBe('Cinematic · Bright 40%');
+    // Settings saved from the old sliders keep their brightness and start on Natural.
+    expect(fromStored({ studio: 0.7, flawless: 0.2, enabled: false })).toEqual({ preset: 'natural', brightness: 0.7, enabled: false });
+    expect(fromStored({ preset: 'golden', brightness: 0.3 })).toEqual({ preset: 'golden', brightness: 0.3, enabled: true });
+    expect(fromStored({ preset: 'nope' }).preset).toBe('natural');
   });
 
   test('no filter copy singles anyone out: inclusive words only', () => {
@@ -211,7 +220,10 @@ describe('video calls', () => {
     expect(screen.getByLabelText('Unmute')).toBeOnTheScreen();
     await user.press(screen.getByTestId('call-filters-button'));
     expect(screen.getByTestId('call-filters')).toBeOnTheScreen();
-    for (const label of ['Brightness', 'Smooth Skin', 'Tone', 'Clarity', 'Saturation']) expect(screen.getByText(label)).toBeOnTheScreen();
+    for (const label of ['Natural', 'Studio', 'Golden', 'Cinematic', 'Glow', 'B&W', 'Brightness']) expect(screen.getByText(label)).toBeOnTheScreen();
+    // A preset is one tap, and reaches the camera with its grade.
+    await user.press(screen.getByTestId('call-preset-bw'));
+    expect(screen.getByTestId('call-preset-bw').props.accessibilityState).toEqual(expect.objectContaining({ selected: true }));
 
     await user.press(screen.getByTestId('call-end'));
     expect(signal.send).toHaveBeenLastCalledWith('user-kofi', 'end', { callId });
@@ -357,4 +369,3 @@ describe('the admin account skips every paywall', () => {
     expect(screen.getByTestId('premium-paywall')).toBeOnTheScreen();
   });
 });
-

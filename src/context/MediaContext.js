@@ -3,6 +3,7 @@ import { usePlayer } from './PlayerContext';
 import { episodeItem, podcastById } from '../data/podcasts';
 import ScreeningRoom from '../components/media/ScreeningRoom';
 import PodcastPlayer from '../components/media/PodcastPlayer';
+import { playInCar, useParked } from '../car/parked';
 
 const MediaContext = createContext(null);
 
@@ -13,14 +14,24 @@ export function MediaProvider({ children }) {
   const { isPlaying, pause } = player;
   const [screening, setScreening] = useState(null);
   const [podcastId, setPodcastId] = useState(null);
+  // In a car (Android Automotive OS), video is parked only.
+  const car = useParked();
 
   const openVideo = useCallback(
-    (next) => {
+    async (next) => {
+      if (car.car) {
+        await car.askPermissions();
+        // Refused (moving), or playing in the car's own player or YouTube.
+        if (await playInCar(next, car.parked)) {
+          if (car.parked && isPlaying) pause();
+          return;
+        }
+      }
       // Never talk over the film: audio pauses when a video starts.
       if (isPlaying) pause();
       setScreening(next);
     },
-    [isPlaying, pause],
+    [isPlaying, pause, car],
   );
 
   const openPodcast = useCallback(
@@ -49,7 +60,7 @@ export function MediaProvider({ children }) {
   return (
     <MediaContext.Provider value={value}>
       {children}
-      <ScreeningRoom screening={screening} onClose={value.close} onSwitch={setScreening} />
+      <ScreeningRoom screening={screening} onClose={value.close} onSwitch={setScreening} car={car} />
       {podcastId && <PodcastPlayer podcast={podcastById(podcastId)} onClose={() => setPodcastId(null)} />}
     </MediaContext.Provider>
   );

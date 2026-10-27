@@ -9,6 +9,7 @@ import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.net.Uri
 import android.os.Build
+import android.os.PowerManager
 import android.provider.Settings
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -149,6 +150,39 @@ class BoaCallModule : Module() {
       } else {
         Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
       }
+      context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    }.runOnQueue(Queues.MAIN)
+
+    /**
+     * Whether Android leaves the app alone in the background. Battery
+     * optimised (most phones' default), a call's push can be held back and
+     * the full-screen ring dropped, and some phones (Samsung's "deep
+     * sleeping" apps, Xiaomi, Oppo) stop it outright.
+     */
+    Function("isIgnoringBatteryOptimizations") {
+      (context.getSystemService(Context.POWER_SERVICE) as? PowerManager)?.isIgnoringBatteryOptimizations(context.packageName) == true
+    }
+
+    /** Asks to be left alone (the system's Allow/Deny), or opens the list if the phone won't ask. */
+    AsyncFunction("openBatterySettings") {
+      val ask = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:${context.packageName}"))
+      val list = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+      val intent = if (ask.resolveActivity(context.packageManager) != null) ask else list
+      context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    }.runOnQueue(Queues.MAIN)
+
+    /**
+     * Whether the app may display over other apps. Stock Android doesn't
+     * need it for a full-screen call, but Xiaomi, Oppo, Vivo and some
+     * Samsung builds won't open one from the background without it.
+     */
+    Function("canDrawOverlays") {
+      Settings.canDrawOverlays(context)
+    }
+
+    /** Opens "Display over other apps" for BOA HUB. */
+    AsyncFunction("openOverlaySettings") {
+      val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${context.packageName}"))
       context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }.runOnQueue(Queues.MAIN)
 

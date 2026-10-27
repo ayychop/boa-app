@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -10,6 +11,7 @@ import { Button, Slate, Viewfinder } from '../ui';
 import { fillFrame, toSource } from '../HeroArt';
 import OriginalHeart from '../hub/OriginalHeart';
 import { colors, fonts, space, type } from '../../theme';
+import { PARKED_ONLY } from '../../car/parked';
 
 // Default room art when a production has none of its own.
 const ROOM_ART = require('../../../assets/images/mind-states-backdrop.jpg');
@@ -17,11 +19,28 @@ const ROOM_ART = require('../../../assets/images/mind-states-backdrop.jpg');
 /**
  * Full-screen player. Episodes play from a direct file through <video> when
  * one exists, otherwise from YouTube (where BOA publishes today).
+ *
+ * In a car (car.car, src/car/parked.js) the picture is parked only: the
+ * moment the car moves, the player is taken away (unmounted, so it stops
+ * dead) and a still card takes its place. Once parked again the card
+ * offers Resume; nothing starts by itself.
  */
-export default function ScreeningRoom({ screening, onClose, onSwitch }) {
+export default function ScreeningRoom({ screening, onClose, onSwitch, car }) {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
+  const inCar = !!car?.car;
+  const parked = !inCar || !!car.parked;
+  // Held: stopped because the car moved, until Resume.
+  const [held, setHeld] = useState(false);
+  useEffect(() => {
+    if (!parked) setHeld(true);
+  }, [parked]);
+  // A new screening starts held unless the car is parked.
+  useEffect(() => {
+    setHeld(!parked);
+  }, [screening]);
   if (!screening) return null;
+  const blocked = inCar && (held || !parked);
 
   const { production, kind, episode } = screening;
   const videoWidth = Math.max(Math.min(width, ((height - 260) * 16) / 9, 1200), Math.min(width, 300));
@@ -71,7 +90,14 @@ export default function ScreeningRoom({ screening, onClose, onSwitch }) {
           >
             {/* YouTube shows each video's own thumbnail; never overlay the
                 production art on it. That art is only the room behind. */}
-            {source?.youTubeId ? (
+            {blocked ? (
+              <View style={[styles.parkedHold, { width: videoWidth, height: videoHeight }]} testID="screening-parked-only">
+                <Ionicons name="car-outline" size={40} color={colors.gold} />
+                <Text style={styles.parkedTitle}>{parked ? 'Parked. Pick up where you left off.' : 'Paused while you drive'}</Text>
+                <Text style={styles.parkedBody}>{PARKED_ONLY}</Text>
+                {parked ? <Button label="Resume" onPress={() => setHeld(false)} style={{ marginTop: space.lg }} testID="screening-resume" /> : null}
+              </View>
+            ) : source?.youTubeId ? (
               <YouTubePlayer key={source.youTubeId} videoId={source.youTubeId} width={videoWidth} height={videoHeight} />
             ) : source?.videoUrl ? (
               <VideoPlayer uri={source.videoUrl} poster={production.image} width={videoWidth} height={videoHeight} />
@@ -120,6 +146,14 @@ export default function ScreeningRoom({ screening, onClose, onSwitch }) {
 }
 
 const styles = StyleSheet.create({
+  parkedHold: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: space.xl,
+    backgroundColor: '#050506',
+  },
+  parkedTitle: { fontFamily: fonts.semibold, fontSize: 24, color: colors.text, marginTop: space.md, textAlign: 'center' },
+  parkedBody: { fontFamily: fonts.medium, fontSize: 18, color: colors.textMuted, marginTop: space.sm, textAlign: 'center' },
   backdrop: { flex: 1, backgroundColor: '#000', overflow: 'hidden' },
   // Oversized so the blur's soft edges stay off-screen.
   roomArt: { transform: [{ scale: 1.2 }] },

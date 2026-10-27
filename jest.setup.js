@@ -9,9 +9,7 @@ jest.mock('react-native-worklets', () => require('react-native-worklets/lib/modu
 require('react-native-reanimated/src/ReanimatedModule').ReanimatedModule.setCSSEventHandler = () => {};
 jest.mock('react-native-reanimated', () => require('react-native-reanimated/mock'));
 
-jest.mock('@react-native-async-storage/async-storage', () =>
-  require('@react-native-async-storage/async-storage/jest/async-storage-mock'),
-);
+jest.mock('@react-native-async-storage/async-storage', () => require('@react-native-async-storage/async-storage/jest/async-storage-mock'));
 jest.mock('react-native-safe-area-context', () => require('react-native-safe-area-context/jest/mock').default);
 
 // Audio: an in-memory engine with the same API as src/audio/engine.native.js.
@@ -155,6 +153,12 @@ jest.mock('expo-file-system', () => {
     delete() {
       files.delete(this.uri);
       bytes.delete(this.uri);
+    }
+    create() {
+      files.set(this.uri, 0);
+    }
+    write(text) {
+      files.set(this.uri, String(text).length);
     }
   }
   // Images (station logos) arrive as a real-sized PNG.
@@ -308,6 +312,10 @@ jest.mock('./modules/boa-call', () => {
     }),
     canUseFullScreen: jest.fn(() => true),
     openFullScreenSettings: jest.fn(async () => {}),
+    isIgnoringBatteryOptimizations: jest.fn(() => true),
+    openBatterySettings: jest.fn(async () => {}),
+    canDrawOverlays: jest.fn(() => true),
+    openOverlaySettings: jest.fn(async () => {}),
     leaveLockScreen: jest.fn(async () => {}),
     __decline: (callId) => declines.forEach((fn) => fn(callId)),
   };

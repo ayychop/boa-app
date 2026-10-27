@@ -9,12 +9,13 @@ export const isAvailable = !!native;
 
 /**
  * Shapes the sound of one audio session: bass and treble from -1 (cut) to
- * 1 (boost), spatial on or off. Returns whether any effect is on.
+ * 1 (boost), spatial on or off, and boost (Bass Boost: full BassBoost and
+ * LoudnessEnhancer). Returns whether any effect is on.
  */
-export function apply(sessionId, { bass = 0, treble = 0, spatial = false }) {
+export function apply(sessionId, { bass = 0, treble = 0, spatial = false, boost = false }) {
   if (!native?.apply || !(sessionId > 0)) return false;
   try {
-    return !!native.apply(sessionId, bass, treble, !!spatial);
+    return !!native.apply(sessionId, bass, treble, !!spatial, !!boost);
   } catch {
     return false;
   }

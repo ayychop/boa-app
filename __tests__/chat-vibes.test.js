@@ -9,7 +9,6 @@ import VibePicker from '../src/components/chat/VibePicker';
 import ChatVibeSheet from '../src/components/chat/ChatVibeSheet';
 import useChatVibe from '../src/chat/vibes';
 
-
 jest.useFakeTimers();
 
 // A Realtime client with working broadcast rooms: the test plays the other
@@ -183,7 +182,8 @@ test('a pick in one place shows everywhere (Settings and an open thread share it
 });
 
 // On Android a BlurView without a blurTarget silently draws no blur at all.
-test('the header and composer glass both blur the backdrop and the messages behind them', async () => {
+// The backdrop sits under the blur target, not in it: inside, Android left it unpainted.
+test('the header and composer glass blur the messages, with the vibe backdrop drawn underneath', async () => {
   await open(AMA);
   const behind = screen.getByTestId('hub-thread-behind');
   expect(screen.getAllByTestId('glass').length).toBeGreaterThanOrEqual(2);
@@ -191,7 +191,8 @@ test('the header and composer glass both blur the backdrop and the messages behi
     expect(props.blurTarget?.current).toBeTruthy();
     expect(props.blurMethod).toBe('dimezisBlurView');
   }
-  expect(behind).toContainElement(screen.getByTestId('chat-ambient'));
+  expect(behind).not.toContainElement(screen.getByTestId('chat-ambient'));
+  expect(screen.getByTestId('hub-thread')).toContainElement(screen.getByTestId('chat-ambient'));
   expect(behind).toContainElement(screen.getByTestId('hub-message-m1'));
   expect(behind).not.toContainElement(screen.getByTestId('thread-header'));
   expect(behind).not.toContainElement(screen.getByTestId('hub-composer-bar'));
@@ -218,7 +219,7 @@ test.each(VIBES.map((v) => v.id))('no solid black fill anywhere in the %s thread
   expect(StyleSheet.flatten(screen.getByTestId('hub-thread').props.style).backgroundColor).toBe(VIBES.find((v) => v.id === id).mesh[1]);
 });
 
-test('bubbles: frosted glass with a visible edge, no drop shadow (bar Neon\'s glow), times in spaced capitals', async () => {
+test("bubbles: frosted glass with a visible edge, no drop shadow (bar Neon's glow), times in spaced capitals", async () => {
   hub.listMessages.mockResolvedValue([
     { id: 'm1', conversation_id: 'conv-1', sender_id: AMA.id, body: 'Hey there', created_at: new Date().toISOString() },
     { id: 'm2', conversation_id: 'conv-1', sender_id: ME, body: 'Hi Ama', created_at: new Date().toISOString() },
@@ -235,4 +236,13 @@ test('bubbles: frosted glass with a visible edge, no drop shadow (bar Neon\'s gl
   expect(meta.textTransform).toBe('uppercase');
   expect(meta.fontFamily).toBe('SpaceGrotesk_500Medium');
   expect(StyleSheet.flatten(screen.getByText('Hey there').props.style).fontFamily).toBe('PlusJakartaSans_500Medium');
+});
+
+// Android draws every <Svg> into a bitmap its full size: the screen-and-a-half
+// lights were some 35 MB each, and never showed on the Fold.
+test('the drifting lights are native radial gradients, not full-screen SVG bitmaps', () => {
+  const src = require('fs').readFileSync(require('path').join(__dirname, '../src/components/chat/AmbientGlow.js'), 'utf8');
+  expect(src).not.toMatch(/from 'react-native-svg'/);
+  const { glowOf } = require('../src/components/chat/AmbientGlow');
+  expect(glowOf('#C98A3A')).toBe('radial-gradient(circle closest-side, rgba(201,138,58,0.85) 0%, rgba(201,138,58,0.3) 45%, rgba(201,138,58,0) 100%)');
 });

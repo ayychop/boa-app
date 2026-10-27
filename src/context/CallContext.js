@@ -15,6 +15,7 @@ import { haptics } from '../utils/haptics';
 import { blockScreenshots } from '../calls/privacy';
 import { notifyMissedCall } from '../chat/notifications';
 import * as BoaCall from '../../modules/boa-call';
+import { askForCallWakeUp } from '../calls/wakeUp';
 import { RING_MS, callFromPush, parseCallLink, pendingCall, ringLeft, ringNotification, stopRingNotification } from '../calls/incoming';
 
 const CallContext = createContext(null);
@@ -33,7 +34,14 @@ const onScreen = () => AppState.currentState !== 'background';
 
 // The call's id is also its Agora channel name, so it has to be unguessable.
 const newId = () => Crypto.randomUUID?.() || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`;
-const personOf = (p) => (p ? { id: p.id, name: p.display_name || (p.username ? `@${p.username}` : 'BOA HUB member'), avatar_url: p.avatar_url ?? null } : null);
+const personOf = (p) =>
+  p
+    ? {
+        id: p.id,
+        name: p.display_name || (p.username ? `@${p.username}` : 'BOA HUB member'),
+        avatar_url: p.avatar_url ?? null,
+      }
+    : null;
 
 /** What the call screen says about a call that's over. */
 export const END_REASONS = {
@@ -44,8 +52,19 @@ export const END_REASONS = {
   unreachable: "Couldn't reach them",
 };
 
-const NO_MEDIA = Object.freeze({ status: 'idle', remoteUid: null, remoteVideo: false, remotePrivacy: false, error: null });
-const NO_CONTROLS = Object.freeze({ muted: false, cameraOff: false, speaker: true, privacy: false });
+const NO_MEDIA = Object.freeze({
+  status: 'idle',
+  remoteUid: null,
+  remoteVideo: false,
+  remotePrivacy: false,
+  error: null,
+});
+const NO_CONTROLS = Object.freeze({
+  muted: false,
+  cameraOff: false,
+  speaker: true,
+  privacy: false,
+});
 
 /**
  * BOA video calls: the call in progress and everything about it (who,
@@ -61,6 +80,10 @@ export function CallProvider({ children }) {
   const ringtoneRef = useRef(ringtone);
   ringtoneRef.current = ringtone;
   const { requirePremium } = usePremium();
+  const userIdRef = useRef(userId);
+  userIdRef.current = userId;
+  const profileRef = useRef(profile);
+  profileRef.current = profile;
   const [call, setCall] = useState(null); // { id, peer, direction, phase, startedAt, reason }
   const [controls, setControls] = useState(NO_CONTROLS);
   const [beauty, setBeautyState] = useState(DEFAULT_BEAUTY);
@@ -114,7 +137,14 @@ export function CallProvider({ children }) {
     const c = callRef.current;
     if (c?.direction === 'in') stopRingNotification(c.id);
     // A call that rang here and wasn't picked up stays in the notification shade.
-    if (c && c.phase === 'ringing' && c.direction === 'in' && reason === 'missed') notifyMissedCall({ name: c.peer.name, peerId: c.peer.id, sound: chatSoundRef.current });
+    if (c && c.phase === 'ringing' && c.direction === 'in' && reason === 'missed')
+      notifyMissedCall({
+        name: c.peer.name,
+        peerId: c.peer.id,
+        sound: chatSoundRef.current,
+      });
+    // The ref too, at once: a new call can start before React renders.
+    if (c && c.phase !== 'ended') callRef.current = { ...c, phase: 'ended', reason };
     setCall((cur) => (cur && cur.phase !== 'ended' ? { ...cur, phase: 'ended', reason } : cur));
     timers.current.close = setTimeout(() => {
       setCall(null);
@@ -162,22 +192,98 @@ export function CallProvider({ children }) {
   const ringAway = (c) => {
     Vibration.cancel();
     stopRingtone();
-    ringNotification({ callId: c.id, from: c.peer, sentAt: c.sentAt, ringtone: ringtoneRef.current });
+    ringNotification({
+      callId: c.id,
+      from: c.peer,
+      sentAt: c.sentAt,
+      ringtone: ringtoneRef.current,
+    });
   };
+
+  // A ring that ran out while Android had the app frozen (its timer with
+  // it). Every ring has a wall-clock start, sentAt, so it can't outlive
+  // RING_MS and leave the caller stuck on "Ringing..." and turning calls away.
+  const stale = (c) => c?.phase === 'ringing' && ringLeft(c.sentAt) <= 0;
+  const expire = useCallback(
+    (c) => {
+      if (c.direction === 'out') signal.send(c.peer.id, 'end', { callId: c.id });
+      finish('missed');
+    },
+    [finish],
+  );
+
+  // What a ring says (Realtime): sentAt so a ring delivered late (a phone
+  // waking up) only rings for the time it has left.
+  const ringPayload = (id, sentAt) => ({
+    callId: id,
+    video: true,
+    sentAt,
+    from: personOf(profileRef.current) ?? {
+      id: userIdRef.current,
+      name: 'BOA HUB member',
+    },
+  });
+
+  // You're ringing them and they ring you: one call, never "On another call"
+  // both ways. The call with the smaller id is the one that happens, the
+  // same on both phones. Theirs: drop yours and answer it. Yours: ring them
+  // with it again (their app is open, they're calling), and they answer it.
+  const crossed = useCallback(
+    (mine, theirId, from) => {
+      if (theirId < mine.id || ringLeft(mine.sentAt) < 5000) {
+        clearTimers();
+        media.forget(mine.id);
+        signal.send(from.id, 'end', { callId: mine.id });
+        seen.current.add(mine.id);
+        callRef.current = {
+          id: theirId,
+          peer: mine.peer,
+          direction: 'in',
+          phase: 'ringing',
+          startedAt: null,
+          reason: null,
+          sentAt: Date.now(),
+        };
+        setCall(callRef.current);
+        setVideo(NO_MEDIA);
+        signal.send(from.id, 'accept', {
+          callId: theirId,
+          by: userIdRef.current,
+        });
+        goLive();
+      } else {
+        signal.send(from.id, 'ring', ringPayload(mine.id, mine.sentAt));
+      }
+    },
+    [goLive],
+  );
 
   /** Someone is calling: ring, unless it's a call already heard or we're busy. ms: how long it has left. */
   const ringIn = useCallback(
     ({ callId, from }, ms = RING_MS) => {
       if (!from?.id || !callId || blockedRef.current.has(from.id) || seen.current.has(callId)) return;
       seen.current.add(callId);
-      const current = callRef.current;
+      let current = callRef.current;
+      if (stale(current)) {
+        expire(current);
+        current = null;
+      }
       if (current && current.phase !== 'ended') {
-        signal.send(from.id, 'busy', { callId });
+        if (current.direction === 'out' && current.phase === 'ringing' && current.peer.id === from.id) crossed(current, callId, from);
+        else signal.send(from.id, 'busy', { callId });
         return;
       }
       clearTimers();
       // The ref too, at once: it can be answered (from the notification) before React renders.
-      callRef.current = { id: callId, peer: from, direction: 'in', phase: 'ringing', startedAt: null, reason: null, sentAt: Date.now() - (RING_MS - ms) };
+      callRef.current = {
+        id: callId,
+        peer: from,
+        direction: 'in',
+        phase: 'ringing',
+        startedAt: null,
+        reason: null,
+        sentAt: Date.now() - (RING_MS - ms),
+      };
       setCall(callRef.current);
       setVideo(NO_MEDIA);
       // The token while it rings, so answering connects at once.
@@ -186,7 +292,7 @@ export function CallProvider({ children }) {
       else ringAway(callRef.current);
       timers.current.ring = setTimeout(() => finish('missed'), ms);
     },
-    [finish],
+    [finish, expire, crossed],
   );
 
   // Ringing follows the app: back on screen, the call screen rings it (the
@@ -194,14 +300,16 @@ export function CallProvider({ children }) {
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
       const c = callRef.current;
-      if (!c || c.direction !== 'in' || c.phase !== 'ringing') return;
+      if (!c || c.phase !== 'ringing') return;
+      if (state === 'active' && stale(c)) return expire(c);
+      if (c.direction !== 'in') return;
       if (state === 'active') {
         stopRingNotification(c.id);
         ringHere();
       } else if (state === 'background') ringAway(c);
     });
     return () => sub.remove();
-  }, []);
+  }, [expire]);
 
   // Signals sent to this phone, over Realtime (the app in the foreground).
   useEffect(() => {
@@ -209,7 +317,9 @@ export function CallProvider({ children }) {
     return signal.listen(userId, (event, p) => {
       const current = callRef.current;
       if (event === 'ring') {
-        ringIn(p);
+        // Older apps don't send sentAt: a full ring.
+        const left = p.sentAt ? ringLeft(p.sentAt) : RING_MS;
+        if (left >= 2000) ringIn(p, left);
         return;
       }
       // They answered a call that's already over here (a late push): tell them.
@@ -217,7 +327,15 @@ export function CallProvider({ children }) {
         signal.send(p.by, 'end', { callId: p.callId });
         return;
       }
-      if (!current || p.callId !== current.id || current.phase === 'ended') return;
+      if (!current || p.callId !== current.id || current.phase === 'ended') {
+        // A call that's over before it reached the call screen (it rang by
+        // push, or crossed with yours): it must not ring late.
+        if ((event === 'end' || event === 'decline') && p.callId) {
+          seen.current.add(p.callId);
+          if (pendingCall(p.callId)) stopRingNotification(p.callId);
+        }
+        return;
+      }
       if (event === 'accept' && current.direction === 'out') goLive();
       else if (event === 'decline') finish('declined');
       else if (event === 'busy') finish('busy');
@@ -249,6 +367,17 @@ export function CallProvider({ children }) {
       tapped.remove();
     };
   }, [userId, ringIn]);
+
+  // Signed in on Android: make sure a locked phone can ring (full-screen
+  // calls, no battery restrictions, display over other apps). After the
+  // notification prompt has had its turn.
+  useEffect(() => {
+    if (!userId) return undefined;
+    const t = setTimeout(() => {
+      if (AppState.currentState === 'active' && !callRef.current) askForCallWakeUp();
+    }, 6000);
+    return () => clearTimeout(t);
+  }, [userId]);
 
   useEffect(
     () => () => {
@@ -294,6 +423,7 @@ export function CallProvider({ children }) {
       requirePremium(async () => {
         const peer = personOf(person);
         if (!peer || !userId || peer.id === userId) return;
+        if (stale(callRef.current)) expire(callRef.current);
         if (callRef.current && callRef.current.phase !== 'ended') return;
         // Use the call got ready ahead; if it's still getting ready, say
         // "Preparing call..." on the button and wait for it.
@@ -309,25 +439,31 @@ export function CallProvider({ children }) {
         clearTimers();
         const id = ahead?.id ?? newId();
         // The ref too, at once: the ring can be answered before React renders.
-        callRef.current = { id, peer, direction: 'out', phase: 'ringing', startedAt: null, reason: null };
+        const sentAt = Date.now();
+        callRef.current = {
+          id,
+          peer,
+          direction: 'out',
+          phase: 'ringing',
+          startedAt: null,
+          reason: null,
+          sentAt,
+        };
         setCall(callRef.current);
         setVideo(NO_MEDIA);
         haptics.selection();
         // Your camera comes on while it rings, so you can check how you look.
         media.prepare(id, beautyRef.current).catch(() => {});
         // Realtime reaches a phone with the app open; the push wakes one in a pocket.
-        const [live, pushed] = await Promise.all([
-          signal.send(peer.id, 'ring', { callId: id, video: true, from: personOf(profile) ?? { id: userId, name: 'BOA HUB member' } }),
-          signal.pushRing(peer.id, id),
-        ]);
+        const [live, pushed] = await Promise.all([signal.send(peer.id, 'ring', ringPayload(id, sentAt)), signal.pushRing(peer.id, id)]);
         if (callRef.current?.id !== id) return;
         if (!live && !pushed) return finish('unreachable');
         timers.current.ring = setTimeout(() => {
           signal.send(peer.id, 'end', { callId: id });
           finish('missed');
-        }, RING_MS);
+        }, ringLeft(sentAt));
       }, 'Video calls are part of BOA Premium.'),
-    [requirePremium, userId, profile, finish],
+    [requirePremium, userId, finish, expire],
   );
 
   const accept = useCallback(() => {
@@ -401,7 +537,21 @@ export function CallProvider({ children }) {
   const flipCamera = useCallback(() => media.switchCamera(), []);
 
   const value = useMemo(
-    () => ({ call, controls, video, beauty, setBeauty, startCall, accept, decline, hangUp, toggle, flipCamera, primeCall, callPrep: starting ? 'starting' : prep }),
+    () => ({
+      call,
+      controls,
+      video,
+      beauty,
+      setBeauty,
+      startCall,
+      accept,
+      decline,
+      hangUp,
+      toggle,
+      flipCamera,
+      primeCall,
+      callPrep: starting ? 'starting' : prep,
+    }),
     [call, controls, video, beauty, setBeauty, startCall, accept, decline, hangUp, toggle, flipCamera, primeCall, starting, prep],
   );
 

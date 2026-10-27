@@ -1,0 +1,29 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'com.boanetworks'
+version = '1.0.0'
+
+android {
+  namespace "expo.modules.boacarvideo"
+  defaultConfig {
+    versionCode 1
+    versionName "1.0.0"
+  }
+  // The car's own APIs (parking brake, gear, speed, driving restrictions).
+  // Compiled against the platform's optional android.car library; at run
+  // time it's only there on a car, so nothing touches it anywhere else
+  // (ParkedMonitor checks FEATURE_AUTOMOTIVE first).
+  useLibrary 'android.car'
+}
+
+dependencies {
+  // The same Media3 as expo-video, so the app carries one copy.
+  def media3 = "1.9.1"
+  implementation "androidx.media3:media3-exoplayer:${media3}"
+  implementation "androidx.media3:media3-exoplayer-hls:${media3}"
+  implementation "androidx.media3:media3-ui:${media3}"
+  implementation 'androidx.appcompat:appcompat:1.7.0'
+}

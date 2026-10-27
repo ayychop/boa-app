@@ -122,6 +122,17 @@ export default function EqualizerSheet({ open, onClose }) {
             <Toggle value={settings.spatial} onChange={(v) => !locked && eq.setSettings({ spatial: v })} label="Spatial Audio" testID="eq-spatial" />
           </View>
 
+          <View style={styles.spatial}>
+            <View style={styles.spatialIcon}>
+              <Ionicons name="volume-high-outline" size={18} color={colors.gold} />
+            </View>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={styles.bandLabel}>Bass Boost</Text>
+              <Text style={styles.note}>Deeper lows and a louder ceiling. Mind your ears.</Text>
+            </View>
+            <Toggle value={!!settings.boost} onChange={(v) => !locked && eq.setSettings({ boost: v })} label="Bass Boost" testID="eq-boost" />
+          </View>
+
           {locked ? (
             <View style={StyleSheet.absoluteFill} testID="eq-locked">
               <BlurView intensity={18} tint="dark" blurMethod="dimezisBlurView" style={StyleSheet.absoluteFill} />

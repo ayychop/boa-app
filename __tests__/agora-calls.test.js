@@ -122,8 +122,12 @@ describe('Agora video calls', () => {
     // Agora's rule: denoising before high-quality low light.
     expect(engine.setVideoDenoiserOptions.mock.invocationCallOrder[0]).toBeLessThan(engine.setLowlightEnhanceOptions.mock.invocationCallOrder[0]);
     expect(engine.setCameraAutoExposureFaceModeEnabled).toHaveBeenCalledWith(true);
-    expect(engine.setBeautyEffectOptions).toHaveBeenCalledWith(true, expect.objectContaining({ lighteningContrastLevel: 2, smoothnessLevel: 0.15, sharpnessLevel: 0.52 }));
-    expect(engine.setColorEnhanceOptions).toHaveBeenCalledWith(true, expect.objectContaining({ skinProtectLevel: 1 }));
+    // The filters' extension is switched on before any filter, then Natural is applied to the camera (source 2).
+    expect(engine.enableExtension).toHaveBeenCalledWith('agora_video_filters_clear_vision', 'clear_vision', true, 2);
+    expect(engine.enableExtension.mock.invocationCallOrder[0]).toBeLessThan(engine.setBeautyEffectOptions.mock.invocationCallOrder[0]);
+    expect(engine.setBeautyEffectOptions).toHaveBeenCalledWith(true, expect.objectContaining({ lighteningContrastLevel: 1, lighteningLevel: 0.2, smoothnessLevel: 0.15, sharpnessLevel: 0.28 }), 2);
+    expect(engine.setColorEnhanceOptions).toHaveBeenCalledWith(true, expect.objectContaining({ skinProtectLevel: 1 }), 2);
+    expect(engine.setFilterEffectOptions).toHaveBeenCalledWith(false, expect.anything(), 2);
     // Echo cancellation, noise suppression and gain control; one stream; 1v1 tuning.
     for (const p of AUDIO_PROCESSING) expect(engine.setParameters).toHaveBeenCalledWith(p);
     expect(engine.setAINSMode).toHaveBeenCalledWith(true, 0);
@@ -193,7 +197,7 @@ describe('Agora video calls', () => {
     // Filters off reach the camera too.
     await user.press(screen.getByTestId('call-filters-button'));
     await user.press(screen.getByTestId('call-filters-toggle'));
-    expect(engine.setBeautyEffectOptions).toHaveBeenLastCalledWith(false, expect.anything());
+    expect(engine.setBeautyEffectOptions).toHaveBeenLastCalledWith(false, expect.anything(), 2);
 
     // They hang up while the picture's frozen; then the call ends and the camera is let go.
     await user.press(screen.getByTestId('call-end'));
@@ -314,7 +318,7 @@ describe('the ringtone', () => {
     await act(async () => jest.advanceTimersByTime(2000));
   });
 
-  test("plays the ringtone you chose (Bashment here), and answering stops it", async () => {
+  test('plays the ringtone you chose (Bashment here), and answering stops it', async () => {
     const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
     mockHub = { ...mockHub, ringtone: 'bashment' };
     await mount();
@@ -480,15 +484,57 @@ describe('incoming calls by push', () => {
 });
 
 describe('the filter readout', () => {
-  test('one chip per filter that is on, and "Filters off" otherwise', () => {
+  test('the preset, then Brightness; "Filters off" when they are off', () => {
     const { describeParts } = require('../src/calls/beauty');
-    expect(describeParts({ studio: 0.5, flawless: 0, glow: 0.3, clarity: 0.6, saturation: 0.35, enabled: true })).toEqual([
-      { id: 'studio', label: 'Bright', value: '50%' },
-      { id: 'glow', label: 'Tone', value: '30%' },
-      { id: 'clarity', label: 'Clarity', value: '60%' },
-      { id: 'saturation', label: 'Colour', value: '35%' },
+    expect(describeParts({ preset: 'golden', brightness: 0.5, enabled: true })).toEqual([
+      { id: 'preset', label: 'Golden', value: null },
+      { id: 'brightness', label: 'Bright', value: '50%' },
     ]);
-    expect(describeParts({ studio: 0.5, enabled: false })).toEqual([{ id: 'off', label: 'Filters off', value: null }]);
+    expect(describeParts({ preset: 'golden', enabled: false })).toEqual([{ id: 'off', label: 'Filters off', value: null }]);
+  });
+});
+
+describe('the call presets', () => {
+  const { lutText, GRADES, LUT_SIZE } = require('../src/calls/luts');
+  const { PRESETS, toAgora } = require('../src/calls/beauty');
+  const rows = (id) => lutText(id).trim().split('\n');
+
+  test('six presets; every one but Natural grades the picture with a 32-point Cube LUT', () => {
+    expect(PRESETS.map((p) => p.label)).toEqual(['Natural', 'Studio', 'Golden', 'Cinematic', 'Glow', 'B&W']);
+    for (const p of PRESETS.filter((x) => x.grade)) {
+      const lines = rows(p.grade.lut);
+      expect(lines[1]).toBe('LUT_3D_SIZE 32');
+      // Header, then one row per cell, red changing fastest.
+      expect(lines.length).toBe(4 + LUT_SIZE ** 3);
+      for (const v of lines[4].split(' ').concat(lines.at(-1).split(' '))) expect(Number(v)).toBeGreaterThanOrEqual(0);
+    }
+    expect(PRESETS.find((p) => p.id === 'natural').grade).toBeNull();
+  });
+
+  test('B&W is grey everywhere; Golden is warmer than it found; Cinematic pushes shadows teal', () => {
+    for (const c of [
+      [0.8, 0.2, 0.1],
+      [0.1, 0.5, 0.9],
+    ]) {
+      const [r, g, b] = GRADES.bw(...c);
+      expect(r).toBeCloseTo(g, 6);
+      expect(g).toBeCloseTo(b, 6);
+    }
+    const [r, , b] = GRADES.golden(0.5, 0.5, 0.5);
+    expect(r).toBeGreaterThan(b);
+    const [sr, , sb] = GRADES.cinematic(0.15, 0.15, 0.15);
+    expect(sb).toBeGreaterThan(sr);
+  });
+
+  test('each preset reaches Agora as beauty, colour and its grade; Brightness is lightening', () => {
+    const bw = toAgora({ preset: 'bw', brightness: 1, enabled: true });
+    expect(bw.filter).toEqual({ enabled: true, lut: 'bw', strength: 1 });
+    expect(bw.colorEnhance.enabled).toBe(false);
+    expect(bw.beauty.lighteningLevel).toBe(0.5);
+    expect(toAgora({ preset: 'glow', brightness: 0, enabled: true }).beauty).toEqual(expect.objectContaining({ lighteningLevel: 0, lighteningContrastLevel: 0 }));
+    const off = toAgora({ preset: 'cinematic', enabled: false });
+    expect(off.beauty.enabled).toBe(false);
+    expect(off.filter.enabled).toBe(false);
   });
 });
 
@@ -650,5 +696,128 @@ describe('ringing like a phone call (the app in the background)', () => {
     expect(fn).toMatch(/ringtone,/);
     const app = require('../app.json').expo;
     expect(app.android.permissions).toContain('android.permission.USE_FULL_SCREEN_INTENT');
+  });
+});
+
+describe('calls that never leave anyone stuck', () => {
+  const { AppState } = require('react-native');
+  const { callFromPush, RING_MS } = require('../src/calls/incoming');
+  const from = { id: 'user-kofi', name: 'Kofi Boateng', avatar_url: null };
+  const ringOut = async (user) => {
+    signal.send.mockClear();
+    await user.press(screen.getByText('Call Kofi'));
+    await act(async () => {});
+    return signal.send.mock.calls.find(([, event]) => event === 'ring')[2];
+  };
+
+  test("the background task finds the call one level down, in FCM's data", () => {
+    const data = { type: 'call', callId: 'a1c3e1f0-0000-4000-8000-000000000001', sentAt: 1000, ringtone: 'rnb', from };
+    const task = { notification: null, data: { body: JSON.stringify(data), dataString: JSON.stringify(data), experienceId: '@boa/app' } };
+    expect(callFromPush(task)).toEqual({ callId: data.callId, from, sentAt: 1000, ringtone: 'rnb' });
+  });
+
+  test('a ring says when it was sent, and one that arrives after the ring is over rings nothing', async () => {
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    await mount();
+    const ring = await ringOut(user);
+    expect(ring.sentAt).toEqual(expect.any(Number));
+    await user.press(screen.getByTestId('call-end'));
+    await act(async () => jest.advanceTimersByTime(2000));
+    await act(async () => mockSignal('ring', { callId: 'a1c3e1f0-0000-4000-8000-000000000002', from, sentAt: Date.now() - RING_MS - 1000 }));
+    expect(screen.queryByTestId('call-accept')).toBeNull();
+  });
+
+  test('ringing them while they ring you connects you both, never "on another call"', async () => {
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    await mount();
+    const mine = await ringOut(user);
+    signal.send.mockClear();
+    // Their call id sorts first: theirs is the call. Yours is dropped and theirs answered.
+    const theirs = '00000000-0000-4000-8000-000000000000';
+    await act(async () => mockSignal('ring', { callId: theirs, from, sentAt: Date.now() }));
+    expect(signal.send).not.toHaveBeenCalledWith('user-kofi', 'busy', expect.anything());
+    expect(signal.send).toHaveBeenCalledWith('user-kofi', 'end', { callId: mine.callId });
+    expect(signal.send).toHaveBeenCalledWith('user-kofi', 'accept', { callId: theirs, by: 'user-me' });
+    expect(screen.getByTestId('call-end')).toBeOnTheScreen();
+    await user.press(screen.getByTestId('call-end'));
+    await act(async () => jest.advanceTimersByTime(2000));
+  });
+
+  test('when your call sorts first, it rings them again so they answer it', async () => {
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    await mount();
+    const mine = await ringOut(user);
+    signal.send.mockClear();
+    await act(async () => mockSignal('ring', { callId: 'zzzzzzzz-zzzz-4zzz-8zzz-zzzzzzzzzzzz', from, sentAt: Date.now() }));
+    expect(signal.send).not.toHaveBeenCalledWith('user-kofi', 'busy', expect.anything());
+    expect(signal.send).toHaveBeenCalledWith('user-kofi', 'ring', expect.objectContaining({ callId: mine.callId }));
+    await user.press(screen.getByTestId('call-end'));
+    await act(async () => jest.advanceTimersByTime(2000));
+  });
+
+  test("a ring that ran out while the app was frozen ends the moment it's back, and you can call again", async () => {
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    const listeners = [];
+    const spy = jest.spyOn(AppState, 'addEventListener').mockImplementation((type, fn) => {
+      listeners.push(fn);
+      return { remove: () => {} };
+    });
+    await mount();
+    const mine = await ringOut(user);
+    // Android froze the timer: the clock moves on, the timeout never fires.
+    const now = Date.now();
+    const clock = jest.spyOn(Date, 'now').mockReturnValue(now + RING_MS + 5000);
+    signal.send.mockClear();
+    await act(async () => listeners.forEach((fn) => fn('active')));
+    expect(signal.send).toHaveBeenCalledWith('user-kofi', 'end', { callId: mine.callId });
+    expect(screen.getByTestId('call-status')).toHaveTextContent('No answer');
+    clock.mockRestore();
+    spy.mockRestore();
+    await act(async () => jest.advanceTimersByTime(2000));
+    expect(screen.queryByTestId('call-screen')).toBeNull();
+  });
+});
+
+describe('the call screen layout', () => {
+  test('the filter chips sit in the column right above the dock, not pinned to the bottom edge', () => {
+    const src = fs.readFileSync(path.join(__dirname, '../src/components/calls/CallScreen.js'), 'utf8');
+    expect(src).not.toMatch(/height \* 0\.08/);
+    expect(src).toMatch(/center: \{\s*flex: 1,\s*alignItems: 'center',\s*justifyContent: 'center'/);
+    expect(src).not.toMatch(/bottom: \{\s*position: 'absolute'/);
+    expect(src.indexOf('testID="call-filter-line"')).toBeLessThan(src.indexOf('testID="call-controls"'));
+  });
+});
+
+describe('waking a locked Android phone', () => {
+  const { Alert, Platform } = require('react-native');
+  const BoaCall = require('../modules/boa-call');
+  const { nextWakeStep, askForCallWakeUp } = require('../src/calls/wakeUp');
+  const os = Platform.OS;
+  beforeEach(() => {
+    Platform.OS = 'android';
+  });
+  afterEach(() => {
+    Platform.OS = os;
+    jest.restoreAllMocks();
+  });
+
+  test('asks for no battery restrictions, then Display over other apps, and opens the setting', async () => {
+    BoaCall.isIgnoringBatteryOptimizations.mockReturnValue(false);
+    BoaCall.canDrawOverlays.mockReturnValue(false);
+    expect((await nextWakeStep()).id).toBe('battery');
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    await askForCallWakeUp();
+    expect(alert).toHaveBeenCalledWith('Let calls reach you', expect.stringMatching(/battery/), expect.any(Array));
+    alert.mock.calls[0][2].find((b) => b.text === 'Open settings').onPress();
+    expect(BoaCall.openBatterySettings).toHaveBeenCalled();
+    BoaCall.isIgnoringBatteryOptimizations.mockReturnValue(true);
+    expect((await nextWakeStep()).id).toBe('overlay');
+    BoaCall.canDrawOverlays.mockReturnValue(true);
+    expect(await nextWakeStep()).toBeNull();
+  });
+
+  test('the app declares both permissions', () => {
+    const perms = require('../app.json').expo.android.permissions;
+    expect(perms).toEqual(expect.arrayContaining(['android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS', 'android.permission.SYSTEM_ALERT_WINDOW']));
   });
 });
