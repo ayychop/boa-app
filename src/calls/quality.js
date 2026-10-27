@@ -51,12 +51,13 @@ export const CAPTURE = Object.freeze({
 export const STABILIZATION_OFF = -1; // CameraStabilizationModeOff
 
 /**
- * Any light: denoising and low-light enhancement both run in auto mode, so
- * they only work when the room is dark and leave a well-lit face alone.
+ * Any light: high-quality noise reduction runs on every frame (clean skin
+ * and backgrounds even in good light), and low-light enhancement runs in
+ * auto mode, lifting only rooms that are actually dark.
  * High-quality low light needs high-quality denoising alongside it (Agora's
  * rule), so the two are always set as a pair.
  */
-export const DENOISER = Object.freeze({ mode: 0, level: 0 }); // VideoDenoiserAuto, VideoDenoiserLevelHighQuality
+export const DENOISER = Object.freeze({ mode: 1, level: 0 }); // VideoDenoiserManual (every frame), VideoDenoiserLevelHighQuality
 export const LOW_LIGHT = Object.freeze({ mode: 0, level: 0 }); // LowLightEnhanceAuto, LowLightEnhanceLevelHighQuality
 
 /**

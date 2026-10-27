@@ -3,9 +3,10 @@ import Animated, { FadeIn, FadeInDown, ZoomIn } from 'react-native-reanimated';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { WHATS_NEW } from '../lib/whats-new';
+import { WHATS_NEW, appVersion } from '../lib/whats-new';
 import { Button, Slate } from './ui';
 import { colors, fonts, radius, space, type } from '../theme';
+import { SPRING } from '../utils/motion';
 
 /**
  * The notes for this release in a dark glass card, once per update (see
@@ -24,7 +25,7 @@ export default function WhatsNewModal({ visible, onClose, notes = WHATS_NEW }) {
       </Pressable>
       <View style={styles.center} pointerEvents="box-none">
         <Animated.View
-          entering={ZoomIn.duration(360).springify().damping(18)}
+          entering={ZoomIn.springify().damping(SPRING.damping).stiffness(SPRING.stiffness)}
           style={[styles.card, { width: cardWidth, maxHeight: height * 0.8 }]}
           testID="whats-new"
         >
@@ -36,7 +37,7 @@ export default function WhatsNewModal({ visible, onClose, notes = WHATS_NEW }) {
           />
           <View style={styles.header}>
             <View style={{ flex: 1, gap: space.sm }}>
-              <Slate dot>{`What's new · v${notes.version}`}</Slate>
+              <Slate dot>{`What's new · v${appVersion()}`}</Slate>
               <Text style={styles.headline}>{notes.headline}</Text>
             </View>
             <Pressable onPress={onClose} hitSlop={12} style={styles.close} accessibilityRole="button" accessibilityLabel="Close">

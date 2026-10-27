@@ -7,7 +7,7 @@ import { usePremium } from './PremiumContext';
 import * as signal from '../calls/signaling';
 import * as media from '../calls/media';
 import { startRingtone, stopRingtone } from '../calls/ringtone';
-import { DEFAULT_BEAUTY } from '../calls/beauty';
+import { DEFAULT_BEAUTY, fromStored } from '../calls/beauty';
 import CallScreen from '../components/calls/CallScreen';
 import { haptics } from '../utils/haptics';
 import { blockScreenshots } from '../calls/privacy';
@@ -64,7 +64,7 @@ export function CallProvider({ children }) {
 
   useEffect(() => {
     AsyncStorage.getItem(BEAUTY_KEY)
-      .then((raw) => raw && setBeautyState({ ...DEFAULT_BEAUTY, ...JSON.parse(raw) }))
+      .then((raw) => raw && setBeautyState(fromStored(JSON.parse(raw))))
       .catch(() => {});
   }, []);
 

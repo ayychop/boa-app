@@ -7,8 +7,9 @@ import { BlurView } from 'expo-blur';
 import { scheduleOnRN } from 'react-native-worklets';
 import useLayout from '../hooks/useLayout';
 import { colors, radius, space } from '../theme';
+import { SPRING } from '../utils/motion';
 
-const OPEN = { mass: 1, stiffness: 260, damping: 28 };
+const OPEN = SPRING;
 const OFFSCREEN = 900;
 
 /**

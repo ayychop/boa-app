@@ -1,9 +1,10 @@
 import { useEffect } from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
-import Animated, { Easing, interpolate, useAnimatedStyle, useReducedMotion, useSharedValue } from 'react-native-reanimated';
+import Animated, { Easing, FadeIn, FadeOut, interpolate, useAnimatedStyle, useReducedMotion, useSharedValue } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
 import Grain from '../Grain';
+import VibeTexture from './VibeTexture';
 import { startLoop } from '../../utils/loop';
 import { vibeById } from '../../chat/vibes';
 
@@ -112,17 +113,21 @@ export default function AmbientGlow({ vibe = vibeById() }) {
   const still = useReducedMotion();
   return (
     <View pointerEvents="none" style={[styles.fill, { backgroundColor: vibe.mesh[1] }]} testID="chat-ambient">
-      <LinearGradient colors={vibe.mesh} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} testID={`chat-mesh-${vibe.id}`} />
-      {vibe.lights.map((l) => (
-        <Light key={`${vibe.id}-${l.id}`} light={l} width={width} height={height} still={still} />
-      ))}
-      {/* A veil keeps the lights behind the words, never over them. */}
-      <View style={[StyleSheet.absoluteFill, { backgroundColor: vibe.veil }]} />
-      {Array.from({ length: STAR_SETS }, (_, set) => (
-        <StarSet key={set} stars={STARS.filter((s) => s.set === set)} set={set} width={width} height={height} still={still} max={vibe.stars.max} />
-      ))}
-      {vibe.stars.deep ? <StarSet stars={DEEP_STARS} set={STAR_SETS} width={width} height={height} still={still} max={vibe.stars.max} /> : null}
-      <Grain width={width} height={height} opacity={0.07} running={!still} />
+      {/* Keyed by the look, so a new vibe crossfades in over the old one. */}
+      <Animated.View key={`${vibe.id}-${vibe.customColor ?? ''}`} entering={FadeIn.duration(450)} exiting={FadeOut.duration(450)} style={StyleSheet.absoluteFill}>
+        <LinearGradient colors={vibe.mesh} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} testID={`chat-mesh-${vibe.id}`} />
+        {vibe.lights.map((l) => (
+          <Light key={`${vibe.id}-${l.id}`} light={l} width={width} height={height} still={still} />
+        ))}
+        {/* A veil keeps the lights behind the words, never over them. */}
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: vibe.veil }]} />
+        <VibeTexture vibe={vibe} width={width} height={height} still={still} />
+        {Array.from({ length: STAR_SETS }, (_, set) => (
+          <StarSet key={set} stars={STARS.filter((s) => s.set === set)} set={set} width={width} height={height} still={still} max={vibe.stars.max} />
+        ))}
+        {vibe.stars.deep ? <StarSet stars={DEEP_STARS} set={STAR_SETS} width={width} height={height} still={still} max={vibe.stars.max} /> : null}
+        <Grain width={width} height={height} opacity={0.07} running={!still} />
+      </Animated.View>
     </View>
   );
 }

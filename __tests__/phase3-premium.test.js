@@ -150,21 +150,27 @@ describe('Hi-Fi audio', () => {
 describe('beauty filters', () => {
   const { toAgora, describe: describeBeauty } = require('../src/calls/beauty');
 
-  test('skin tone protected, lightening capped, and within gentle limits', () => {
-    const max = toAgora({ smoothing: 1, tone: 1, enabled: true });
-    expect(max.beauty.lighteningContrastLevel).toBe(2); // LighteningContrastHigh
-    expect(max.beauty.lighteningLevel).toBe(0.15);
-    expect(max.beauty.smoothnessLevel).toBe(0.5);
-    expect(max.beauty.rednessLevel).toBe(0.3);
-    expect(max.colorEnhance.skinProtectLevel).toBe(1);
-    // Tone alone still glows a little; smoothing alone never lightens.
-    expect(toAgora({ smoothing: 0, tone: 0.5 }).beauty).toEqual(expect.objectContaining({ enabled: true, lighteningLevel: 0.08, smoothnessLevel: 0 }));
-    expect(toAgora({ smoothing: 0.5, tone: 0 }).beauty).toEqual(expect.objectContaining({ lighteningLevel: 0, smoothnessLevel: 0.25, rednessLevel: 0.15 }));
-    expect(max.colorEnhance.strengthLevel).toBeLessThanOrEqual(0.45);
-    const off = toAgora({ smoothing: 1, tone: 1, enabled: false });
+  test('four studio filters, each capped so no face is ever washed out', () => {
+    const { FILTERS, fromStored } = require('../src/calls/beauty');
+    expect(FILTERS.map((f) => f.label)).toEqual(['Studio Lighting', 'Flawless HD', 'Tone Enhancer', 'Soft Glow']);
+    const max = toAgora({ studio: 1, flawless: 1, tone: 1, glow: 1, enabled: true });
+    expect(max.beauty).toEqual(expect.objectContaining({ lighteningContrastLevel: 2, lighteningLevel: 0.15, smoothnessLevel: 0.5, rednessLevel: 0.3 }));
+    expect(max.colorEnhance).toEqual({ enabled: true, strengthLevel: 0.45, skinProtectLevel: 1 });
+    // Each slider drives only its own setting.
+    expect(toAgora({ studio: 0.5 }).beauty).toEqual(expect.objectContaining({ enabled: true, lighteningLevel: 0.08, smoothnessLevel: 0, rednessLevel: 0 }));
+    expect(toAgora({ flawless: 0.5 }).beauty).toEqual(expect.objectContaining({ lighteningLevel: 0, smoothnessLevel: 0.25, rednessLevel: 0 }));
+    expect(toAgora({ glow: 0.5 }).beauty).toEqual(expect.objectContaining({ lighteningLevel: 0, smoothnessLevel: 0, rednessLevel: 0.15 }));
+    const off = toAgora({ studio: 1, flawless: 1, tone: 1, glow: 1, enabled: false });
     expect(off.beauty.enabled).toBe(false);
     expect(off.colorEnhance.enabled).toBe(false);
-    expect(describeBeauty({ smoothing: 0.4, tone: 0.35, enabled: true })).toBe('Smoothing 40% · Tone 35%');
+    expect(describeBeauty({ studio: 0.5, flawless: 0.4, tone: 0.35, glow: 0, enabled: true })).toBe('Studio 50% · HD 40% · Tone 35%');
+    // Settings saved before the rename keep their strengths.
+    expect(fromStored({ smoothing: 0.7, tone: 0.2, enabled: false })).toEqual({ studio: 0.5, flawless: 0.7, tone: 0.2, glow: 0.3, enabled: false });
+  });
+
+  test('no filter copy singles anyone out: inclusive words only', () => {
+    const src = ['src/calls/beauty.js', 'src/components/calls/CallScreen.js'].map((f) => require('fs').readFileSync(require('path').join(__dirname, '..', f), 'utf8')).join('');
+    expect(src).not.toMatch(/melanin/i);
   });
 });
 
@@ -199,7 +205,7 @@ describe('video calls', () => {
     expect(screen.getByLabelText('Unmute')).toBeOnTheScreen();
     await user.press(screen.getByTestId('call-filters-button'));
     expect(screen.getByTestId('call-filters')).toBeOnTheScreen();
-    expect(screen.getByText('Skin Smoothing')).toBeOnTheScreen();
+    for (const label of ['Studio Lighting', 'Flawless HD', 'Tone Enhancer', 'Soft Glow']) expect(screen.getByText(label)).toBeOnTheScreen();
     expect(screen.getByText('Tone Enhancer')).toBeOnTheScreen();
 
     await user.press(screen.getByTestId('call-end'));

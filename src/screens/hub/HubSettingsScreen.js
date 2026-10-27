@@ -46,7 +46,7 @@ export default function HubSettingsScreen({ navigation }) {
     bio: profile?.bio ?? '',
     roles: profile?.roles ?? [],
   }));
-  const { vibe, setVibe } = useChatVibe();
+  const { vibe, setVibe, customColor, setCustomColor } = useChatVibe();
   const [saving, setSaving] = useState(false);
   const [busy, setBusy] = useState(null);
   const [blockedPeople, setBlockedPeople] = useState([]);
@@ -274,7 +274,7 @@ export default function HubSettingsScreen({ navigation }) {
           </View>
 
           <Slate style={styles.section}>Chat vibe</Slate>
-          <VibePicker value={vibe.id} onChange={setVibe} />
+          <VibePicker value={vibe.id} onChange={setVibe} customColor={customColor} onCustomColor={setCustomColor} />
 
           <Slate style={styles.section}>Make it yours</Slate>
           <View style={styles.group}>

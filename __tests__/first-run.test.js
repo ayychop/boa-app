@@ -25,7 +25,9 @@ jest.mock('../src/lib/supabase', () => ({
 const FirstRun = require('../src/components/FirstRun').default;
 const { SCENES } = require('../src/components/onboarding/FeatureTour');
 const { replayTour } = require('../src/api/onboarding');
-const { WHATS_NEW, LAST_SEEN_KEY, shouldShowWhatsNew } = require('../src/lib/whats-new');
+// The installed build: version 1.2.0 (app.json), build 14.
+jest.mock('expo-application', () => ({ nativeApplicationVersion: '1.2.0', nativeBuildVersion: '14' }));
+const { WHATS_NEW, LAST_SEEN_KEY, shouldShowWhatsNew, currentRelease } = require('../src/lib/whats-new');
 
 async function show(props = {}) {
   await render(<FirstRun freshInstall={false} {...props} />);
@@ -38,8 +40,8 @@ beforeEach(async () => {
   mockRow = { has_seen_onboarding: false };
   mockError = null;
   mockUpdate.mockClear();
-  // Already read this version's notes, unless a test says otherwise.
-  await AsyncStorage.setItem(LAST_SEEN_KEY, WHATS_NEW.version);
+  // Already read this build's notes, unless a test says otherwise.
+  await AsyncStorage.setItem(LAST_SEEN_KEY, currentRelease());
 });
 
 describe('the welcome tour', () => {
@@ -123,6 +125,25 @@ describe("What's New", () => {
     expect(shouldShowWhatsNew(null, '1.1.0', true)).toBe(false);
   });
 
+  test('an update is the installed version plus its build number, so every new build counts', async () => {
+    expect(currentRelease()).toBe('1.2.0+14');
+    // The old hardcoded note version, from before this fix: a phone that saw it gets the new notes.
+    await AsyncStorage.setItem(LAST_SEEN_KEY, '1.1.0');
+    await show();
+    expect(screen.getByTestId('whats-new')).toBeTruthy();
+    expect(screen.getByText("What's new · v1.2.0")).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('whats-new-done'));
+    await act(async () => {});
+    // Same build again: nothing. A new build of the same version: the notes again.
+    await screen.unmount();
+    await show();
+    expect(screen.queryByTestId('whats-new')).toBeNull();
+    await AsyncStorage.setItem(LAST_SEEN_KEY, '1.2.0+13');
+    await screen.unmount();
+    await show();
+    expect(screen.getByTestId('whats-new')).toBeTruthy();
+  });
+
   test('shows the notes once after an update and closes with Got it', async () => {
     await AsyncStorage.setItem(LAST_SEEN_KEY, '0.9.0');
     await show();
@@ -131,7 +152,7 @@ describe("What's New", () => {
     await fireEvent.press(screen.getByTestId('whats-new-done'));
     await act(async () => {});
     expect(screen.queryByTestId('whats-new')).toBeNull();
-    expect(await AsyncStorage.getItem(LAST_SEEN_KEY)).toBe(WHATS_NEW.version);
+    expect(await AsyncStorage.getItem(LAST_SEEN_KEY)).toBe(currentRelease());
   });
 
   test('closes with the X or a tap outside', async () => {
@@ -150,7 +171,7 @@ describe("What's New", () => {
     await AsyncStorage.removeItem(LAST_SEEN_KEY);
     await show({ freshInstall: true });
     expect(screen.queryByTestId('whats-new')).toBeNull();
-    expect(await AsyncStorage.getItem(LAST_SEEN_KEY)).toBe(WHATS_NEW.version);
+    expect(await AsyncStorage.getItem(LAST_SEEN_KEY)).toBe(currentRelease());
   });
 
   test('waits for the welcome tour to finish', async () => {

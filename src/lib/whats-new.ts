@@ -1,9 +1,14 @@
+import Constants from 'expo-constants';
+import * as Application from 'expo-application';
+
 // "What's New": the notes shown once after an update (components/WhatsNewModal.js).
 //
-// To announce a release, bump `version` and replace `notes`. Everyone who
-// opens the app on a build with a version they haven't seen gets the
-// modal once; a fresh install skips it (they get the vibe check and the
-// welcome tour instead).
+// An update is any build this phone hasn't opened before: the app's
+// version (app.json, via expo-constants) plus its build number
+// (expo-application; EAS raises it on every build). So every new build
+// shows the modal once, even when only the build number moved. A fresh
+// install skips it (they get the vibe check and the welcome tour instead).
+// To announce a release, replace `notes`.
 
 export type PatchNote = {
   /** An Ionicons name. */
@@ -12,29 +17,28 @@ export type PatchNote = {
   body: string;
 };
 
-export const WHATS_NEW: { version: string; headline: string; notes: PatchNote[] } = {
-  version: '1.1.0',
+export const WHATS_NEW: { headline: string; notes: PatchNote[] } = {
   headline: 'Fresh in BOA HUB',
   notes: [
     {
-      icon: 'car-sport',
-      title: 'BOA Radio in your car',
-      body: 'Android Auto support: browse stations by genre on the car screen and control playback from the wheel.',
-    },
-    {
-      icon: 'sparkles',
-      title: 'A welcome tour',
-      body: 'New to the Hub? A quick, swipeable tour of Radio, Originals, Zen Mode, the Creative Hub and the Casting Board.',
-    },
-    {
       icon: 'videocam',
-      title: 'Video calls',
-      body: 'Face to face with anyone on the Hub, with Skin Smoothing and Tone Enhancer filters.',
+      title: 'Video calls, redesigned',
+      body: 'A floating glass dock with big, easy controls, flip camera, and Studio filters: Studio Lighting, Flawless HD, Tone Enhancer and Soft Glow.',
     },
     {
-      icon: 'pulse',
-      title: 'Hi-Fi audio',
-      body: 'Bass, treble and spatial sound on every station with BOA Premium.',
+      icon: 'shield-checkmark',
+      title: 'Privacy Mode',
+      body: 'Turn off screenshots during a call. The other person sees that you have.',
+    },
+    {
+      icon: 'color-palette',
+      title: '12 chat vibes, and your own',
+      body: 'From Turntable to The Block, or pick any colour with Custom. Make your bubbles yours in Chat Appearance.',
+    },
+    {
+      icon: 'musical-notes',
+      title: 'BOA ringtones',
+      body: 'Hip Hop, R&B, Afrobeats or Bashment: choose what rings when someone calls.',
     },
   ],
 };
@@ -49,4 +53,14 @@ export const LAST_SEEN_KEY = 'boa.whatsNew.lastSeen';
 export function shouldShowWhatsNew(lastSeen: string | null, version: string, freshInstall: boolean): boolean {
   if (lastSeen == null) return !freshInstall;
   return lastSeen !== version;
+}
+
+/** The installed app's version, as shown in the modal ("1.2.0"). */
+export function appVersion(): string {
+  return Constants.expoConfig?.version ?? Application.nativeApplicationVersion ?? '0.0.0';
+}
+
+/** This build, as stored: version and build number ("1.2.0+14"). */
+export function currentRelease(): string {
+  return `${appVersion()}+${Application.nativeBuildVersion ?? '0'}`;
 }

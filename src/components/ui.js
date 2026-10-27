@@ -6,13 +6,13 @@ import Animated, {
   useReducedMotion,
   useSharedValue,
   withRepeat,
-  withSpring,
   withTiming,
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import BoaLogo from './BoaLogo';
 import Smoke from './Smoke';
 import { colors, fonts, radius, space, type } from '../theme';
+import { PRESS_SCALE, usePress } from '../utils/motion';
 
 /** Mono, letter-spaced label, optionally led by a gold "recording" dot. */
 export function Slate({ children, dot = false, color, style, lines = 1 }) {
@@ -50,17 +50,10 @@ export function Fog({ opacity = 0.35, variant = 0 }) {
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 /** Press-to-shrink wrapper so every tappable thing feels physical. */
-export function Tappable({ children, style, onPress, scaleTo = 0.96, ...rest }) {
-  const scale = useSharedValue(1);
-  const anim = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+export function Tappable({ children, style, onPress, scaleTo = PRESS_SCALE, haptic = true, ...rest }) {
+  const press = usePress({ to: scaleTo, haptic: haptic && !!onPress });
   return (
-    <AnimatedPressable
-      onPress={onPress}
-      onPressIn={() => (scale.value = withSpring(scaleTo, { stiffness: 500, damping: 30 }))}
-      onPressOut={() => (scale.value = withSpring(1, { stiffness: 340, damping: 18 }))}
-      style={[style, anim]}
-      {...rest}
-    >
+    <AnimatedPressable onPress={onPress} onPressIn={press.onPressIn} onPressOut={press.onPressOut} style={[style, press.style]} {...rest}>
       {children}
     </AnimatedPressable>
   );

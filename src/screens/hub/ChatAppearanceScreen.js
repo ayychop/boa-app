@@ -24,6 +24,7 @@ import { DEFAULT_THEME, PALETTE, rgba, textOn } from '../../chat/bubbleTheme';
 import { PageHeader } from '../../components/kit';
 import { Button, Slate } from '../../components/ui';
 import { haptics } from '../../utils/haptics';
+import { usePress } from '../../utils/motion';
 import { colors, fonts, radius, space } from '../../theme';
 
 const COLOR_MS = 420;
@@ -35,25 +36,24 @@ const clamp = (v) => {
 
 /** One colour in the palette: dips when touched, a gold ring when it's yours. */
 function Swatch({ swatch, selected, onPress }) {
-  const scale = useSharedValue(1);
+  const press = usePress({ to: 0.88, haptic: false });
   const ring = useSharedValue(selected ? 1 : 0);
   useEffect(() => {
     ring.value = withTiming(selected ? 1 : 0, { duration: 220 });
   }, [selected, ring]);
-  const style = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
   const ringStyle = useAnimatedStyle(() => ({ opacity: ring.value, transform: [{ scale: 0.85 + ring.value * 0.15 }] }));
   return (
     <Pressable
       onPress={onPress}
-      onPressIn={() => (scale.value = withSpring(0.86, { damping: 16, stiffness: 420 }))}
-      onPressOut={() => (scale.value = withSpring(1, { damping: 12, stiffness: 300 }))}
+      onPressIn={press.onPressIn}
+      onPressOut={press.onPressOut}
       accessibilityRole="radio"
       accessibilityLabel={swatch.label}
       accessibilityState={{ checked: selected }}
       style={styles.swatchCell}
       testID={`appearance-color-${swatch.id}`}
     >
-      <Animated.View style={[styles.swatchWrap, style]}>
+      <Animated.View style={[styles.swatchWrap, press.style]}>
         <Animated.View pointerEvents="none" style={[styles.swatchRing, ringStyle]} />
         <View style={[styles.swatch, { backgroundColor: swatch.color, boxShadow: `0px 0px 14px ${rgba(swatch.color, 0.45)}` }]}>
           {selected ? <Ionicons name="checkmark" size={18} color={textOn(swatch.color, 0, '#000000')} /> : null}

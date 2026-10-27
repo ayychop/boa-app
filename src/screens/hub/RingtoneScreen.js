@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Animated, { FadeIn, FadeInDown, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withSpring, withTiming } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeInDown, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,6 +10,7 @@ import { RINGTONES, previewRingtone, stopPreview } from '../../calls/ringtone';
 import { PageHeader } from '../../components/kit';
 import { Slate } from '../../components/ui';
 import { haptics } from '../../utils/haptics';
+import { usePress } from '../../utils/motion';
 import { colors, fonts, radius, space } from '../../theme';
 
 // Three gold bars dancing while a preview plays.
@@ -36,14 +37,13 @@ function Bar({ v }) {
 }
 
 function Option({ tone, active, playing, onPick, onPlay, last }) {
-  const scale = useSharedValue(1);
-  const style = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+  const press = usePress({ haptic: false });
   return (
-    <Animated.View style={style}>
+    <Animated.View style={press.style}>
       <Pressable
         onPress={onPick}
-        onPressIn={() => (scale.value = withSpring(0.98, { damping: 18, stiffness: 400 }))}
-        onPressOut={() => (scale.value = withSpring(1, { damping: 18, stiffness: 400 }))}
+        onPressIn={press.onPressIn}
+        onPressOut={press.onPressOut}
         accessibilityRole="radio"
         accessibilityState={{ checked: active }}
         accessibilityLabel={tone.label}

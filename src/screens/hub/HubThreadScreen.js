@@ -115,6 +115,7 @@ function Bubble({ message, mine, seen, fresh, vibe, onLongPress, onOpenMedia, on
         style={[
           styles.bubble,
           mine ? [styles.mine, { borderColor: vibe.mineEdge }, vibe.mineGlow && { boxShadow: vibe.mineGlow }] : [styles.theirs, { backgroundColor: vibe.theirsFill, borderColor: vibe.theirsEdge }],
+          vibe.radius && { borderRadius: vibe.radius },
           media && styles.mediaBubble,
           message.pending && !media && { opacity: 0.6 },
         ]}
@@ -203,7 +204,7 @@ function Thread({ navigation, route }) {
   // list keeps their heights clear at its ends.
   const [headerH, setHeaderH] = useState(insets.top + 60);
   const [composerH, setComposerH] = useState(64);
-  const { vibe: chatVibe, setVibe } = useChatVibe();
+  const { vibe: chatVibe, setVibe, customColor, setCustomColor } = useChatVibe();
   // Your own bubbles in your Chat Appearance colour, if you've chosen one.
   const vibe = useMemo(() => withChatTheme(chatVibe, chatTheme), [chatVibe, chatTheme]);
   // What the glass blurs on Android: the backdrop and the messages.
@@ -557,11 +558,11 @@ function Thread({ navigation, route }) {
   );
 
   const picker = (
-    <BottomSheet open={picking} onClose={() => setPicking(false)} glass>
+    <BottomSheet open={picking} onClose={() => setPicking(false)} glass dragAnywhere={false}>
       <View style={styles.sheet} testID="chat-vibe-sheet">
         <Text style={styles.sheetKicker}>Chat vibe</Text>
         <Text style={[type.bodyMuted, { marginBottom: space.lg }]}>How your conversations look. Applies to every chat on this phone.</Text>
-        <VibePicker value={vibe.id} onChange={setVibe} />
+        <VibePicker value={vibe.id} onChange={setVibe} customColor={customColor} onCustomColor={setCustomColor} />
       </View>
     </BottomSheet>
   );

@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import Animated, { Easing, FadeInDown, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
+import Svg, { Circle, Defs, Line, LinearGradient as SvgLinearGradient, Path, RadialGradient, Rect, Stop } from 'react-native-svg';
 import { useHub } from '../../context/HubContext';
 import * as casting from '../../api/casting';
 import { ROLES } from '../../api/hub';
@@ -12,10 +13,43 @@ import { Button, Slate } from '../ui';
 import { haptics } from '../../utils/haptics';
 import { colors, fonts, radius, space, type } from '../../theme';
 
-// BOA's casting calls have their own image, not the show's poster (that's
-// on the Originals): a film set, a light held over the performers.
-// "On Set II" by Wesley Tingey (Unsplash, via Wikimedia Commons), CC0.
-const CASTING_ART = require('../../../assets/images/casting-on-set.jpg');
+/**
+ * The backdrop for BOA's own casting calls: drawn, not photographed, so
+ * it's razor sharp on any screen. A spotlight falls from the top right
+ * through a lens of gold rings onto a dark stage.
+ */
+function CinematicBackdrop() {
+  return (
+    <View style={StyleSheet.absoluteFill} pointerEvents="none" testID="casting-art">
+      <LinearGradient colors={['#1B150C', '#0D0C0E', '#060607']} locations={[0, 0.45, 1]} start={{ x: 1, y: 0 }} end={{ x: 0.2, y: 1 }} style={StyleSheet.absoluteFill} />
+      <Svg width="100%" height="100%" viewBox="0 0 400 520" preserveAspectRatio="xMidYMid slice" style={StyleSheet.absoluteFill}>
+        <Defs>
+          <RadialGradient id="cast-key" cx="88%" cy="2%" r="75%">
+            <Stop offset="0" stopColor="#F6D38A" stopOpacity={0.55} />
+            <Stop offset="0.35" stopColor="#E2A84B" stopOpacity={0.18} />
+            <Stop offset="1" stopColor="#E2A84B" stopOpacity={0} />
+          </RadialGradient>
+          <SvgLinearGradient id="cast-beam" x1="1" y1="0" x2="0.15" y2="1">
+            <Stop offset="0" stopColor="#F6D38A" stopOpacity={0.32} />
+            <Stop offset="0.7" stopColor="#E2A84B" stopOpacity={0.04} />
+            <Stop offset="1" stopColor="#E2A84B" stopOpacity={0} />
+          </SvgLinearGradient>
+        </Defs>
+        <Rect width="400" height="520" fill="url(#cast-key)" />
+        {/* The spotlight's cone. */}
+        <Path d="M 352 -10 L 400 -10 L 150 520 L -20 520 Z" fill="url(#cast-beam)" />
+        {/* A lens of gold rings around the light. */}
+        {[70, 120, 175, 235, 300].map((r, i) => (
+          <Circle key={r} cx="352" cy="10" r={r} stroke="#E2A84B" strokeOpacity={0.22 - i * 0.035} strokeWidth={i === 0 ? 1.4 : 1} fill="none" />
+        ))}
+        {/* Fine light streaks across the dark. */}
+        {[150, 210, 265].map((y, i) => (
+          <Line key={y} x1="-10" y1={y + 60} x2="410" y2={y - 70} stroke="#F6D38A" strokeOpacity={0.06 + i * 0.015} strokeWidth="0.8" />
+        ))}
+      </Svg>
+    </View>
+  );
+}
 
 const STATUS_LABEL = { submitted: 'Applied', shortlisted: 'Shortlisted', declined: 'Not this time', hired: 'Hired' };
 
@@ -28,19 +62,21 @@ function AppliedPill({ status }) {
   );
 }
 
-/** The massive gold band on BOA's own productions. */
+/** The massive gold band on BOA's own productions, breathing a soft gold glow. */
 function OriginalBadge() {
+  const t = useSharedValue(0);
+  useEffect(() => {
+    t.value = withRepeat(withTiming(1, { duration: 2200, easing: Easing.inOut(Easing.sin) }), -1, true);
+  }, [t]);
+  const halo = useAnimatedStyle(() => ({ opacity: 0.45 + t.value * 0.4 }));
   return (
-    <LinearGradient
-      colors={['#FFE6A8', colors.gold, colors.goldDeep]}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
-      style={styles.originalBadge}
-      testID="badge-boa-original"
-    >
-      <Ionicons name="film" size={16} color={colors.bg} />
-      <Text style={styles.originalBadgeText}>BOA ORIGINAL PRODUCTION</Text>
-    </LinearGradient>
+    <View style={styles.originalBadgeWrap}>
+      <Animated.View pointerEvents="none" style={[styles.originalBadgeHalo, halo]} />
+      <LinearGradient colors={['#FFE6A8', colors.gold, colors.goldDeep]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.originalBadge} testID="badge-boa-original">
+        <Ionicons name="film" size={16} color={colors.bg} />
+        <Text style={styles.originalBadgeText}>BOA ORIGINAL PRODUCTION</Text>
+      </LinearGradient>
+    </View>
   );
 }
 
@@ -57,21 +93,16 @@ function VerifiedGigBadge() {
 /** A BOA Original: cinematic, the key art behind it, no budget. */
 function OriginalCard({ call, applied, onApply, index }) {
   return (
-    <Animated.View entering={FadeInDown.delay(index * 70).springify().damping(18)} style={styles.originalCard} testID={`casting-${call.id}`}>
-      <Image source={CASTING_ART} style={StyleSheet.absoluteFill} resizeMode="cover" testID="casting-art" />
-      {/* BOA's gold light over the black-and-white set, then night below. */}
-      <LinearGradient
-        colors={['rgba(226,168,75,0.38)', 'rgba(226,168,75,0.06)', 'rgba(5,5,6,0)']}
-        locations={[0, 0.45, 0.7]}
-        start={{ x: 0.85, y: 0 }}
-        end={{ x: 0.2, y: 1 }}
-        style={StyleSheet.absoluteFill}
-      />
-      <LinearGradient
-        colors={['rgba(5,5,6,0.2)', 'rgba(5,5,6,0.5)', 'rgba(5,5,6,0.97)']}
-        locations={[0, 0.42, 1]}
-        style={StyleSheet.absoluteFill}
-      />
+    <Animated.View
+      entering={FadeInDown.delay(index * 70)
+        .springify()
+        .damping(18)}
+      style={styles.originalCard}
+      testID={`casting-${call.id}`}
+    >
+      <CinematicBackdrop />
+      {/* Night falls over the bottom, so the white type and the gold Apply read perfectly. */}
+      <LinearGradient colors={['rgba(5,5,6,0)', 'rgba(5,5,6,0.72)', 'rgba(5,5,6,0.96)']} locations={[0.3, 0.62, 1]} style={StyleSheet.absoluteFill} />
       <OriginalBadge />
       <View style={{ flex: 1 }} />
       <Text style={styles.originalTitle}>{call.title}</Text>
@@ -82,9 +113,7 @@ function OriginalCard({ call, applied, onApply, index }) {
       <Text style={styles.originalBody} numberOfLines={4}>
         {call.description}
       </Text>
-      <View style={styles.cardFoot}>
-        {applied ? <AppliedPill status={applied} /> : <Button label="Apply" icon="videocam-outline" onPress={() => onApply(call)} />}
-      </View>
+      <View style={styles.cardFoot}>{applied ? <AppliedPill status={applied} /> : <Button label="Apply" icon="videocam-outline" onPress={() => onApply(call)} />}</View>
     </Animated.View>
   );
 }
@@ -103,7 +132,13 @@ function Meta({ icon, text }) {
 /** An external gig, on frosted glass, with its budget. */
 function GigCard({ call, applied, mine, onApply, index }) {
   return (
-    <Animated.View entering={FadeInDown.delay(index * 70).springify().damping(18)} style={styles.gigCard} testID={`casting-${call.id}`}>
+    <Animated.View
+      entering={FadeInDown.delay(index * 70)
+        .springify()
+        .damping(18)}
+      style={styles.gigCard}
+      testID={`casting-${call.id}`}
+    >
       <LinearGradient colors={['rgba(255,255,255,0.08)', 'rgba(255,255,255,0.02)']} style={StyleSheet.absoluteFill} />
       <View style={styles.gigHead}>
         <VerifiedGigBadge />
@@ -262,7 +297,14 @@ function PostSheet({ open, onClose, onPosted, onSignIn }) {
             <Button label="Join the Hub to post" icon="arrow-forward" onPress={onSignIn} style={{ marginTop: space.xl }} />
           ) : (
             <>
-              <Field label="Title" value={form.title} onChangeText={(t) => set('title')(t.slice(0, 120))} placeholder="e.g. Lead for a music video" testID="post-title" style={{ marginTop: space.xl }} />
+              <Field
+                label="Title"
+                value={form.title}
+                onChangeText={(t) => set('title')(t.slice(0, 120))}
+                placeholder="e.g. Lead for a music video"
+                testID="post-title"
+                style={{ marginTop: space.xl }}
+              />
               <Text style={styles.label}>Role needed</Text>
               <View style={styles.roles}>
                 {ROLES.map((r) => (
@@ -278,7 +320,14 @@ function PostSheet({ open, onClose, onPosted, onSignIn }) {
                 testID="post-budget"
                 style={{ marginTop: space.lg }}
               />
-              <Field label="Location" value={form.location} onChangeText={(t) => set('location')(t.slice(0, 120))} placeholder="City, or Remote" testID="post-location" style={{ marginTop: space.lg }} />
+              <Field
+                label="Location"
+                value={form.location}
+                onChangeText={(t) => set('location')(t.slice(0, 120))}
+                placeholder="City, or Remote"
+                testID="post-location"
+                style={{ marginTop: space.lg }}
+              />
               <Field
                 label="Description"
                 value={form.description}
@@ -415,7 +464,16 @@ export default function CastingBoard({ navigation }) {
 const styles = StyleSheet.create({
   section: { paddingHorizontal: space.xl, paddingTop: space.lg, paddingBottom: space.xl, gap: space.lg },
   head: { flexDirection: 'row', alignItems: 'flex-end', gap: space.md },
-  notice: { flexDirection: 'row', alignItems: 'center', gap: space.sm, padding: space.md, borderRadius: radius.lg, backgroundColor: 'rgba(226,168,75,0.12)', borderWidth: 1, borderColor: 'rgba(226,168,75,0.4)' },
+  notice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    padding: space.md,
+    borderRadius: radius.lg,
+    backgroundColor: 'rgba(226,168,75,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(226,168,75,0.4)',
+  },
   noticeText: { flex: 1, fontFamily: fonts.medium, fontSize: 13, color: colors.text },
   empty: { paddingVertical: space.lg },
   originalCard: {
@@ -428,6 +486,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     boxShadow: '0px 18px 40px rgba(0,0,0,0.55), 0px 0px 30px rgba(226,168,75,0.18)',
   },
+  originalBadgeWrap: { alignSelf: 'flex-start' },
+  originalBadgeHalo: { ...StyleSheet.absoluteFillObject, borderRadius: radius.pill, boxShadow: '0px 0px 28px 4px rgba(226,168,75,0.7)' },
   originalBadge: {
     alignSelf: 'flex-start',
     flexDirection: 'row',
@@ -454,7 +514,17 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(18,18,22,0.6)',
   },
   gigHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.md },
-  gigBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 5, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.gold, backgroundColor: 'rgba(226,168,75,0.12)' },
+  gigBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.gold,
+    backgroundColor: 'rgba(226,168,75,0.12)',
+  },
   gigBadgeText: { fontFamily: fonts.bold, fontSize: 11, letterSpacing: 1.2, color: colors.gold },
   budget: { fontFamily: fonts.semibold, fontSize: 22, letterSpacing: -0.6, color: colors.text },
   gigTitle: { fontFamily: fonts.semibold, fontSize: 20, letterSpacing: -0.5, color: colors.text, marginTop: space.md },

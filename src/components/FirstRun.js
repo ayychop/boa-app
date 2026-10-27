@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useHub } from '../context/HubContext';
 import { hasSeenTour, markTourSeen, onTourReplay } from '../api/onboarding';
-import { LAST_SEEN_KEY, WHATS_NEW, shouldShowWhatsNew } from '../lib/whats-new';
+import { LAST_SEEN_KEY, currentRelease, shouldShowWhatsNew } from '../lib/whats-new';
 import FeatureTour from './onboarding/FeatureTour';
 import WhatsNewModal from './WhatsNewModal';
 
@@ -23,9 +23,9 @@ export default function FirstRun({ freshInstall }) {
       .catch(() => null)
       .then((seen) => {
         if (!alive) return;
-        if (shouldShowWhatsNew(seen, WHATS_NEW.version, freshInstall)) setWhatsNew(true);
-        // A fresh install starts on this version's notes, already read.
-        else if (seen == null) AsyncStorage.setItem(LAST_SEEN_KEY, WHATS_NEW.version).catch(() => {});
+        if (shouldShowWhatsNew(seen, currentRelease(), freshInstall)) setWhatsNew(true);
+        // A fresh install starts on this build's notes, already read.
+        else if (seen == null) AsyncStorage.setItem(LAST_SEEN_KEY, currentRelease()).catch(() => {});
       });
     return () => {
       alive = false;
@@ -54,7 +54,7 @@ export default function FirstRun({ freshInstall }) {
 
   const closeWhatsNew = useCallback(() => {
     setWhatsNew(false);
-    AsyncStorage.setItem(LAST_SEEN_KEY, WHATS_NEW.version).catch(() => {});
+    AsyncStorage.setItem(LAST_SEEN_KEY, currentRelease()).catch(() => {});
   }, []);
 
   return (

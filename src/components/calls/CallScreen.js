@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Image, Modal, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Animated, { Easing, FadeIn, FadeInDown, FadeOutDown, SlideInDown, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSpring, withTiming } from 'react-native-reanimated';
+import Animated, { Easing, FadeIn, FadeInDown, FadeOut, FadeOutDown, SlideInDown, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSpring, withTiming } from 'react-native-reanimated';
 import { GestureDetector, GestureHandlerRootView, usePanGesture } from 'react-native-gesture-handler';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
@@ -11,6 +11,7 @@ import { useCall, END_REASONS } from '../../context/CallContext';
 import { FILTERS, describe } from '../../calls/beauty';
 import { LocalVideo, RemoteVideo } from '../../calls/media';
 import { haptics } from '../../utils/haptics';
+import { SPRING, usePress } from '../../utils/motion';
 import { Avatar, Toggle } from '../kit';
 import { GoldBadge } from '../ui';
 import { colors, fonts, radius, space } from '../../theme';
@@ -23,11 +24,10 @@ const VIDEO_NOTE = {
   reconnecting: 'Reconnecting',
   failed: "Video couldn't connect",
 };
-const PRESS = { damping: 18, stiffness: 420 };
-const SNAP = { damping: 20, stiffness: 220 };
-const BAR_ROOM = 112; // the control bar and its gap, kept clear of your picture
-const BAR_PAD = 10;
-const BAR_GAP = 6;
+const SNAP = SPRING;
+const DOCK_PAD = space.lg;
+const DOCK_GAP = 14;
+const WIDE = 600; // unfolded: every control in one row
 const PILL_ROOM = 44; // the privacy pill, when it's showing
 
 const clock = (ms) => {
@@ -54,7 +54,10 @@ function Ripple({ size, delay = 0 }) {
   useEffect(() => {
     t.value = withDelay(delay, withRepeat(withTiming(1, { duration: 2400, easing: Easing.out(Easing.quad) }), -1, false));
   }, [t, delay]);
-  const style = useAnimatedStyle(() => ({ opacity: 0.5 * (1 - t.value), transform: [{ scale: 1 + t.value * 0.7 }] }));
+  const style = useAnimatedStyle(() => ({
+    opacity: 0.5 * (1 - t.value),
+    transform: [{ scale: 1 + t.value * 0.7 }],
+  }));
   return <Animated.View pointerEvents="none" style={[styles.ripple, { width: size, height: size, borderRadius: size / 2 }, style]} />;
 }
 
@@ -64,85 +67,103 @@ function PulseRing({ size, children }) {
   useEffect(() => {
     t.value = withRepeat(withTiming(1, { duration: 1100, easing: Easing.inOut(Easing.sin) }), -1, true);
   }, [t]);
-  const ring = useAnimatedStyle(() => ({ opacity: 0.55 + t.value * 0.45, transform: [{ scale: 1 + t.value * 0.06 }] }));
+  const ring = useAnimatedStyle(() => ({
+    opacity: 0.55 + t.value * 0.45,
+    transform: [{ scale: 1 + t.value * 0.06 }],
+  }));
   const pad = 8;
   return (
-    <View style={{ width: size + pad * 2, height: size + pad * 2, alignItems: 'center', justifyContent: 'center' }}>
+    <View
+      style={{
+        width: size + pad * 2,
+        height: size + pad * 2,
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
       <Animated.View pointerEvents="none" style={[styles.pulseRing, { width: size + pad * 2, height: size + pad * 2, borderRadius: size }, ring]} />
       {children}
     </View>
   );
 }
 
-/** A round button that dips when touched and taps back through the phone. */
-function CallButton({ icon, label, onPress, on = false, onColor, tone, size = 52, iconSize, glow, ring, testID }) {
-  const scale = useSharedValue(1);
-  const style = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+/**
+ * A round button that dips when touched and taps back through the phone.
+ * caption: a label under it, for the dock. width: a pill instead of a
+ * circle, with the label inside (End).
+ */
+function CallButton({ icon, label, caption, onPress, on = false, onColor, tone, size = 52, width, iconSize, glow, ring, testID }) {
+  const press = usePress({ to: 0.9 });
   const fill = tone ? { backgroundColor: tone } : on ? (onColor ? { backgroundColor: onColor } : styles.buttonOn) : styles.buttonGlass;
+  const color = tone ? '#fff' : on ? colors.bg : colors.text;
   return (
     <Pressable
-      onPressIn={() => {
-        haptics.tap();
-        scale.value = withSpring(0.88, PRESS);
-      }}
-      onPressOut={() => {
-        scale.value = withSpring(1, PRESS);
-      }}
+      onPressIn={press.onPressIn}
+      onPressOut={press.onPressOut}
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityState={{ selected: on }}
-      hitSlop={4}
+      hitSlop={6}
+      style={styles.buttonCell}
       testID={testID}
     >
       <Animated.View
-        style={[styles.button, { width: size, height: size, borderRadius: size / 2 }, fill, glow && { boxShadow: glow }, ring && { borderWidth: 2, borderColor: ring }, style]}
+        style={[styles.button, { width: width ?? size, height: size, borderRadius: size / 2 }, fill, glow && { boxShadow: glow }, ring && { borderWidth: 2, borderColor: ring }, press.style]}
       >
-        <Ionicons name={icon} size={iconSize ?? Math.round(size * 0.44)} color={tone ? '#fff' : on ? colors.bg : colors.text} />
+        <Ionicons name={icon} size={iconSize ?? Math.round(size * 0.42)} color={color} />
+        {width ? <Text style={styles.pillLabel}>{caption}</Text> : null}
       </Animated.View>
+      {caption && !width ? (
+        <Text style={styles.caption} numberOfLines={1}>
+          {caption}
+        </Text>
+      ) : null}
     </Pressable>
   );
 }
 
-function BeautyPanel({ beauty, setBeauty, onClose, width }) {
+function BeautyPanel({ beauty, setBeauty, onClose, width, maxHeight }) {
   return (
     <Animated.View entering={FadeInDown.springify().damping(18)} exiting={FadeOutDown.duration(160)} style={[styles.panel, { width }]} testID="call-filters">
       <BlurView intensity={50} tint="dark" blurMethod="dimezisBlurView" style={StyleSheet.absoluteFill} />
       <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(10,10,12,0.55)' }]} />
       <View style={styles.panelHead}>
         <Ionicons name="sparkles" size={16} color={colors.gold} />
-        <Text style={styles.panelTitle}>BOA Filters</Text>
+        <Text style={styles.panelTitle}>BOA Studio</Text>
         <View style={{ flex: 1 }} />
         <Toggle value={beauty.enabled} onChange={(v) => setBeauty({ enabled: v })} label="Filters on" testID="call-filters-toggle" />
         <Pressable onPress={onClose} hitSlop={10} accessibilityRole="button" accessibilityLabel="Close filters" style={{ marginLeft: space.md }}>
           <Ionicons name="chevron-down" size={22} color={colors.textMuted} />
         </Pressable>
       </View>
-      <Text style={styles.panelNote}>Tuned for melanin-rich skin: smoother and richer, with your skin tone protected.</Text>
-      {FILTERS.map((f) => (
-        <View key={f.id} style={[styles.filter, !beauty.enabled && { opacity: 0.4 }]}>
-          <View style={styles.filterHead}>
-            <Ionicons name={f.icon} size={16} color={colors.gold} />
-            <Text style={styles.filterLabel}>{f.label}</Text>
-            <Text style={styles.filterValue}>{Math.round(beauty[f.id] * 100)}%</Text>
+      <Text style={styles.panelNote}>Soft studio light and noise reduction, so you look your best in any light.</Text>
+      <ScrollView style={{ maxHeight: maxHeight }} showsVerticalScrollIndicator={false}>
+        {FILTERS.map((f) => (
+          <View key={f.id} style={[styles.filter, !beauty.enabled && { opacity: 0.4 }]}>
+            <View style={styles.filterHead}>
+              <Ionicons name={f.icon} size={16} color={colors.gold} />
+              <Text style={styles.filterLabel}>{f.label}</Text>
+              <Text style={styles.filterValue}>{Math.round(beauty[f.id] * 100)}%</Text>
+            </View>
+            <Text style={styles.filterDetail}>{f.detail}</Text>
+            <Slider
+              style={{ height: 36, marginHorizontal: -4 }}
+              minimumValue={0}
+              maximumValue={1}
+              step={0.05}
+              value={beauty[f.id]}
+              disabled={!beauty.enabled}
+              onValueChange={(v) => setBeauty({ [f.id]: v })}
+              minimumTrackTintColor={colors.gold}
+              maximumTrackTintColor="rgba(243,239,232,0.18)"
+              thumbTintColor={colors.gold}
+              accessibilityLabel={f.label}
+              testID={`call-filter-${f.id}`}
+            />
           </View>
-          <Text style={styles.filterDetail}>{f.detail}</Text>
-          <Slider
-            style={{ height: 36, marginHorizontal: -4 }}
-            minimumValue={0}
-            maximumValue={1}
-            step={0.05}
-            value={beauty[f.id]}
-            disabled={!beauty.enabled}
-            onValueChange={(v) => setBeauty({ [f.id]: v })}
-            minimumTrackTintColor={colors.gold}
-            maximumTrackTintColor="rgba(243,239,232,0.18)"
-            thumbTintColor={colors.gold}
-            accessibilityLabel={f.label}
-            testID={`call-filter-${f.id}`}
-          />
-        </View>
-      ))}
+        ))}
+      </ScrollView>
     </Animated.View>
   );
 }
@@ -178,11 +199,19 @@ function SelfView({ size, top, bottomRoom, width, height, children }) {
       // Where a flick was heading decides the corner, not just where it let go.
       const px = x.value + e.velocityX * 0.12;
       const py = y.value + e.velocityY * 0.12;
-      x.value = withSpring(Math.abs(px - minX) < Math.abs(px) ? minX : 0, { ...SNAP, velocity: e.velocityX });
-      y.value = withSpring(Math.abs(py - maxY) < Math.abs(py) ? maxY : 0, { ...SNAP, velocity: e.velocityY });
+      x.value = withSpring(Math.abs(px - minX) < Math.abs(px) ? minX : 0, {
+        ...SNAP,
+        velocity: e.velocityX,
+      });
+      y.value = withSpring(Math.abs(py - maxY) < Math.abs(py) ? maxY : 0, {
+        ...SNAP,
+        velocity: e.velocityY,
+      });
     },
   });
-  const style = useAnimatedStyle(() => ({ transform: [{ translateX: x.value }, { translateY: y.value }] }));
+  const style = useAnimatedStyle(() => ({
+    transform: [{ translateX: x.value }, { translateY: y.value }],
+  }));
   return (
     <GestureDetector gesture={pan}>
       <Animated.View entering={FadeIn.delay(150).duration(300)} style={[styles.pip, size, { top, right: margin }, style]} testID="call-self-view">
@@ -197,7 +226,10 @@ function SelfView({ size, top, bottomRoom, width, height, children }) {
 function TheirVideo({ uid }) {
   const veil = useSharedValue(1);
   useEffect(() => {
-    veil.value = withTiming(0, { duration: 650, easing: Easing.out(Easing.cubic) });
+    veil.value = withTiming(0, {
+      duration: 650,
+      easing: Easing.out(Easing.cubic),
+    });
   }, [veil]);
   const style = useAnimatedStyle(() => ({ opacity: veil.value }));
   return (
@@ -258,27 +290,46 @@ export default function CallScreen({ me }) {
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [dockH, setDockH] = useState(220);
+  // Hide the controls (walking about, phone in hand) and bring them back
+  // with the button they leave behind, or a tap on the picture.
+  const [controlsHidden, setControlsHidden] = useState(false);
+  const tuck = useSharedValue(0);
+  const hideControls = () => {
+    setFiltersOpen(false);
+    setControlsHidden(true);
+    tuck.value = withSpring(1, SPRING);
+  };
+  const showControls = () => {
+    setControlsHidden(false);
+    tuck.value = withSpring(0, SPRING);
+  };
+  const dockStyle = useAnimatedStyle(() => ({
+    opacity: 1 - tuck.value,
+    transform: [{ translateY: tuck.value * (dockH + 60) }],
+  }));
   const elapsed = useElapsed(call?.phase === 'active' ? call.startedAt : null);
   useEffect(() => {
-    if (!call) setFiltersOpen(false);
-  }, [call]);
+    if (call) return;
+    setFiltersOpen(false);
+    setControlsHidden(false);
+    tuck.value = 0;
+  }, [call, tuck]);
   if (!call) return null;
 
   const { peer, phase, direction } = call;
   const incoming = direction === 'in' && phase === 'ringing';
-  const status =
-    phase === 'ended'
-      ? END_REASONS[call.reason] ?? END_REASONS.ended
-      : phase === 'active'
-        ? clock(elapsed)
-        : incoming
-          ? 'Incoming video call'
-          : 'Ringing…';
+  const status = phase === 'ended' ? (END_REASONS[call.reason] ?? END_REASONS.ended) : phase === 'active' ? clock(elapsed) : incoming ? 'Incoming video call' : 'Ringing…';
   const avatar = Math.min(150, width * 0.36);
-  const pip = { width: Math.min(116, width * 0.28), height: Math.min(164, width * 0.4) };
+  const wide = width >= WIDE;
+  const pipW = Math.round(Math.min(wide ? 176 : 150, width * 0.34));
+  const pip = { width: pipW, height: Math.round(pipW * 1.42) };
   const panelWidth = Math.min(width - space.lg * 2, 480);
-  // Seven buttons in one bar, sized to fit a folded cover screen.
-  const button = Math.max(36, Math.min(52, (Math.min(width, 480) - space.lg * 2 - BAR_PAD * 2 - BAR_GAP * 6) / 7));
+  // The dock: one row of seven unfolded; on the cover screen a 4 x 2 grid,
+  // so every button can be big. Never smaller than 56, never past 72.
+  const dockWidth = Math.min(width - space.lg * 2, wide ? 720 : 440);
+  const cols = wide ? 7 : 4;
+  const button = Math.floor(Math.max(56, Math.min(72, (dockWidth - DOCK_PAD * 2 - DOCK_GAP * (cols - 1)) / cols)));
   // They've turned screenshots off: say so at the top, and move everything else down to make room.
   const theyrePrivate = phase === 'active' && !!video?.remotePrivacy;
   const top = insets.top + space.md + (theyrePrivate ? PILL_ROOM : 0);
@@ -311,9 +362,26 @@ export default function CallScreen({ me }) {
             style={StyleSheet.absoluteFill}
           />
           {!theirs ? <LinearGradient pointerEvents="none" colors={['rgba(226,168,75,0.22)', 'rgba(226,168,75,0)']} locations={[0, 0.5]} style={StyleSheet.absoluteFill} /> : null}
+          {/* A tap on the picture hides or brings back the controls, like FaceTime. */}
+          {!incoming && phase !== 'ended' ? (
+            <Pressable
+              style={StyleSheet.absoluteFill}
+              onPress={controlsHidden ? showControls : hideControls}
+              accessibilityLabel={controlsHidden ? 'Show controls' : 'Hide controls'}
+              testID="call-picture"
+            />
+          ) : null}
 
           {incoming ? (
-            <View style={[StyleSheet.absoluteFill, { paddingTop: insets.top, paddingBottom: insets.bottom + space.xl }]}>
+            <View
+              style={[
+                StyleSheet.absoluteFill,
+                {
+                  paddingTop: insets.top,
+                  paddingBottom: insets.bottom + space.xl,
+                },
+              ]}
+            >
               <Incoming peer={peer} status={status} width={width} onAccept={accept} onDecline={decline} />
             </View>
           ) : theirs ? (
@@ -375,7 +443,7 @@ export default function CallScreen({ me }) {
 
           {/* You, in the corner. */}
           {!incoming && phase !== 'ended' ? (
-            <SelfView size={pip} top={top} bottomRoom={insets.bottom + space.lg + BAR_ROOM} width={width} height={height}>
+            <SelfView size={pip} top={top} bottomRoom={insets.bottom + space.lg + dockH + space.md} width={width} height={height}>
               {controls.cameraOff ? (
                 <Ionicons name="videocam-off" size={26} color={colors.textMuted} />
               ) : (
@@ -399,33 +467,88 @@ export default function CallScreen({ me }) {
 
           {!incoming && phase !== 'ended' ? (
             <View style={[styles.bottom, { paddingBottom: insets.bottom + space.lg }]} pointerEvents="box-none">
-              {filtersOpen ? <BeautyPanel beauty={beauty} setBeauty={setBeauty} onClose={() => setFiltersOpen(false)} width={panelWidth} /> : null}
-              {!filtersOpen ? (
+              {filtersOpen ? (
+                <BeautyPanel
+                  beauty={beauty}
+                  setBeauty={setBeauty}
+                  onClose={() => setFiltersOpen(false)}
+                  width={panelWidth}
+                  maxHeight={Math.max(180, height - dockH - insets.top - insets.bottom - 260)}
+                />
+              ) : null}
+              {!filtersOpen && !controlsHidden ? (
                 <Text style={styles.filterLine} numberOfLines={1}>
                   {describe(beauty)}
                 </Text>
               ) : null}
               {/* Keyed by phase so it slides up again the moment the call connects. */}
-              <Animated.View key={phase} entering={SlideInDown.springify().damping(20).stiffness(180)} style={styles.bar} testID="call-controls">
-                <View style={styles.barGlass}>
-                  <BlurView intensity={55} tint="dark" blurMethod="dimezisBlurView" style={StyleSheet.absoluteFill} />
-                  <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(18,18,22,0.35)' }]} />
-                </View>
-                <CallButton size={button} icon={controls.muted ? 'mic-off' : 'mic'} label={controls.muted ? 'Unmute' : 'Mute'} on={controls.muted} onPress={() => toggle('muted')} testID="call-mute" />
-                <CallButton size={button} icon={controls.cameraOff ? 'videocam-off' : 'videocam'} label={controls.cameraOff ? 'Camera on' : 'Camera off'} on={controls.cameraOff} onPress={() => toggle('cameraOff')} testID="call-camera" />
-                <CallButton size={button} icon="camera-reverse" label="Switch camera" onPress={flipCamera} testID="call-flip" />
-                <CallButton
-                  size={button}
-                  icon={controls.privacy ? 'shield-checkmark' : 'shield-outline'}
-                  label={controls.privacy ? 'Privacy Mode on' : 'Privacy Mode off'}
-                  on={controls.privacy}
-                  onColor={colors.gold}
-                  onPress={() => toggle('privacy')}
-                  testID="call-privacy"
-                />
-                <CallButton size={button} icon="sparkles" label="Filters" on={filtersOpen} onPress={() => setFiltersOpen((o) => !o)} testID="call-filters-button" />
-                <CallButton size={button} icon={controls.speaker ? 'volume-high' : 'ear'} label={controls.speaker ? 'Speaker' : 'Phone'} onPress={() => toggle('speaker')} testID="call-speaker" />
-                <CallButton size={button} icon="call" label="End" tone={RED} glow="0px 0px 18px rgba(255,59,78,0.55)" onPress={hangUp} testID="call-end" />
+              <Animated.View key={phase} entering={SlideInDown.springify().damping(SPRING.damping).stiffness(SPRING.stiffness)} style={{ width: dockWidth }}>
+                <Animated.View style={[styles.dock, dockStyle]} pointerEvents={controlsHidden ? 'none' : 'auto'} onLayout={(e) => setDockH(e.nativeEvent.layout.height)} testID="call-controls">
+                  <View style={styles.dockGlass}>
+                    <BlurView intensity={60} tint="dark" blurMethod="dimezisBlurView" style={StyleSheet.absoluteFill} />
+                    <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(18,18,22,0.4)' }]} />
+                  </View>
+                  <Pressable onPress={hideControls} hitSlop={10} accessibilityRole="button" accessibilityLabel="Hide controls" style={styles.dockHandle} testID="call-hide-controls">
+                    <View style={styles.grabber} />
+                  </Pressable>
+                  <View style={[styles.dockGrid, { gap: DOCK_GAP }]}>
+                    <CallButton
+                      size={button}
+                      caption={controls.muted ? 'Unmute' : 'Mute'}
+                      icon={controls.muted ? 'mic-off' : 'mic'}
+                      label={controls.muted ? 'Unmute' : 'Mute'}
+                      on={controls.muted}
+                      onPress={() => toggle('muted')}
+                      testID="call-mute"
+                    />
+                    <CallButton
+                      size={button}
+                      caption="Camera"
+                      icon={controls.cameraOff ? 'videocam-off' : 'videocam'}
+                      label={controls.cameraOff ? 'Camera on' : 'Camera off'}
+                      on={controls.cameraOff}
+                      onPress={() => toggle('cameraOff')}
+                      testID="call-camera"
+                    />
+                    <CallButton size={button} caption="Flip" icon="camera-reverse" label="Switch camera" onPress={flipCamera} testID="call-flip" />
+                    <CallButton size={button} caption="Filters" icon="sparkles" label="Filters" on={filtersOpen} onPress={() => setFiltersOpen((o) => !o)} testID="call-filters-button" />
+                    <CallButton
+                      size={button}
+                      caption="Privacy"
+                      icon={controls.privacy ? 'shield-checkmark' : 'shield-outline'}
+                      label={controls.privacy ? 'Privacy Mode on' : 'Privacy Mode off'}
+                      on={controls.privacy}
+                      onColor={colors.gold}
+                      onPress={() => toggle('privacy')}
+                      testID="call-privacy"
+                    />
+                    <CallButton
+                      size={button}
+                      caption={controls.speaker ? 'Speaker' : 'Phone'}
+                      icon={controls.speaker ? 'volume-high' : 'ear'}
+                      label={controls.speaker ? 'Speaker' : 'Phone'}
+                      onPress={() => toggle('speaker')}
+                      testID="call-speaker"
+                    />
+                    <CallButton
+                      size={button}
+                      width={wide ? undefined : button * 2 + DOCK_GAP}
+                      caption="End"
+                      icon="call"
+                      label="End"
+                      tone={RED}
+                      glow="0px 0px 22px rgba(255,59,78,0.55)"
+                      onPress={hangUp}
+                      testID="call-end"
+                    />
+                  </View>
+                </Animated.View>
+                {/* Controls tucked away: one small glass button brings them back. */}
+                {controlsHidden ? (
+                  <Animated.View entering={FadeIn.delay(120).duration(200)} exiting={FadeOut.duration(120)} style={styles.showWrap}>
+                    <CallButton size={56} icon="chevron-up" label="Show controls" onPress={showControls} testID="call-show-controls" />
+                  </Animated.View>
+                ) : null}
               </Animated.View>
             </View>
           ) : null}
@@ -438,15 +561,53 @@ export default function CallScreen({ me }) {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: '#050506' },
   top: { alignItems: 'center' },
-  brandRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm },
-  brand: { fontFamily: fonts.mono, fontSize: 11, letterSpacing: 3, color: 'rgba(246,211,138,0.9)' },
+  brandRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: space.sm,
+  },
+  brand: {
+    fontFamily: fonts.mono,
+    fontSize: 11,
+    letterSpacing: 3,
+    color: 'rgba(246,211,138,0.9)',
+  },
   center: { alignItems: 'center', paddingHorizontal: space.xl },
   ripple: { position: 'absolute', borderWidth: 1.5, borderColor: colors.gold },
-  pulseRing: { position: 'absolute', borderWidth: 2, borderColor: colors.gold, boxShadow: '0px 0px 36px rgba(226,168,75,0.55)' },
-  avatarRing: { borderRadius: 999, boxShadow: '0px 0px 40px rgba(226,168,75,0.45)' },
-  name: { fontFamily: fonts.semibold, fontSize: 30, lineHeight: 36, letterSpacing: -1, color: colors.text, marginTop: space.xl, textAlign: 'center' },
-  status: { fontFamily: fonts.medium, fontSize: 16, color: GOLD_LIGHT, marginTop: space.sm, fontVariant: ['tabular-nums'], textAlign: 'center' },
-  incoming: { flex: 1, alignItems: 'center', justifyContent: 'space-evenly', paddingHorizontal: space.lg },
+  pulseRing: {
+    position: 'absolute',
+    borderWidth: 2,
+    borderColor: colors.gold,
+    boxShadow: '0px 0px 36px rgba(226,168,75,0.55)',
+  },
+  avatarRing: {
+    borderRadius: 999,
+    boxShadow: '0px 0px 40px rgba(226,168,75,0.45)',
+  },
+  name: {
+    fontFamily: fonts.semibold,
+    fontSize: 30,
+    lineHeight: 36,
+    letterSpacing: -1,
+    color: colors.text,
+    marginTop: space.xl,
+    textAlign: 'center',
+  },
+  status: {
+    fontFamily: fonts.medium,
+    fontSize: 16,
+    color: GOLD_LIGHT,
+    marginTop: space.sm,
+    fontVariant: ['tabular-nums'],
+    textAlign: 'center',
+  },
+  incoming: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'space-evenly',
+    paddingHorizontal: space.lg,
+  },
   card: {
     borderRadius: radius.xl + 6,
     overflow: 'hidden',
@@ -457,10 +618,25 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(246,211,138,0.35)',
   },
   cardTint: { backgroundColor: 'rgba(12,12,15,0.5)' },
-  cardAvatar: { alignItems: 'center', justifyContent: 'center', marginTop: space.xxl },
-  answerRow: { flexDirection: 'row', justifyContent: 'space-around', maxWidth: 400, width: '100%', alignSelf: 'center' },
+  cardAvatar: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: space.xxl,
+  },
+  answerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    maxWidth: 400,
+    width: '100%',
+    alignSelf: 'center',
+  },
   answer: { alignItems: 'center', gap: space.md },
-  answerLabel: { fontFamily: fonts.semibold, fontSize: 14, color: colors.text, letterSpacing: 0.2 },
+  answerLabel: {
+    fontFamily: fonts.semibold,
+    fontSize: 14,
+    color: colors.text,
+    letterSpacing: 0.2,
+  },
   liveHead: {
     position: 'absolute',
     left: space.lg,
@@ -476,21 +652,53 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(243,239,232,0.2)',
   },
   liveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: GREEN },
-  liveName: { fontFamily: fonts.semibold, fontSize: 15, letterSpacing: -0.2, color: colors.text },
-  liveClock: { fontFamily: fonts.mono, fontSize: 11.5, color: GOLD_LIGHT, fontVariant: ['tabular-nums'] },
-  pending: { fontFamily: fonts.mono, fontSize: 9.5, letterSpacing: 1.2, color: colors.textFaint, marginTop: space.md, textAlign: 'center', textTransform: 'uppercase' },
-  pip: { position: 'absolute', borderRadius: radius.lg, boxShadow: '0px 10px 28px rgba(0,0,0,0.55)' },
+  liveName: {
+    fontFamily: fonts.semibold,
+    fontSize: 15,
+    letterSpacing: -0.2,
+    color: colors.text,
+  },
+  liveClock: {
+    fontFamily: fonts.mono,
+    fontSize: 11.5,
+    color: GOLD_LIGHT,
+    fontVariant: ['tabular-nums'],
+  },
+  pending: {
+    fontFamily: fonts.mono,
+    fontSize: 9.5,
+    letterSpacing: 1.2,
+    color: colors.textFaint,
+    marginTop: space.md,
+    textAlign: 'center',
+    textTransform: 'uppercase',
+  },
+  pip: {
+    position: 'absolute',
+    borderRadius: radius.lg,
+    boxShadow: '0px 0px 18px rgba(226,168,75,0.35), 0px 12px 30px rgba(0,0,0,0.55)',
+  },
   pipInner: {
     flex: 1,
     borderRadius: radius.lg,
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(246,211,138,0.6)',
+    borderWidth: 1.5,
+    borderColor: colors.gold,
     backgroundColor: 'rgba(18,18,22,0.85)',
   },
-  pipShield: { position: 'absolute', top: 6, left: 6, width: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(5,5,6,0.7)' },
+  pipShield: {
+    position: 'absolute',
+    top: 6,
+    left: 6,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(5,5,6,0.7)',
+  },
   privacyPill: {
     position: 'absolute',
     alignSelf: 'center',
@@ -502,22 +710,116 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: 'rgba(246,211,138,0.5)',
   },
-  privacyText: { fontFamily: fonts.semibold, fontSize: 13, color: GOLD_LIGHT, letterSpacing: 0.1 },
-  pipTag: { position: 'absolute', top: 6, right: 6, width: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(5,5,6,0.7)' },
-  bottom: { position: 'absolute', left: 0, right: 0, bottom: 0, alignItems: 'center', paddingHorizontal: space.lg, gap: space.md },
-  filterLine: { fontFamily: fonts.mono, fontSize: 10, letterSpacing: 1.2, color: colors.textMuted, textTransform: 'uppercase', textShadowColor: 'rgba(0,0,0,0.6)', textShadowRadius: 6 },
-  bar: { flexDirection: 'row', alignItems: 'center', gap: BAR_GAP, padding: BAR_PAD, borderRadius: radius.pill, boxShadow: '0px 12px 32px rgba(0,0,0,0.45)' },
-  barGlass: { ...StyleSheet.absoluteFillObject, borderRadius: radius.pill, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(243,239,232,0.22)' },
-  button: { alignItems: 'center', justifyContent: 'center' },
+  privacyText: {
+    fontFamily: fonts.semibold,
+    fontSize: 13,
+    color: GOLD_LIGHT,
+    letterSpacing: 0.1,
+  },
+  pipTag: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(5,5,6,0.7)',
+  },
+  bottom: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    paddingHorizontal: space.lg,
+    gap: space.md,
+  },
+  filterLine: {
+    fontFamily: fonts.mono,
+    fontSize: 10,
+    letterSpacing: 1.2,
+    color: colors.textMuted,
+    textTransform: 'uppercase',
+    textShadowColor: 'rgba(0,0,0,0.6)',
+    textShadowRadius: 6,
+  },
+  dock: {
+    paddingHorizontal: DOCK_PAD,
+    paddingBottom: DOCK_PAD,
+    borderRadius: 34,
+    boxShadow: '0px 16px 40px rgba(0,0,0,0.5)',
+  },
+  dockGlass: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 34,
+    overflow: 'hidden',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(243,239,232,0.22)',
+  },
+  dockHandle: {
+    alignSelf: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: space.xl,
+  },
+  grabber: {
+    width: 40,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: 'rgba(243,239,232,0.35)',
+  },
+  dockGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    rowGap: space.md,
+  },
+  showWrap: { position: 'absolute', bottom: 0, alignSelf: 'center' },
+  buttonCell: { alignItems: 'center', gap: 6 },
+  button: {
+    flexDirection: 'row',
+    gap: space.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  caption: { fontFamily: fonts.medium, fontSize: 12, color: colors.textMuted },
+  pillLabel: { fontFamily: fonts.semibold, fontSize: 16, color: '#fff' },
   buttonGlass: { backgroundColor: 'rgba(243,239,232,0.12)' },
   buttonOn: { backgroundColor: colors.text },
-  panel: { borderRadius: radius.xl, overflow: 'hidden', padding: space.lg, borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(246,211,138,0.4)' },
+  panel: {
+    borderRadius: radius.xl,
+    overflow: 'hidden',
+    padding: space.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(246,211,138,0.4)',
+  },
   panelHead: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   panelTitle: { fontFamily: fonts.semibold, fontSize: 16, color: colors.text },
-  panelNote: { fontFamily: fonts.medium, fontSize: 12, color: colors.textMuted, marginTop: space.xs },
+  panelNote: {
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    color: colors.textMuted,
+    marginTop: space.xs,
+  },
   filter: { marginTop: space.md },
   filterHead: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  filterLabel: { flex: 1, fontFamily: fonts.semibold, fontSize: 14, color: colors.text },
-  filterValue: { fontFamily: fonts.mono, fontSize: 12, color: colors.gold, fontVariant: ['tabular-nums'] },
-  filterDetail: { fontFamily: fonts.medium, fontSize: 11.5, color: colors.textFaint, marginTop: 2 },
+  filterLabel: {
+    flex: 1,
+    fontFamily: fonts.semibold,
+    fontSize: 14,
+    color: colors.text,
+  },
+  filterValue: {
+    fontFamily: fonts.mono,
+    fontSize: 12,
+    color: colors.gold,
+    fontVariant: ['tabular-nums'],
+  },
+  filterDetail: {
+    fontFamily: fonts.medium,
+    fontSize: 11.5,
+    color: colors.textFaint,
+    marginTop: 2,
+  },
 });

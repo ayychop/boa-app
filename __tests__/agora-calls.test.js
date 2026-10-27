@@ -81,9 +81,9 @@ describe('HD in any light', () => {
     expect(AUDIO_PROCESSING).toEqual(['{"che.audio.aec.enable":true}', '{"che.audio.ans.enable":true}', '{"che.audio.agc.enable":true}']);
   });
 
-  test('low light and denoising are on, auto, high quality', () => {
-    expect(LOW_LIGHT).toEqual({ mode: 0, level: 0 });
-    expect(DENOISER).toEqual({ mode: 0, level: 0 });
+  test('noise reduction on every frame, low light lifted only when dark, both high quality', () => {
+    expect(LOW_LIGHT).toEqual({ mode: 0, level: 0 }); // auto
+    expect(DENOISER).toEqual({ mode: 1, level: 0 }); // manual: always on
   });
 });
 
@@ -165,6 +165,18 @@ describe('Agora video calls', () => {
     tap.mockRestore();
     expect(screen.getByTestId('call-controls')).toBeOnTheScreen();
     expect(screen.getByTestId('call-self-view')).toBeOnTheScreen();
+
+    // Walking about: the controls tuck away (and can't be pressed), one button brings them back, so does a tap on the picture.
+    await user.press(screen.getByTestId('call-hide-controls'));
+    expect(screen.getByTestId('call-controls').props.pointerEvents).toBe('none');
+    expect(screen.getByTestId('call-show-controls')).toBeOnTheScreen();
+    await user.press(screen.getByTestId('call-show-controls'));
+    expect(screen.getByTestId('call-controls').props.pointerEvents).toBe('auto');
+    expect(screen.queryByTestId('call-show-controls')).toBeNull();
+    await user.press(screen.getByTestId('call-picture'));
+    expect(screen.getByTestId('call-show-controls')).toBeOnTheScreen();
+    await user.press(screen.getByTestId('call-picture'));
+    expect(screen.queryByTestId('call-show-controls')).toBeNull();
 
     // Filters off reach the camera too.
     await user.press(screen.getByTestId('call-filters-button'));
