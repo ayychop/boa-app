@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { Vibration } from 'react-native';
+import { AppState, Vibration } from 'react-native';
+import * as Linking from 'expo-linking';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import * as Crypto from 'expo-crypto';
@@ -13,11 +14,13 @@ import CallScreen from '../components/calls/CallScreen';
 import { haptics } from '../utils/haptics';
 import { blockScreenshots } from '../calls/privacy';
 import { notifyMissedCall } from '../chat/notifications';
+import * as BoaCall from '../../modules/boa-call';
+import { RING_MS, callFromPush, parseCallLink, pendingCall, ringLeft, ringNotification, stopRingNotification } from '../calls/incoming';
 
 const CallContext = createContext(null);
 
 // How long a call rings before it's a missed call.
-export const RING_MS = 45000;
+export { RING_MS };
 // How long "Call ended" stays up before the screen closes.
 const ENDED_MS = 1600;
 const BEAUTY_KEY = 'boa.call.beauty';
@@ -25,6 +28,8 @@ const BEAUTY_KEY = 'boa.call.beauty';
 const PRIMED_MS = 40 * 60 * 1000;
 // The incoming-call buzz: long, pause, long, repeating.
 const RING_VIBRATION = [0, 800, 600, 800, 1600];
+// Unknown (just started) counts as on screen; only a known background rings by notification.
+const onScreen = () => AppState.currentState !== 'background';
 
 // The call's id is also its Agora channel name, so it has to be unguessable.
 const newId = () => Crypto.randomUUID?.() || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`;
@@ -107,6 +112,7 @@ export function CallProvider({ children }) {
     if (controlsRef.current.privacy) blockScreenshots(false);
     setControls((c) => (c.privacy ? { ...c, privacy: false } : c));
     const c = callRef.current;
+    if (c?.direction === 'in') stopRingNotification(c.id);
     // A call that rang here and wasn't picked up stays in the notification shade.
     if (c && c.phase === 'ringing' && c.direction === 'in' && reason === 'missed') notifyMissedCall({ name: c.peer.name, peerId: c.peer.id, sound: chatSoundRef.current });
     setCall((cur) => (cur && cur.phase !== 'ended' ? { ...cur, phase: 'ended', reason } : cur));
@@ -114,6 +120,8 @@ export function CallProvider({ children }) {
       setCall(null);
       setControls(NO_CONTROLS);
       setVideo(NO_MEDIA);
+      // A call that opened the app over the lock screen leaves it there.
+      BoaCall.leaveLockScreen();
     }, ENDED_MS);
   }, []);
 
@@ -123,6 +131,7 @@ export function CallProvider({ children }) {
     const c = callRef.current;
     setCall((cur) => (cur ? { ...cur, phase: 'active', startedAt: Date.now() } : cur));
     if (!c) return;
+    if (c.direction === 'in') stopRingNotification(c.id);
     media.join(c.id, {
       beauty: beautyRef.current,
       controls: controlsRef.current,
@@ -144,6 +153,18 @@ export function CallProvider({ children }) {
   const blockedRef = useRef(blocked);
   blockedRef.current = blocked;
 
+  // An incoming call rings on the call screen with the app on screen, and
+  // as a phone-call notification when it isn't (src/calls/incoming.js).
+  const ringHere = () => {
+    Vibration.vibrate(RING_VIBRATION, true);
+    startRingtone(ringtoneRef.current);
+  };
+  const ringAway = (c) => {
+    Vibration.cancel();
+    stopRingtone();
+    ringNotification({ callId: c.id, from: c.peer, sentAt: c.sentAt, ringtone: ringtoneRef.current });
+  };
+
   /** Someone is calling: ring, unless it's a call already heard or we're busy. ms: how long it has left. */
   const ringIn = useCallback(
     ({ callId, from }, ms = RING_MS) => {
@@ -155,16 +176,32 @@ export function CallProvider({ children }) {
         return;
       }
       clearTimers();
-      setCall({ id: callId, peer: from, direction: 'in', phase: 'ringing', startedAt: null, reason: null });
+      // The ref too, at once: it can be answered (from the notification) before React renders.
+      callRef.current = { id: callId, peer: from, direction: 'in', phase: 'ringing', startedAt: null, reason: null, sentAt: Date.now() - (RING_MS - ms) };
+      setCall(callRef.current);
       setVideo(NO_MEDIA);
       // The token while it rings, so answering connects at once.
       media.warmUp(callId, { engine: false }).catch(() => {});
-      Vibration.vibrate(RING_VIBRATION, true);
-      startRingtone(ringtoneRef.current);
+      if (onScreen()) ringHere();
+      else ringAway(callRef.current);
       timers.current.ring = setTimeout(() => finish('missed'), ms);
     },
     [finish],
   );
+
+  // Ringing follows the app: back on screen, the call screen rings it (the
+  // notification goes); sent to the background, the notification does.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      const c = callRef.current;
+      if (!c || c.direction !== 'in' || c.phase !== 'ringing') return;
+      if (state === 'active') {
+        stopRingNotification(c.id);
+        ringHere();
+      } else if (state === 'background') ringAway(c);
+    });
+    return () => sub.remove();
+  }, []);
 
   // Signals sent to this phone, over Realtime (the app in the foreground).
   useEffect(() => {
@@ -195,13 +232,12 @@ export function CallProvider({ children }) {
   useEffect(() => {
     if (!userId) return undefined;
     const fromPush = (n) => {
-      const data = n?.request?.content?.data ?? {};
-      if (data.type !== 'call') return;
+      const c = callFromPush(n?.request?.content?.data);
+      if (!c) return;
       Notifications.dismissNotificationAsync?.(n.request.identifier)?.catch?.(() => {});
-      const age = Math.max(0, Date.now() - (Number(data.sentAt) || Date.now()));
-      const left = RING_MS - age;
+      const left = ringLeft(c.sentAt);
       if (left < 2000) return;
-      ringIn({ callId: data.callId, from: data.from }, left);
+      ringIn({ callId: c.callId, from: c.from }, left);
     };
     const received = Notifications.addNotificationReceivedListener(fromPush);
     const tapped = Notifications.addNotificationResponseReceivedListener((r) => fromPush(r?.notification));
@@ -314,6 +350,40 @@ export function CallProvider({ children }) {
     signal.send(c.peer.id, 'end', { callId: c.id });
     finish('ended');
   }, [finish]);
+
+  // The call notification (src/calls/incoming.js): tapping it or the
+  // full-screen intent opens the app on a call link, which rings the call
+  // here; Answer answers it as well. Cold starts too (the link the app was
+  // opened with).
+  useEffect(() => {
+    if (!userId) return undefined;
+    const fromLink = (url) => {
+      const c = parseCallLink(url);
+      if (!c) return;
+      const left = ringLeft(c.sentAt);
+      if (left >= 2000) ringIn({ callId: c.callId, from: c.from }, left);
+      if (c.action === 'accept' && callRef.current?.id === c.callId) accept();
+    };
+    Linking.getInitialURL()
+      .then((url) => url && fromLink(url))
+      .catch(() => {});
+    const sub = Linking.addEventListener('url', (e) => fromLink(e?.url));
+    return () => sub?.remove?.();
+  }, [userId, ringIn, accept]);
+
+  // Decline on the notification. A call the call screen never heard of
+  // (it only came by push) is still declined to the caller.
+  useEffect(
+    () =>
+      BoaCall.addDeclineListener((callId) => {
+        if (callRef.current?.id === callId) return decline();
+        const p = pendingCall(callId);
+        stopRingNotification(callId);
+        seen.current.add(callId);
+        if (p) signal.send(p.from.id, 'decline', { callId });
+      }),
+    [decline],
+  );
 
   // The call screen's buttons give their own haptic tap.
   const toggle = useCallback((key) => {

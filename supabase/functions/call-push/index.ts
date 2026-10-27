@@ -7,8 +7,14 @@
 // an app in the background and its Realtime socket with it, so a phone in
 // a pocket only heard the ring once it was opened. This sends the same ring
 // as a high-priority FCM push (through Expo, like message-push), which
-// wakes the phone: it pops up on the ringtone's call channel, and tapping
-// it opens the incoming call screen (src/context/CallContext.js).
+// wakes the phone.
+//
+// Android phones get it data-only: nothing shows by itself, the app's
+// background task (src/calls/pushTask.js) wakes and rings it like a phone
+// call, full screen over the lock screen with Answer and Decline
+// (modules/boa-call). A visible push would only ever be a text-message
+// style banner. iPhones get the visible push, on the ringtone's sound;
+// tapping it opens the incoming call screen (src/context/CallContext.js).
 //
 // Only the caller can send it, signed in and not banned, to someone who
 // hasn't blocked them (and whom they haven't blocked). Who is calling comes
@@ -63,7 +69,7 @@ Deno.serve(async (req) => {
       admin.from('profiles').select('id, username, display_name, avatar_url, banned_at').eq('id', me.user.id).maybeSingle(),
       admin.from('profiles').select('ringtone_preference').eq('id', to).maybeSingle(),
       admin.rpc('is_blocked', { a: me.user.id, b: to }),
-      admin.from('push_tokens').select('token').eq('user_id', to),
+      admin.from('push_tokens').select('token, platform').eq('user_id', to),
     ]);
     if (!from || from.banned_at) return refuse(403, "This account can't make calls.", { user: me.user.id });
     if (blocked) return json({ skipped: 'blocked' });
@@ -71,21 +77,27 @@ Deno.serve(async (req) => {
 
     const name = from.display_name?.trim() || (from.username ? `@${from.username}` : 'BOA HUB member');
     const ringtone = RINGTONES.includes(them?.ringtone_preference) ? them!.ringtone_preference : RINGTONES[0];
-    const pushes = tokens.map((t) => ({
-      to: t.token,
-      title: name,
-      body: 'Incoming video call',
-      sound: `${ringtone}.wav`,
-      channelId: `boa-call-${ringtone}`,
-      priority: 'high',
-      ttl: RING_SECONDS,
-      data: {
-        type: 'call',
-        callId,
-        sentAt: Date.now(),
-        from: { id: from.id, name, avatar_url: from.avatar_url ?? null },
-      },
-    }));
+    const data = {
+      type: 'call',
+      callId,
+      sentAt: Date.now(),
+      ringtone,
+      from: { id: from.id, name, avatar_url: from.avatar_url ?? null },
+    };
+    const pushes = tokens.map((t) =>
+      t.platform === 'android'
+        ? { to: t.token, priority: 'high', ttl: RING_SECONDS, data }
+        : {
+            to: t.token,
+            title: name,
+            body: 'Incoming video call',
+            sound: `${ringtone}.wav`,
+            channelId: `boa-call-${ringtone}`,
+            priority: 'high',
+            ttl: RING_SECONDS,
+            data,
+          },
+    );
 
     const res = await fetch(EXPO_PUSH, {
       method: 'POST',

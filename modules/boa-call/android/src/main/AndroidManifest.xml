@@ -1,0 +1,9 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <!-- Lets an incoming call take over the screen, even locked. Android 14+
+       grants it by default only to calling apps, and Play asks for a
+       declaration of it (Policy > App content > Full-screen intent). -->
+  <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+  <application>
+    <receiver android:name="expo.modules.boacall.CallDeclineReceiver" android:exported="false" />
+  </application>
+</manifest>

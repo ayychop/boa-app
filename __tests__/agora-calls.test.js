@@ -23,6 +23,15 @@ jest.mock('../src/calls/signaling', () => ({
   send: jest.fn(async () => true),
   pushRing: jest.fn(async () => true),
 }));
+// Call links (the call notification's tap, full-screen intent and Answer).
+let mockLink = null;
+jest.mock('expo-linking', () => ({
+  getInitialURL: jest.fn(async () => null),
+  addEventListener: jest.fn((type, fn) => {
+    mockLink = fn;
+    return { remove: () => (mockLink = null) };
+  }),
+}));
 // Our backend's answer: the Agora App ID, a token and this person's uid.
 jest.mock('../src/calls/token', () => ({ fetchToken: jest.fn(async () => ({ appId: 'boa-app-id', token: 'tok-1', uid: 4242 })) }));
 
@@ -554,5 +563,92 @@ describe('the first call works first time', () => {
     expect(screen.getByTestId('call-video-note')).toHaveTextContent("Video couldn't connect: timed out");
     await user.press(screen.getByTestId('call-end'));
     await act(async () => jest.advanceTimersByTime(2000));
+  });
+});
+
+describe('ringing like a phone call (the app in the background)', () => {
+  const BoaCall = require('../modules/boa-call');
+  const { AppState } = require('react-native');
+  const { callLink, parseCallLink, callFromPush, ringNotification } = require('../src/calls/incoming');
+  const from = { id: 'user-kofi', name: 'Kofi Boateng', avatar_url: null };
+  const away = AppState.currentState;
+  afterEach(() => {
+    AppState.currentState = away;
+  });
+
+  test('call links and call pushes read back, however the push arrived', () => {
+    const call = { callId: 'f1c3e1f0-0000-4000-8000-000000000001', from, sentAt: 1000 };
+    expect(parseCallLink(callLink(call, 'accept'))).toEqual({ ...call, action: 'accept' });
+    expect(parseCallLink(callLink(call))).toEqual({ ...call, action: null });
+    expect(parseCallLink('network.boa://u/kofi')).toBeNull();
+    const data = { type: 'call', callId: call.callId, sentAt: 1000, ringtone: 'rnb', from };
+    const read = { ...call, ringtone: 'rnb' };
+    expect(callFromPush({ dataString: JSON.stringify(data) })).toEqual(read);
+    expect(callFromPush({ body: JSON.stringify(data) })).toEqual(read);
+    expect(callFromPush({ ...data, from: JSON.stringify(from) })).toEqual(read);
+    expect(callFromPush({ type: 'chat' })).toBeNull();
+  });
+
+  test('a ring with the app in the background rings the call notification, not the in-app ringtone', async () => {
+    AppState.currentState = 'background';
+    await mount();
+    createAudioPlayer.mockClear();
+    BoaCall.showIncoming.mockClear();
+    const callId = 'f1c3e1f0-0000-4000-8000-000000000002';
+    await act(async () => mockSignal('ring', { callId, from }));
+    expect(BoaCall.showIncoming).toHaveBeenCalledWith(
+      expect.objectContaining({
+        callId,
+        name: 'Kofi Boateng',
+        channelId: 'boa-call-hiphop',
+        link: expect.stringMatching(/^network\.boa:\/\/call\//),
+        acceptLink: expect.stringContaining('action=accept'),
+      }),
+    );
+    expect(createAudioPlayer).not.toHaveBeenCalled();
+    // Nobody answers: the notification goes when the call is missed.
+    BoaCall.cancelIncoming.mockClear();
+    await act(async () => jest.advanceTimersByTime(46000));
+    expect(BoaCall.cancelIncoming).toHaveBeenCalled();
+    await act(async () => jest.advanceTimersByTime(2000));
+    expect(BoaCall.leaveLockScreen).toHaveBeenCalled();
+  });
+
+  test('Answer on the notification opens the app on the call and answers it', async () => {
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    await mount();
+    signal.send.mockClear();
+    const callId = 'f1c3e1f0-0000-4000-8000-000000000003';
+    await act(async () => mockLink({ url: callLink({ callId, from, sentAt: Date.now() }, 'accept') }));
+    expect(signal.send).toHaveBeenCalledWith('user-kofi', 'accept', { callId, by: 'user-me' });
+    expect(BoaCall.cancelIncoming).toHaveBeenCalled();
+    await user.press(screen.getByTestId('call-end'));
+    await act(async () => jest.advanceTimersByTime(2000));
+  });
+
+  test('a stale call link (the ring is over) rings nothing', async () => {
+    await mount();
+    signal.send.mockClear();
+    await act(async () => mockLink({ url: callLink({ callId: 'f1c3e1f0-0000-4000-8000-000000000004', from, sentAt: Date.now() - 60000 }, 'accept') }));
+    expect(signal.send).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('call-accept')).toBeNull();
+  });
+
+  test('Decline on the notification declines to the caller, even a call that only came by push', async () => {
+    await mount();
+    signal.send.mockClear();
+    const callId = 'f1c3e1f0-0000-4000-8000-000000000005';
+    await ringNotification({ callId, from, sentAt: Date.now(), ringtone: 'rnb' });
+    expect(BoaCall.showIncoming).toHaveBeenLastCalledWith(expect.objectContaining({ callId, channelId: 'boa-call-rnb' }));
+    await act(async () => BoaCall.__decline(callId));
+    expect(signal.send).toHaveBeenCalledWith('user-kofi', 'decline', { callId });
+  });
+
+  test('the push function rings Android phones data-only (the app rings full screen), iPhones visibly', () => {
+    const fn = fs.readFileSync(path.join(__dirname, '../supabase/functions/call-push/index.ts'), 'utf8');
+    expect(fn).toMatch(/t\.platform === 'android'\s*\?\s*\{ to: t\.token, priority: 'high', ttl: RING_SECONDS, data \}/);
+    expect(fn).toMatch(/ringtone,/);
+    const app = require('../app.json').expo;
+    expect(app.android.permissions).toContain('android.permission.USE_FULL_SCREEN_INTENT');
   });
 });

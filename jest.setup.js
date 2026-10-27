@@ -295,6 +295,24 @@ jest.mock('./modules/boa-screen', () => {
   };
 });
 
+// Incoming calls rung like phone calls (Android).
+jest.mock('./modules/boa-call', () => {
+  const declines = new Set();
+  return {
+    isAvailable: true,
+    showIncoming: jest.fn(async () => true),
+    cancelIncoming: jest.fn(async () => {}),
+    addDeclineListener: jest.fn((fn) => {
+      declines.add(fn);
+      return () => declines.delete(fn);
+    }),
+    canUseFullScreen: jest.fn(() => true),
+    openFullScreenSettings: jest.fn(async () => {}),
+    leaveLockScreen: jest.fn(async () => {}),
+    __decline: (callId) => declines.forEach((fn) => fn(callId)),
+  };
+});
+
 // Alarms: scheduled notifications, never actually delivered in tests.
 jest.mock('expo-notifications', () => {
   const sub = () => ({ remove: jest.fn() });

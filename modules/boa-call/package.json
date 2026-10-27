@@ -1,0 +1,7 @@
+{
+  "name": "boa-call",
+  "version": "1.0.0",
+  "private": true,
+  "main": "index.js",
+  "description": "Rings an incoming BOA video call like a phone call: a full-screen, call-style notification that wakes the phone and shows over the lock screen."
+}

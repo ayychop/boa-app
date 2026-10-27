@@ -40,6 +40,7 @@ import AmbientGlow from '../../components/chat/AmbientGlow';
 import Composer from '../../components/chat/Composer';
 import TypingIndicator, { TypingDots } from '../../components/chat/TypingIndicator';
 import ThreadHeader from '../../components/chat/ThreadHeader';
+import ChatVibeSheet from '../../components/chat/ChatVibeSheet';
 import useChatVibe, { vibeById } from '../../chat/vibes';
 import { withChatTheme } from '../../chat/bubbleTheme';
 import { MediaTile, MediaViewer, VoiceNote } from '../../components/chat/media';
@@ -198,6 +199,8 @@ function Thread({ navigation, route }) {
   const [once, setOnce] = useState(null);
   const [keyboard, setKeyboard] = useState(false);
   const [theyType, setTheyType] = useState(false);
+  // The vibe sheet, from the header's palette: change the look mid-chat.
+  const [picking, setPicking] = useState(false);
   // The header and composer float over the conversation on glass, so the
   // list keeps their heights clear at its ends.
   const [headerH, setHeaderH] = useState(insets.top + 60);
@@ -565,6 +568,7 @@ function Thread({ navigation, route }) {
       status={other ? <HeaderStatus person={other} online={online} typing={theyType} accent={vibe.accent} ink={vibe.ink} muted={vibe.light ? vibe.inkMuted : null} /> : null}
       onBack={() => navigation.goBack()}
       onProfile={conv && other ? () => navigation.navigate('HubProfile', { id: conv.otherId }) : null}
+      onVibe={() => setPicking(true)}
       onCall={calls && other && !isBlocked ? () => calls.startCall({ ...other, id: conv.otherId }) : null}
       callState={calls?.callPrep}
       onLayout={(e) => setHeaderH(e.nativeEvent.layout.height)}
@@ -595,6 +599,7 @@ function Thread({ navigation, route }) {
           </View>
         </BlurTargetView>
         {header}
+        <ChatVibeSheet open={picking} onClose={() => setPicking(false)} />
       </View>
     );
   }
@@ -671,6 +676,7 @@ function Thread({ navigation, route }) {
       <MediaViewer item={viewing} onClose={() => setViewing(null)} />
       <SendMediaSheet file={picked} viewOnce={viewOnce} onViewOnce={setViewOnce} onCancel={() => setPicked(null)} onSend={sendPicked} />
       <ReportSheet target={reporting} onClose={(didBlock) => (setReporting(null), didBlock && navigation.goBack())} />
+      <ChatVibeSheet open={picking} onClose={() => setPicking(false)} />
       <ViewOnceViewer item={once} onClose={closeOnce} />
     </View>
   );

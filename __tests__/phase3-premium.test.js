@@ -286,8 +286,9 @@ describe('push notifications', () => {
     expect(SQL).toMatch(/private\.push_settings/);
     const app = require('../app.json').expo;
     const notif = app.plugins.find((p) => Array.isArray(p) && p[0] === 'expo-notifications')[1];
-    expect(notif.icon).toBe('./assets/notification-icon.png');
-    expect(fs.existsSync(path.join(__dirname, '../assets/notification-icon.png'))).toBe(true);
+    // One compact white glyph (the skyline O), never the whole wordmark squeezed into 24dp.
+    expect(notif.icon).toBe('./assets/notification-small-icon.png');
+    expect(fs.existsSync(path.join(__dirname, '../assets/notification-small-icon.png'))).toBe(true);
   });
 });
 

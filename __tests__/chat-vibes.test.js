@@ -111,11 +111,16 @@ beforeEach(async () => {
   resetChatVibe();
 });
 
-// The vibe is picked from your profile now, not from inside a thread.
-test('the thread has no vibe button of its own', async () => {
+// The palette in the thread header changes the vibe mid-chat (your profile has it too).
+test("the thread header's palette opens the vibe sheet, and a pick shows at once", async () => {
+  const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
   await open(AMA);
-  expect(screen.queryByRole('button', { name: 'Chat vibe' })).toBeNull();
   expect(screen.queryByTestId('chat-vibe-sheet')).toBeNull();
+  expect(screen.getByTestId('chat-mesh-noir')).toBeOnTheScreen();
+  await user.press(screen.getByRole('button', { name: 'Chat vibe' }));
+  expect(screen.getByTestId('chat-vibe-sheet')).toBeOnTheScreen();
+  await user.press(screen.getByTestId('chat-vibe-neon'));
+  expect(screen.getByTestId('chat-mesh-neon')).toBeOnTheScreen();
 });
 
 test('a pick in the vibe sheet turns an open thread blue and violet at once, and is saved', async () => {
