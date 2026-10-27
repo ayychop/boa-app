@@ -1,4 +1,4 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -14,17 +14,24 @@ const AVATAR = 42;
  * and the vibe button. Avatar and the name block share one centre line.
  * On Android the blur needs `blurTarget`, the view holding what's behind.
  */
-export default function ThreadHeader({ name, person, online, badge, status, vibe, blurTarget, onBack, onProfile, onVibe, onCall, onLayout }) {
+/**
+ * callState: 'preparing' while the next call gets ready in the background
+ * (a small spinner, the button still works), 'starting' once you've tapped
+ * and it's waiting on that (the button says "Preparing call...").
+ */
+export default function ThreadHeader({ name, person, online, badge, status, vibe, blurTarget, onBack, onProfile, onVibe, onCall, callState, onLayout }) {
   const insets = useSafeAreaInsets();
+  const ink = vibe.ink ?? colors.text;
+  const starting = callState === 'starting';
   return (
     <View style={[styles.wrap, { paddingTop: insets.top + space.sm }]} onLayout={onLayout} testID="thread-header">
-      <BlurView intensity={50} tint="dark" blurMethod="dimezisBlurView" blurTarget={blurTarget} style={StyleSheet.absoluteFill} />
+      <BlurView intensity={50} tint={vibe.light ? 'light' : 'dark'} blurMethod="dimezisBlurView" blurTarget={blurTarget} style={StyleSheet.absoluteFill} />
       {/* The glass's tint, which is also its look wherever blur isn't drawn. */}
       <View style={[StyleSheet.absoluteFill, { backgroundColor: vibe.bar }]} />
       <LinearGradient colors={['rgba(255,255,255,0.07)', 'rgba(255,255,255,0)']} style={StyleSheet.absoluteFill} pointerEvents="none" />
       <View style={styles.row}>
         <Pressable onPress={onBack} hitSlop={12} accessibilityRole="button" accessibilityLabel="Back" style={({ pressed }) => [styles.icon, pressed && styles.pressed]}>
-          <Ionicons name="chevron-back" size={24} color={colors.text} />
+          <Ionicons name="chevron-back" size={24} color={ink} />
         </Pressable>
         <Pressable
           onPress={onProfile}
@@ -36,17 +43,36 @@ export default function ThreadHeader({ name, person, online, badge, status, vibe
           {person ? <Avatar uri={person.avatar_url} name={name} size={AVATAR} online={online} /> : <View style={styles.avatarSpace} />}
           <View style={styles.text}>
             <View style={styles.nameRow}>
-              <Text style={styles.name} numberOfLines={1} accessibilityRole="header">
+              <Text style={[styles.name, { color: ink }]} numberOfLines={1} accessibilityRole="header">
                 {name}
               </Text>
               {badge}
             </View>
-            {status}
+            {starting ? (
+              <Text style={[styles.preparing, { color: vibe.accent }]} testID="thread-call-preparing">
+                Preparing call...
+              </Text>
+            ) : (
+              status
+            )}
           </View>
         </Pressable>
         {onCall ? (
-          <Pressable onPress={onCall} hitSlop={8} accessibilityRole="button" accessibilityLabel={`Video call ${name}`} style={({ pressed }) => [styles.vibe, { borderColor: vibe.accentEdge, backgroundColor: vibe.accentSoft }, pressed && styles.pressed]} testID="thread-call">
-            <Ionicons name="videocam-outline" size={19} color={vibe.accent} />
+          <Pressable
+            onPress={onCall}
+            disabled={starting}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={starting ? 'Preparing call' : `Video call ${name}`}
+            accessibilityState={{ busy: starting || callState === 'preparing' }}
+            style={({ pressed }) => [styles.vibe, { borderColor: vibe.accentEdge, backgroundColor: vibe.accentSoft }, pressed && styles.pressed]}
+            testID="thread-call"
+          >
+            {starting || callState === 'preparing' ? (
+              <ActivityIndicator size="small" color={vibe.accent} testID="thread-call-spinner" />
+            ) : (
+              <Ionicons name="videocam-outline" size={19} color={vibe.accent} />
+            )}
           </Pressable>
         ) : null}
         {onVibe ? (
@@ -72,6 +98,7 @@ const styles = StyleSheet.create({
   text: { flex: 1, minWidth: 0, minHeight: AVATAR, justifyContent: 'center' },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6, minWidth: 0 },
   name: { flexShrink: 1, fontFamily: fonts.chatBold, fontSize: 17, lineHeight: 22, letterSpacing: -0.3, color: colors.text },
+  preparing: { fontFamily: fonts.chat, fontSize: 12.5, marginTop: 3 },
   vibe: { width: 38, height: 38, borderRadius: 19, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   // A fine line of the vibe's light along the glass's lower edge.
   edge: { position: 'absolute', left: 0, right: 0, bottom: 0, height: StyleSheet.hairlineWidth, opacity: 0.45 },

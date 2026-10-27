@@ -1,5 +1,5 @@
 // How BOA video calls look and sound. Models and creatives take these
-// calls, so picture quality wins once the call is live: HD, a quality-first
+// calls, so picture quality wins once the call is live: 1080p, a quality-first
 // encoder, and Agora's clear-vision pipeline on in every call so a dim
 // bedroom or a backlit window still looks good. While it rings the camera
 // starts small (PREVIEW) so it comes on almost at once, then steps up to
@@ -9,8 +9,8 @@
 // loads anywhere, tests included; src/calls/media.native.js hands them to
 // the engine.
 
-/** 720p at 30 fps for the live call. */
-export const HD = Object.freeze({ width: 1280, height: 720, fps: 30 });
+/** 1080p at 30 fps for the live call. */
+export const HD = Object.freeze({ width: 1920, height: 1080, fps: 30 });
 
 /** setVideoEncoderConfiguration while it rings: 360p at 15 fps opens the camera fast. */
 export const PREVIEW = Object.freeze({
@@ -27,7 +27,7 @@ export const PREVIEW = Object.freeze({
 export const ENCODER = Object.freeze({
   dimensions: { width: HD.width, height: HD.height },
   frameRate: HD.fps,
-  bitrate: 2000, // Kbps: steady, clean 720p30 for a face and a room
+  bitrate: 3150, // Kbps: Agora's figure for clean 1080p30
   minBitrate: -1, // DEFAULT_MIN_BITRATE
   orientationMode: 0, // OrientationModeAdaptive: portrait phones send portrait video
   // MaintainQuality: on a weak network keep the picture sharp and give up
@@ -39,8 +39,9 @@ export const ENCODER = Object.freeze({
 
 /**
  * setCameraCapturerConfiguration: front camera. No fixed format, so the
- * camera opens at the encoder's size (PREVIEW, then ENCODER) instead of
- * spinning up full resolution before anyone has answered.
+ * camera captures at the encoder's size: small (PREVIEW) while it rings so
+ * it opens at once, then 1080p (ENCODER) from the moment the call connects.
+ * The filters run on those captured frames, before encoding.
  */
 export const CAPTURE = Object.freeze({
   cameraDirection: 1, // CameraFront
@@ -51,13 +52,14 @@ export const CAPTURE = Object.freeze({
 export const STABILIZATION_OFF = -1; // CameraStabilizationModeOff
 
 /**
- * Any light: high-quality noise reduction runs on every frame (clean skin
- * and backgrounds even in good light), and low-light enhancement runs in
- * auto mode, lifting only rooms that are actually dark.
+ * Any light: high-quality noise reduction and low-light enhancement, both
+ * in auto mode, so they only step in when the picture is actually noisy or
+ * dark. Denoising every frame smeared fine detail (tattoos, hair, fabric)
+ * in a well-lit room, so a clean picture is now left alone.
  * High-quality low light needs high-quality denoising alongside it (Agora's
  * rule), so the two are always set as a pair.
  */
-export const DENOISER = Object.freeze({ mode: 1, level: 0 }); // VideoDenoiserManual (every frame), VideoDenoiserLevelHighQuality
+export const DENOISER = Object.freeze({ mode: 0, level: 0 }); // VideoDenoiserAuto, VideoDenoiserLevelHighQuality
 export const LOW_LIGHT = Object.freeze({ mode: 0, level: 0 }); // LowLightEnhanceAuto, LowLightEnhanceLevelHighQuality
 
 /**

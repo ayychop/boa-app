@@ -36,11 +36,18 @@ function vibe(v) {
     theirsFill: 'rgba(26,24,28,0.84)',
     theirsEdge: 'rgba(255,255,255,0.2)',
     theirsText: '#F3EFE8',
+    theirsGlow: null,
     grain: true,
     bar: alpha(v.mesh[1], 0.75),
     send: [v.mine[0], v.mine[1], v.mine[2]],
     sendIcon: v.mineText,
     radius: null,
+    // light: a pale backdrop, so the header, composer and their-side text
+    // flip to dark ink and the glass blurs light instead of dark.
+    light: false,
+    // ink: the colour of the UI chrome's text and icons (header name, back
+    // arrow, composer field). White on the dark vibes, dark on a light one.
+    ink: '#F3EFE8',
     ...v,
   };
 }
@@ -127,7 +134,9 @@ export const VIBES = [
     theirs: ['rgba(170,190,255,0.16)', 'rgba(170,190,255,0.04)'],
     theirsFill: 'rgba(14,24,62,0.86)',
     theirsEdge: 'rgba(170,190,255,0.3)',
-    theirsText: '#E6ECFF',
+    theirsText: '#FFFFFF',
+    // Glowing white text on the deep navy, as the vibe promises.
+    theirsGlow: '0px 0px 10px rgba(201,214,255,0.65)',
     bar: 'rgba(8,14,40,0.6)',
     send: ['#FFFFFF', '#C9D6FF', '#8EA2DA'],
     sendIcon: '#0A1230',
@@ -273,27 +282,34 @@ export const VIBES = [
   vibe({
     id: 'minimalist',
     label: 'Minimalist',
-    detail: 'Plain dark grey, sharp white lines',
-    mesh: ['#1C1C1E', '#1C1C1E', '#1C1C1E'],
-    // Lights the colour of the grey itself: there, but nothing to see.
+    detail: 'Bright white, stark black text',
+    // A near-white paper backdrop: the one light vibe.
+    mesh: ['#FFFFFF', '#F4F4F6', '#ECECEF'],
+    // Faint grey lights, barely there, so the paper isn't dead flat.
     lights: [
-      light('a', '#1C1C1E', 1, [0.3, 0.5], [0.3, 0.5], [0.2, 0.3], 30000),
-      light('b', '#1C1C1E', 1, [0.7, 0.5], [0.7, 0.5], [0.2, 0.3], 30000),
-      light('c', '#1C1C1E', 1, [0.5, 0.5], [0.4, 0.6], [0.2, 0.3], 30000),
+      light('a', '#E2E2E6', 1.1, [0.2, 0.45], [0.2, 0.4], [0.3, 0.45], 28000),
+      light('b', '#D8D8DE', 1.2, [0.8, 0.55], [0.7, 0.55], [0.25, 0.4], 32000),
+      light('c', '#E6E6EA', 1, [0.5, 0.5], [0.4, 0.6], [0.2, 0.3], 30000),
     ],
-    veil: 'rgba(0,0,0,0)',
-    accent: '#FFFFFF',
-    mine: ['rgba(44,44,47,1)', 'rgba(44,44,47,1)', 'rgba(44,44,47,1)'],
+    veil: 'rgba(255,255,255,0)',
+    light: true,
+    ink: '#111113',
+    accent: '#111113',
+    accentSoft: 'rgba(17,17,19,0.06)',
+    accentEdge: 'rgba(17,17,19,0.22)',
+    // Your bubbles: solid near-black with white text, the only strong block.
+    mine: ['rgba(28,28,30,1)', 'rgba(20,20,22,1)', 'rgba(14,14,16,1)'],
     mineText: '#FFFFFF',
-    mineMeta: 'rgba(255,255,255,0.65)',
-    mineEdge: 'rgba(255,255,255,1)',
+    mineMeta: 'rgba(255,255,255,0.68)',
+    mineEdge: 'rgba(0,0,0,0.9)',
+    // Theirs: a light grey card, stark black text.
     theirs: ['rgba(0,0,0,0)', 'rgba(0,0,0,0)'],
-    theirsFill: 'rgba(28,28,30,1)',
-    theirsEdge: 'rgba(255,255,255,0.85)',
-    theirsText: '#FFFFFF',
-    bar: 'rgba(28,28,30,0.96)',
-    send: ['#FFFFFF', '#FFFFFF', '#FFFFFF'],
-    sendIcon: '#1C1C1E',
+    theirsFill: 'rgba(237,237,240,1)',
+    theirsEdge: 'rgba(0,0,0,0.12)',
+    theirsText: '#111113',
+    bar: 'rgba(248,248,250,0.96)',
+    send: ['#111113', '#141416', '#1C1C1E'],
+    sendIcon: '#FFFFFF',
     stars: { max: 0, deep: false },
     grain: false,
     radius: 6,

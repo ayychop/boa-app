@@ -15,7 +15,7 @@ export { PRICE };
 
 const BENEFITS = [
   { icon: 'videocam', title: 'Unlimited HD video calls', body: 'Face to face with anyone on the Hub, as long as you like.' },
-  { icon: 'sparkles', title: 'Exclusive filters', body: 'Skin Smoothing and Tone Enhancer, tuned so every skin tone stays true.' },
+  { icon: 'sparkles', title: 'Exclusive filters', body: 'Brightness, Smooth Skin, Tone, Clarity and Saturation, done by the camera in 1080p.' },
   { icon: 'heart', title: 'Save playlists & stations', body: 'Build your own library of stations and come back to it any time.' },
   { icon: 'ban', title: 'Ad-free', body: 'No interruptions between you and the music.' },
   { icon: 'pulse', title: 'Hi-Fi audio', body: 'Bass, treble and spatial sound on every station, and the best streams we can find.' },

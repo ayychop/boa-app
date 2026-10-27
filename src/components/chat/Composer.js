@@ -132,7 +132,7 @@ export default function Composer({ onSend, onAttach, onVoice, onTyping, bottomIn
 
   return (
     <View style={[styles.wrap, { paddingBottom: bottomInset + space.sm }, style]} onLayout={onLayout} testID="hub-composer-bar">
-      <BlurView intensity={50} tint="dark" blurMethod="dimezisBlurView" blurTarget={blurTarget} style={StyleSheet.absoluteFill} />
+      <BlurView intensity={50} tint={vibe.light ? 'light' : 'dark'} blurMethod="dimezisBlurView" blurTarget={blurTarget} style={StyleSheet.absoluteFill} />
       {/* The glass's tint, which is also its look wherever blur isn't drawn. */}
       <View style={[StyleSheet.absoluteFill, { backgroundColor: vibe.bar }]} />
       {recording ? (
@@ -169,11 +169,18 @@ export default function Composer({ onSend, onAttach, onVoice, onTyping, bottomIn
             onChangeText={change}
             onFocus={onFocus}
             placeholder="Message"
-            placeholderTextColor={colors.textFaint}
+            placeholderTextColor={vibe.light ? 'rgba(17,17,19,0.4)' : colors.textFaint}
             selectionColor={vibe.accent}
             multiline
             maxLength={MAX_LENGTH}
-            style={styles.input}
+            // The field flips with the vibe: dark ink on a light theme,
+            // and a tint of the backdrop so it never reads as a black box.
+            style={[
+              styles.input,
+              vibe.light
+                ? { backgroundColor: 'rgba(17,17,19,0.05)', borderColor: 'rgba(17,17,19,0.14)', color: '#111113' }
+                : { color: vibe.ink },
+            ]}
             accessibilityLabel="Message"
             testID="hub-composer"
           />

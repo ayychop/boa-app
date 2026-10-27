@@ -21,6 +21,8 @@ export const RING_MS = 45000;
 // How long "Call ended" stays up before the screen closes.
 const ENDED_MS = 1600;
 const BEAUTY_KEY = 'boa.call.beauty';
+// How long a call got ready ahead of time stays usable (its token lasts an hour).
+const PRIMED_MS = 40 * 60 * 1000;
 // The incoming-call buzz: long, pause, long, repeating.
 const RING_VIBRATION = [0, 800, 600, 800, 1600];
 
@@ -65,6 +67,11 @@ export function CallProvider({ children }) {
   const beautyRef = useRef(beauty);
   beautyRef.current = beauty;
   const timers = useRef({});
+  // The next call you place, got ready ahead (its id, token and the engine):
+  // { id, at, ready }. prep says how that's going, for the call button.
+  const primed = useRef(null);
+  const [prep, setPrep] = useState('idle'); // idle | preparing | ready | error
+  const [starting, setStarting] = useState(false);
 
   useEffect(() => {
     AsyncStorage.getItem(BEAUTY_KEY)
@@ -91,7 +98,11 @@ export function CallProvider({ children }) {
   // A call ends: say why for a moment, then close the screen.
   const finish = useCallback((reason = 'ended') => {
     clearTimers();
-    media.leave();
+    // A call that never connected (no answer, or nobody to ring) leaves
+    // nothing behind: the engine goes too, so the next call starts fresh.
+    if (reason === 'missed' || reason === 'unreachable') media.reset();
+    else media.leave();
+    if (callRef.current) media.forget(callRef.current.id);
     // Screenshots come back the moment the call ends, not when the screen closes.
     if (controlsRef.current.privacy) blockScreenshots(false);
     setControls((c) => (c.privacy ? { ...c, privacy: false } : c));
@@ -146,6 +157,8 @@ export function CallProvider({ children }) {
       clearTimers();
       setCall({ id: callId, peer: from, direction: 'in', phase: 'ringing', startedAt: null, reason: null });
       setVideo(NO_MEDIA);
+      // The token while it rings, so answering connects at once.
+      media.warmUp(callId, { engine: false }).catch(() => {});
       Vibration.vibrate(RING_VIBRATION, true);
       startRingtone(ringtoneRef.current);
       timers.current.ring = setTimeout(() => finish('missed'), ms);
@@ -210,6 +223,35 @@ export function CallProvider({ children }) {
     [],
   );
 
+  /**
+   * Gets your next call ready before you tap the call button: its id, its
+   * token from agora-token and the Agora engine. The chat thread calls this
+   * when it opens and again after each call. Safe to call often.
+   */
+  const primeCall = useCallback(() => {
+    if (!userId || !media.available) return;
+    const p = primed.current;
+    if (p && Date.now() - p.at < PRIMED_MS) return;
+    if (p) media.forget(p.id);
+    const next = { id: newId(), at: Date.now() };
+    primed.current = next;
+    setPrep('preparing');
+    next.ready = media.warmUp(next.id).then(
+      () => {
+        if (primed.current === next) setPrep('ready');
+        return true;
+      },
+      (err) => {
+        console.error('[call] warm-up failed', err?.message ?? err);
+        if (primed.current === next) {
+          primed.current = null;
+          setPrep('error');
+        }
+        return false;
+      },
+    );
+  }, [userId]);
+
   /** Calls someone (BOA Premium). person: their profile. */
   const startCall = useCallback(
     (person) =>
@@ -217,9 +259,22 @@ export function CallProvider({ children }) {
         const peer = personOf(person);
         if (!peer || !userId || peer.id === userId) return;
         if (callRef.current && callRef.current.phase !== 'ended') return;
+        // Use the call got ready ahead; if it's still getting ready, say
+        // "Preparing call..." on the button and wait for it.
+        const ahead = primed.current;
+        primed.current = null;
+        setPrep('idle');
+        if (ahead?.ready) {
+          setStarting(true);
+          await ahead.ready;
+          setStarting(false);
+          if (callRef.current && callRef.current.phase !== 'ended') return;
+        }
         clearTimers();
-        const id = newId();
-        setCall({ id, peer, direction: 'out', phase: 'ringing', startedAt: null, reason: null });
+        const id = ahead?.id ?? newId();
+        // The ref too, at once: the ring can be answered before React renders.
+        callRef.current = { id, peer, direction: 'out', phase: 'ringing', startedAt: null, reason: null };
+        setCall(callRef.current);
         setVideo(NO_MEDIA);
         haptics.selection();
         // Your camera comes on while it rings, so you can check how you look.
@@ -276,8 +331,8 @@ export function CallProvider({ children }) {
   const flipCamera = useCallback(() => media.switchCamera(), []);
 
   const value = useMemo(
-    () => ({ call, controls, video, beauty, setBeauty, startCall, accept, decline, hangUp, toggle, flipCamera }),
-    [call, controls, video, beauty, setBeauty, startCall, accept, decline, hangUp, toggle, flipCamera],
+    () => ({ call, controls, video, beauty, setBeauty, startCall, accept, decline, hangUp, toggle, flipCamera, primeCall, callPrep: starting ? 'starting' : prep }),
+    [call, controls, video, beauty, setBeauty, startCall, accept, decline, hangUp, toggle, flipCamera, primeCall, starting, prep],
   );
 
   return (

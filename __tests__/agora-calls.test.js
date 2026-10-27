@@ -59,11 +59,11 @@ const mount = () =>
 const handler = () => engine.registerEventHandler.mock.calls.at(-1)[0];
 
 describe('HD in any light', () => {
-  test('720p30 once live, quality first, never trading sharpness for frames', () => {
-    expect(HD).toEqual({ width: 1280, height: 720, fps: 30 });
-    expect(ENCODER.dimensions).toEqual({ width: 1280, height: 720 });
+  test('1080p30 once live, quality first, never trading sharpness for frames', () => {
+    expect(HD).toEqual({ width: 1920, height: 1080, fps: 30 });
+    expect(ENCODER.dimensions).toEqual({ width: 1920, height: 1080 });
     expect(ENCODER.frameRate).toBe(30);
-    expect(ENCODER.bitrate).toBe(2000);
+    expect(ENCODER.bitrate).toBe(3150);
     expect(ENCODER.degradationPreference).toBe(0); // MaintainQuality
     expect(ENCODER.advanceOptions.compressionPreference).toBe(1); // PreferQuality
     expect(CAPTURE.cameraDirection).toBe(1); // front
@@ -82,9 +82,9 @@ describe('HD in any light', () => {
     expect(AUDIO_PROCESSING).toEqual(['{"che.audio.aec.enable":true}', '{"che.audio.ans.enable":true}', '{"che.audio.agc.enable":true}']);
   });
 
-  test('noise reduction on every frame, low light lifted only when dark, both high quality', () => {
+  test('noise reduction and low light step in only when needed, so fine detail is kept, both high quality', () => {
     expect(LOW_LIGHT).toEqual({ mode: 0, level: 0 }); // auto
-    expect(DENOISER).toEqual({ mode: 1, level: 0 }); // manual: always on
+    expect(DENOISER).toEqual({ mode: 0, level: 0 }); // auto: a clean picture is left alone
   });
 });
 
@@ -113,7 +113,7 @@ describe('Agora video calls', () => {
     // Agora's rule: denoising before high-quality low light.
     expect(engine.setVideoDenoiserOptions.mock.invocationCallOrder[0]).toBeLessThan(engine.setLowlightEnhanceOptions.mock.invocationCallOrder[0]);
     expect(engine.setCameraAutoExposureFaceModeEnabled).toHaveBeenCalledWith(true);
-    expect(engine.setBeautyEffectOptions).toHaveBeenCalledWith(true, expect.objectContaining({ lighteningContrastLevel: 2, smoothnessLevel: 0.25 }));
+    expect(engine.setBeautyEffectOptions).toHaveBeenCalledWith(true, expect.objectContaining({ lighteningContrastLevel: 2, smoothnessLevel: 0.15, sharpnessLevel: 0.52 }));
     expect(engine.setColorEnhanceOptions).toHaveBeenCalledWith(true, expect.objectContaining({ skinProtectLevel: 1 }));
     // Echo cancellation, noise suppression and gain control; one stream; 1v1 tuning.
     for (const p of AUDIO_PROCESSING) expect(engine.setParameters).toHaveBeenCalledWith(p);
@@ -195,16 +195,22 @@ describe('Agora video calls', () => {
     expect(screen.queryByTestId('call-screen')).toBeNull();
   });
 
-  test('an answered incoming call joins; a token that fails says so instead of hanging', async () => {
+  test('an answered incoming call joins; a token that fails twice says so instead of hanging', async () => {
     const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
-    fetchToken.mockRejectedValueOnce(new Error('Video calls are not set up yet.'));
+    fetchToken.mockClear();
+    fetchToken.mockRejectedValue(new Error('Video calls are not set up yet.'));
     engine.joinChannel.mockClear();
+    engine.release.mockClear();
     await mount();
     await act(async () => mockSignal('ring', { callId: 'a7c3e1f0-0000-4000-8000-000000000001', from: { id: 'user-kofi', name: 'Kofi Boateng' } }));
     await user.press(screen.getByTestId('call-accept'));
     await act(async () => {});
     expect(engine.joinChannel).not.toHaveBeenCalled();
     expect(screen.getByTestId('call-video-note')).toHaveTextContent("Video couldn't connect: Video calls are not set up yet.");
+    // Fetched while it rang, on answer, and once more from scratch, then the engine is let go.
+    expect(fetchToken).toHaveBeenCalledTimes(3);
+    expect(engine.release).toHaveBeenCalled();
+    fetchToken.mockResolvedValue({ appId: 'boa-app-id', token: 'tok-1', uid: 4242 });
     await user.press(screen.getByTestId('call-end'));
     await act(async () => jest.advanceTimersByTime(2000));
 
@@ -411,9 +417,24 @@ describe('Android camera and microphone', () => {
       await act(async () => jest.advanceTimersByTime(2000));
     });
 
-    test('if Agora refuses the join, the screen says so with the code, not a black screen', async () => {
+    test('a refused first join is torn down and retried from scratch, and connects', async () => {
       jest.spyOn(PermissionsAndroid, 'requestMultiple').mockResolvedValue({ 'android.permission.CAMERA': GRANTED, 'android.permission.RECORD_AUDIO': GRANTED });
+      engine.joinChannel.mockClear();
+      engine.release.mockClear();
       engine.joinChannel.mockReturnValueOnce(-17);
+      const user = await answer('b1c3e1f0-0000-4000-8000-000000000004');
+      expect(engine.release).toHaveBeenCalledTimes(1);
+      expect(engine.joinChannel).toHaveBeenCalledTimes(2);
+      expect(screen.getByTestId('call-video-note')).toHaveTextContent('Connecting HD video');
+      await act(async () => handler().onJoinChannelSuccess({}, 10));
+      expect(screen.getByTestId('call-video-note')).toHaveTextContent('Waiting for their video');
+      await user.press(screen.getByTestId('call-end'));
+      await act(async () => jest.advanceTimersByTime(2000));
+    });
+
+    test('if Agora refuses the join twice, the screen says so with the code, not a black screen', async () => {
+      jest.spyOn(PermissionsAndroid, 'requestMultiple').mockResolvedValue({ 'android.permission.CAMERA': GRANTED, 'android.permission.RECORD_AUDIO': GRANTED });
+      engine.joinChannel.mockReturnValueOnce(-17).mockReturnValueOnce(-17);
       const user = await answer('b1c3e1f0-0000-4000-8000-000000000003');
       expect(screen.getByTestId('call-video-note')).toHaveTextContent("Video couldn't connect: Agora error 17");
       await user.press(screen.getByTestId('call-end'));
@@ -452,11 +473,86 @@ describe('incoming calls by push', () => {
 describe('the filter readout', () => {
   test('one chip per filter that is on, and "Filters off" otherwise', () => {
     const { describeParts } = require('../src/calls/beauty');
-    expect(describeParts({ studio: 0.5, flawless: 0, tone: 0.35, glow: 0.3, enabled: true })).toEqual([
-      { id: 'studio', label: 'Studio', value: '50%' },
-      { id: 'tone', label: 'Tone', value: '35%' },
-      { id: 'glow', label: 'Glow', value: '30%' },
+    expect(describeParts({ studio: 0.5, flawless: 0, glow: 0.3, clarity: 0.6, saturation: 0.35, enabled: true })).toEqual([
+      { id: 'studio', label: 'Bright', value: '50%' },
+      { id: 'glow', label: 'Tone', value: '30%' },
+      { id: 'clarity', label: 'Clarity', value: '60%' },
+      { id: 'saturation', label: 'Colour', value: '35%' },
     ]);
     expect(describeParts({ studio: 0.5, enabled: false })).toEqual([{ id: 'off', label: 'Filters off', value: null }]);
+  });
+});
+
+describe('the first call works first time', () => {
+  function Primed() {
+    const { primeCall, startCall, callPrep } = useCall();
+    return (
+      <>
+        <Text onPress={primeCall}>Prime</Text>
+        <Text onPress={() => startCall(KOFI)}>Call Kofi</Text>
+        <Text testID="prep">{callPrep}</Text>
+      </>
+    );
+  }
+  const mountPrimed = () =>
+    render(
+      <PremiumProvider>
+        <CallProvider>
+          <Primed />
+        </CallProvider>
+      </PremiumProvider>,
+    );
+
+  test('the token and engine are ready before the tap, the call uses them, and a missed call tears the engine down', async () => {
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    fetchToken.mockClear();
+    engine.release.mockClear();
+    let answer;
+    fetchToken.mockImplementationOnce((channel) => new Promise((r) => (answer = () => r({ appId: 'boa-app-id', token: 'tok-early', uid: 4242, channel }))));
+    await mountPrimed();
+    await user.press(screen.getByText('Prime'));
+    expect(screen.getByTestId('prep')).toHaveTextContent('preparing');
+    const early = fetchToken.mock.calls.at(-1)[0];
+
+    // Tapped while it's still getting ready: "starting", and nothing rings yet.
+    signal.send.mockClear();
+    await user.press(screen.getByText('Call Kofi'));
+    expect(screen.getByTestId('prep')).toHaveTextContent('starting');
+    expect(signal.send).not.toHaveBeenCalled();
+    await act(async () => answer());
+    // Ready: the call rings under the id got ready, with the token already in hand.
+    const { callId } = signal.send.mock.calls.at(-1)[2];
+    expect(callId).toBe(early);
+    expect(fetchToken).toHaveBeenCalledTimes(1);
+    expect(engine.initialize).toHaveBeenCalledWith(expect.objectContaining({ appId: 'boa-app-id' }));
+    await act(async () => mockSignal('accept', { callId }));
+    expect(engine.joinChannel).toHaveBeenLastCalledWith('tok-early', early, 4242, expect.anything());
+    await user.press(screen.getByTestId('call-end'));
+    await act(async () => jest.advanceTimersByTime(2000));
+
+    // Nobody answers: the engine is destroyed so the next call starts fresh.
+    await user.press(screen.getByText('Call Kofi'));
+    await act(async () => {});
+    await act(async () => jest.advanceTimersByTime(46000));
+    expect(engine.release).toHaveBeenCalled();
+    await act(async () => jest.advanceTimersByTime(2000));
+  });
+
+  test('a join that never connects is retried from scratch, then reported', async () => {
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    const { JOIN_TIMEOUT_MS } = require('../src/calls/media');
+    await mount();
+    await act(async () => mockSignal('ring', { callId: 'e1c3e1f0-0000-4000-8000-000000000001', from: { id: 'user-kofi', name: 'Kofi Boateng' } }));
+    await user.press(screen.getByTestId('call-accept'));
+    await act(async () => {});
+    engine.joinChannel.mockClear();
+    engine.release.mockClear();
+    await act(async () => jest.advanceTimersByTime(JOIN_TIMEOUT_MS + 10));
+    expect(engine.release).toHaveBeenCalledTimes(1);
+    expect(engine.joinChannel).toHaveBeenCalledTimes(1);
+    await act(async () => jest.advanceTimersByTime(JOIN_TIMEOUT_MS + 10));
+    expect(screen.getByTestId('call-video-note')).toHaveTextContent("Video couldn't connect: timed out");
+    await user.press(screen.getByTestId('call-end'));
+    await act(async () => jest.advanceTimersByTime(2000));
   });
 });

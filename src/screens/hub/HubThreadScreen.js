@@ -132,7 +132,7 @@ function Bubble({ message, mine, seen, fresh, vibe, onLongPress, onOpenMedia, on
         {once ? <ViewOnceTile message={message} mine={mine} onOpen={onOpenOnce} opening={opening} accent={mine ? vibe.mineText : vibe.accent} textColor={mine ? vibe.mineText : vibe.theirsText} /> : null}
         {voice ? <VoiceNote message={message} mine={mine} /> : null}
         {(!media && !voice && !once) || (caption && !once) ? (
-          <Text style={[styles.body, { color: mine ? vibe.mineText : vibe.theirsText }, media && { marginTop: space.sm, paddingHorizontal: space.xs }]}>{message.body}</Text>
+          <Text style={[styles.body, { color: mine ? vibe.mineText : vibe.theirsText }, !mine && vibe.theirsGlow && { textShadowColor: 'rgba(201,214,255,0.7)', textShadowRadius: 8 }, media && { marginTop: space.sm, paddingHorizontal: space.xs }]}>{message.body}</Text>
         ) : null}
         <Text style={[styles.meta, mine && { color: vibe.mineMeta }, media && { paddingHorizontal: space.xs }]}>
           {left ? (
@@ -232,6 +232,14 @@ function Thread({ navigation, route }) {
       alive.current = false;
     };
   }, []);
+
+  // The call button's call is got ready while you read (token and engine),
+  // and again once a call is over, so tapping it connects first time.
+  const callOpen = !!calls?.call;
+  const primeCall = calls?.primeCall;
+  useEffect(() => {
+    if (!callOpen) primeCall?.();
+  }, [callOpen, primeCall]);
 
   // This thread doesn't ring while it's on screen.
   useFocusEffect(
@@ -563,6 +571,7 @@ function Thread({ navigation, route }) {
       onProfile={conv && other ? () => navigation.navigate('HubProfile', { id: conv.otherId }) : null}
       onVibe={() => setPicking(true)}
       onCall={calls && other && !isBlocked ? () => calls.startCall({ ...other, id: conv.otherId }) : null}
+      callState={calls?.callPrep}
       onLayout={(e) => setHeaderH(e.nativeEvent.layout.height)}
     />
   );

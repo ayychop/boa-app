@@ -137,7 +137,7 @@ function BeautyPanel({ beauty, setBeauty, onClose, width, maxHeight }) {
           <Ionicons name="chevron-down" size={22} color={colors.textMuted} />
         </Pressable>
       </View>
-      <Text style={styles.panelNote}>Soft studio light and noise reduction, so you look your best in any light.</Text>
+      <Text style={styles.panelNote}>Done by the camera itself in 1080p, before your video is sent. What you see is what they see.</Text>
       <ScrollView style={{ maxHeight: maxHeight }} showsVerticalScrollIndicator={false}>
         {FILTERS.map((f) => (
           <View key={f.id} style={[styles.filter, !beauty.enabled && { opacity: 0.4 }]}>

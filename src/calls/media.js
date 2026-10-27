@@ -4,6 +4,9 @@
 
 export const available = false;
 export const prepare = async () => false;
+export const warmUp = async () => false;
+export const forget = () => {};
+export const reset = () => {};
 export const join = async (_channel, { onEvent }) => onEvent({ status: 'failed', error: 'Video calls work in the BOA HUB app.' });
 export const leave = () => {};
 export const setMuted = () => {};

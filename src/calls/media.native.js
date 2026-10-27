@@ -10,16 +10,26 @@ import { AINS_BALANCED, AUDIO, AUDIO_PROCESSING, CAPTURE, DENOISER, ENCODER, LOW
 // one joins the Agora channel named by the call's id with a token from our
 // own backend (src/calls/token.js).
 //
-// One engine for the app's life, set up the first time it's needed
-// (src/calls/quality.js): a small, fast preview while it rings, HD once the
-// call connects, quality-first encoding and the low-light pipeline. Each
-// call only previews, joins and leaves.
+// The engine is set up ahead of time (warmUp, from the chat thread before
+// the call button is tapped, and as soon as a call rings in), together with
+// the call's token, so the first call after opening the app doesn't race a
+// cold engine or a cold token function. A call that fails or never
+// connects tears everything down (reset) and tries once more from scratch;
+// only a second failure reaches the call screen.
 
 export const available = true;
 
 let engine = null;
 let engineAppId = null;
-let session = null; // { channel, token, uid, camera, mic, joined, live, speaker, privacy, streamId, handler }
+let session = null; // { channel, token, uid, camera, mic, joined, live, speaker, privacy, streamId, handler, timer }
+// Tokens fetched ahead of time, by channel: { pass, at }.
+const passes = new Map();
+
+/** How long a join may take before it's torn down and retried. */
+export const JOIN_TIMEOUT_MS = 15000;
+// A token is good for an hour (supabase/functions/agora-token); one fetched
+// ahead is used for up to 45 minutes.
+const PASS_FRESH_MS = 45 * 60 * 1000;
 
 const CHANNEL_COMMUNICATION = 0;
 const ROLE_BROADCASTER = 1;
@@ -69,7 +79,13 @@ function setup(appId) {
   if (engine && engineAppId === appId) return engine;
   engine?.release();
   engine = createAgoraRtcEngine();
-  engine.initialize({ appId, channelProfile: CHANNEL_COMMUNICATION, audioScenario: AUDIO.scenario });
+  const code = engine.initialize({ appId, channelProfile: CHANNEL_COMMUNICATION, audioScenario: AUDIO.scenario });
+  if (code < 0) {
+    engine.release();
+    engine = null;
+    engineAppId = null;
+    throw new Error(`Agora error ${-code}`);
+  }
   engineAppId = appId;
   // Sound and picture both on before anything joins.
   engine.enableAudio();
@@ -102,6 +118,33 @@ export function setBeauty(beauty) {
   engine.setColorEnhanceOptions(c.enabled, c);
 }
 
+/** The call's token: the one fetched ahead if it's still fresh, else a new one. */
+async function passFor(channel) {
+  const kept = passes.get(channel);
+  if (kept && Date.now() - kept.at < PASS_FRESH_MS) return kept.pass;
+  passes.delete(channel);
+  return fetchToken(channel);
+}
+
+/**
+ * Gets ready for a call before anyone taps anything: fetches the call's
+ * token and starts the engine, with no camera or microphone yet. Resolves
+ * once both are ready; rejects if the token can't be had. engine: false
+ * fetches only the token (a call ringing in, so nothing touches the phone's
+ * audio while the ringtone plays).
+ */
+export async function warmUp(channel, { engine: start = true } = {}) {
+  const pass = await passFor(channel);
+  passes.set(channel, { pass, at: passes.get(channel)?.at ?? Date.now() });
+  if (start) setup(pass.appId);
+  return true;
+}
+
+/** Forgets a token fetched ahead for a call that won't happen. */
+export function forget(channel) {
+  passes.delete(channel);
+}
+
 /**
  * Gets the call's token and turns the camera on, so you see yourself while
  * it rings. Safe to call twice; join() calls it if nobody has. Resolves to
@@ -112,7 +155,8 @@ export async function prepare(channel, beauty) {
   const s = { channel, joined: false };
   session = s;
   s.ready = (async () => {
-    const [pass, perm] = await Promise.all([fetchToken(channel), permissions()]);
+    const [pass, perm] = await Promise.all([passFor(channel), permissions()]);
+    passes.delete(channel);
     console.log('[call] token ok', { channel, uid: pass.uid, appId: pass.appId, camera: perm.camera, mic: perm.mic });
     if (session !== s) return false;
     Object.assign(s, { token: pass.token, uid: pass.uid, camera: perm.camera, mic: perm.mic });
@@ -131,22 +175,36 @@ export async function prepare(channel, beauty) {
  * { status: 'connecting' | 'connected' | 'reconnecting' | 'failed' },
  * { remoteUid }, { remoteVideo }.
  */
-export async function join(channel, { beauty, controls, onEvent }) {
+export async function join(channel, opts, attempt = 0) {
+  const { beauty, controls, onEvent } = opts;
+  // A failure on the first try starts again from nothing (no engine, no
+  // channel, a new token); the second is shown on the call screen.
+  const fail = (error) => {
+    if (attempt === 0) {
+      console.log('[call] retrying from scratch', { channel, error });
+      reset();
+      return join(channel, opts, 1);
+    }
+    reset();
+    onEvent({ status: 'failed', error });
+    return undefined;
+  };
   onEvent({ status: 'connecting' });
   let ok;
   try {
     ok = await prepare(channel, beauty);
   } catch (err) {
     console.error('[call] token failed', channel, err?.message ?? err);
-    if (session?.channel === channel) onEvent({ status: 'failed', error: err.message });
-    return;
+    if (session?.channel === channel) return fail(err.message);
+    return undefined;
   }
   const s = session;
-  if (!ok || s?.channel !== channel || s.joined) return;
+  if (!ok || s?.channel !== channel || s.joined) return undefined;
   s.handler = {
     onJoinChannelSuccess: (conn) => {
       console.log('[call] joined', { channel: conn?.channelId, uid: conn?.localUid });
       if (session !== s) return;
+      clearTimeout(s.timer);
       s.live = true;
       engine.setVideoEncoderConfiguration(ENCODER);
       // One small, reliable data stream for call messages (Privacy Mode).
@@ -173,7 +231,12 @@ export async function join(channel, { beauty, controls, onEvent }) {
     onConnectionStateChanged: (_c, state, reason) => {
       console.log('[call] connection state', { state, reason });
       if (state === CONNECTION_RECONNECTING) onEvent({ status: 'reconnecting' });
-      else if (state === CONNECTION_FAILED) onEvent({ status: 'failed', error: `connection ${reason}` });
+      else if (state === CONNECTION_FAILED && session === s) {
+        if (s.live) {
+          reset();
+          onEvent({ status: 'failed', error: `connection ${reason}` });
+        } else fail(`connection ${reason}`);
+      }
       else if (state === CONNECTION_CONNECTED) onEvent({ status: 'connected' });
     },
     // Sound: what each side's audio is doing, and where it's playing.
@@ -204,16 +267,18 @@ export async function join(channel, { beauty, controls, onEvent }) {
   if (code < 0) {
     console.error('[call] joinChannel refused', { channel, uid: s.uid, code });
     // Say so on the call screen, with Agora's code, instead of a black screen.
-    engine.unregisterEventHandler(s.handler);
-    s.handler = null;
-    onEvent({ status: 'failed', error: `Agora error ${-code}` });
-    return;
+    return fail(`Agora error ${-code}`);
   }
   s.joined = true;
+  // Never left hanging on "Connecting": no join in time is a failure too.
+  s.timer = setTimeout(() => {
+    if (session === s && !s.live) fail('timed out');
+  }, JOIN_TIMEOUT_MS);
   s.speaker = controls?.speaker !== false;
   setMuted(!!controls?.muted);
   setCameraOff(!!controls?.cameraOff);
   s.privacy = !!controls?.privacy;
+  return undefined;
 }
 
 function sendPrivacy(s) {
@@ -234,10 +299,26 @@ export function setPrivacy(on) {
 export function leave() {
   const s = session;
   session = null;
-  if (!engine || !s) return;
+  if (!s) return;
+  clearTimeout(s.timer);
+  if (!engine) return;
   if (s.handler) engine.unregisterEventHandler(s.handler);
   engine.stopPreview();
   if (s.joined) engine.leaveChannel();
+}
+
+/**
+ * After a failure: leaves the channel and destroys the engine, so the next
+ * attempt starts fresh, with a new engine and a new token.
+ */
+export function reset() {
+  const channel = session?.channel;
+  leave();
+  if (channel) passes.delete(channel);
+  if (!engine) return;
+  engine.release();
+  engine = null;
+  engineAppId = null;
 }
 
 /** Mute: the microphone keeps running (no click on unmute) but nothing is sent. */

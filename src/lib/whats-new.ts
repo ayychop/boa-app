@@ -22,23 +22,18 @@ export const WHATS_NEW: { headline: string; notes: PatchNote[] } = {
   notes: [
     {
       icon: 'call',
-      title: 'Calls ring straight away',
-      body: "A call now wakes the other phone even when BOA is closed or asleep in a pocket. Tap the call notification to answer, and a missed call stays in your notifications.",
+      title: 'Calls connect first time',
+      body: "Your call is now set up while you chat, so the first one after you open BOA connects straight away. If one ever fails, the next starts completely fresh.",
+    },
+    {
+      icon: 'sparkles',
+      title: 'Real 1080p Studio filters',
+      body: 'Brightness, Smooth Skin, Tone, Clarity and Saturation are now done by the camera itself in full HD, before your video is sent. Fine detail like tattoos stays sharp, and what you see is what they see.',
     },
     {
       icon: 'color-palette',
-      title: 'Chat vibes, brighter',
-      body: 'Every vibe now has its own colours, from Neon blue and violet to Golden Hour amber and The Block concrete. Picking one changes the whole thread, bubbles included.',
-    },
-    {
-      icon: 'videocam',
-      title: 'A cleaner call screen',
-      body: 'Your Studio filter levels now sit above the controls, and the dock is solid glass, so nothing shows through the buttons.',
-    },
-    {
-      icon: 'notifications',
-      title: 'Notifications that stay',
-      body: "Messages and hearts pop up and stay in your notification shade, even when the app is open.",
+      title: 'Chat vibes, transformed',
+      body: 'Each vibe now takes over the whole thread, bubbles and all. Midnight glows on deep blue, Minimalist goes bright white with stark black text, and Turntable spins a record behind your chat.',
     },
   ],
 };
