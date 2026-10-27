@@ -129,10 +129,10 @@ function Bubble({ message, mine, seen, fresh, vibe, onLongPress, onOpenMedia, on
         />
         <View pointerEvents="none" style={[styles.sheen, mine && { backgroundColor: 'rgba(255,255,255,0.28)' }]} />
         {media ? <MediaTile message={message} onOpen={onOpenMedia} /> : null}
-        {once ? <ViewOnceTile message={message} mine={mine} onOpen={onOpenOnce} opening={opening} accent={mine ? vibe.mineText : vibe.accent} textColor={mine ? vibe.mineText : colors.text} /> : null}
+        {once ? <ViewOnceTile message={message} mine={mine} onOpen={onOpenOnce} opening={opening} accent={mine ? vibe.mineText : vibe.accent} textColor={mine ? vibe.mineText : vibe.theirsText} /> : null}
         {voice ? <VoiceNote message={message} mine={mine} /> : null}
         {(!media && !voice && !once) || (caption && !once) ? (
-          <Text style={[styles.body, mine && { color: vibe.mineText }, media && { marginTop: space.sm, paddingHorizontal: space.xs }]}>{message.body}</Text>
+          <Text style={[styles.body, { color: mine ? vibe.mineText : vibe.theirsText }, media && { marginTop: space.sm, paddingHorizontal: space.xs }]}>{message.body}</Text>
         ) : null}
         <Text style={[styles.meta, mine && { color: vibe.mineMeta }, media && { paddingHorizontal: space.xs }]}>
           {left ? (
@@ -182,7 +182,7 @@ function HeaderStatus({ person, online, typing, accent }) {
 function Thread({ navigation, route }) {
   const insets = useSafeAreaInsets();
   const id = route.params?.id;
-  const { userId, isOnline, blocked, unblock, chatTheme } = useHub();
+  const { userId, isOnline, blocked, unblock, chatTheme, setChatTheme } = useHub();
   const calls = useCallMaybe();
   const [conv, setConv] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -207,6 +207,16 @@ function Thread({ navigation, route }) {
   const { vibe: chatVibe, setVibe, customColor, setCustomColor } = useChatVibe();
   // Your own bubbles in your Chat Appearance colour, if you've chosen one.
   const vibe = useMemo(() => withChatTheme(chatVibe, chatTheme), [chatVibe, chatTheme]);
+  // Picking a vibe shows that vibe whole: its own bubbles take over from a
+  // Chat Appearance colour, which would otherwise paint every vibe the same.
+  const pickVibe = (id) => {
+    setVibe(id);
+    if (chatTheme) setChatTheme?.(null)?.catch?.(() => {});
+  };
+  const pickCustom = (hex) => {
+    setCustomColor(hex);
+    if (chatTheme) setChatTheme?.(null)?.catch?.(() => {});
+  };
   // What the glass blurs on Android: the backdrop and the messages.
   const behind = useRef(null);
   const alive = useRef(true);
@@ -558,11 +568,11 @@ function Thread({ navigation, route }) {
   );
 
   const picker = (
-    <BottomSheet open={picking} onClose={() => setPicking(false)} glass dragAnywhere={false}>
+    <BottomSheet open={picking} onClose={() => setPicking(false)} dragAnywhere={false}>
       <View style={styles.sheet} testID="chat-vibe-sheet">
         <Text style={styles.sheetKicker}>Chat vibe</Text>
         <Text style={[type.bodyMuted, { marginBottom: space.lg }]}>How your conversations look. Applies to every chat on this phone.</Text>
-        <VibePicker value={vibe.id} onChange={setVibe} customColor={customColor} onCustomColor={setCustomColor} />
+        <VibePicker value={vibe.id} onChange={pickVibe} customColor={customColor} onCustomColor={pickCustom} />
       </View>
     </BottomSheet>
   );

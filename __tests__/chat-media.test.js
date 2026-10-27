@@ -6,6 +6,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import * as Notifications from 'expo-notifications';
 import * as hub from '../src/api/hub';
+import { RINGTONES } from '../src/calls/ringtone';
 import HubThreadScreen, { keyboardBehavior } from '../src/screens/hub/HubThreadScreen';
 import HubSettingsScreen from '../src/screens/hub/HubSettingsScreen';
 import { CHAT_SOUNDS, chatChannel } from '../src/chat/sounds';
@@ -226,7 +227,7 @@ describe('notifications', () => {
     }
   });
 
-  test('Android gets one buzzing channel per sound', async () => {
+  test('Android gets one buzzing channel per sound, and one ringing call channel per ringtone', async () => {
     const os = Platform.OS;
     Platform.OS = 'android';
     try {
@@ -234,11 +235,14 @@ describe('notifications', () => {
     } finally {
       Platform.OS = os;
     }
-    expect(Notifications.setNotificationChannelAsync).toHaveBeenCalledTimes(CHAT_SOUNDS.length);
+    expect(Notifications.setNotificationChannelAsync).toHaveBeenCalledTimes(CHAT_SOUNDS.length + RINGTONES.length);
     expect(Notifications.setNotificationChannelAsync).toHaveBeenCalledWith(
       chatChannel('airhorn'),
       expect.objectContaining({ sound: 'chat_airhorn.wav', vibrationPattern: expect.any(Array) }),
     );
+    // Calls ring on their own channel, with the ringtone the call-push function names.
+    expect(Notifications.setNotificationChannelAsync).toHaveBeenCalledWith('boa-call-rnb', expect.objectContaining({ sound: 'rnb.wav', importance: Notifications.AndroidImportance.MAX }));
+    for (const r of RINGTONES) expect(require('../app.json').expo.plugins.find((p) => p[0] === 'expo-notifications')[1].sounds).toContain(`./assets/sounds/ringtones/${r.id}.wav`);
   });
 
   test('a message rings with your sound, but not for the thread on screen', async () => {

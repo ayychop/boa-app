@@ -125,6 +125,6 @@ describe('copy and assets', () => {
   });
   test("this release is a new version, so What's New shows once on it", () => {
     // EAS's robot token can't raise preview build numbers, so a release is announced by bumping app.json's version.
-    expect(require('../app.json').expo.version).toBe('1.2.0');
+    expect(require('../app.json').expo.version).toBe('1.3.0');
   });
 });

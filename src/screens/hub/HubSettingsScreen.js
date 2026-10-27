@@ -39,6 +39,7 @@ export default function HubSettingsScreen({ navigation }) {
     disappearing,
     setDisappearing,
     chatTheme,
+    setChatTheme,
     ringtone,
   } = useHub();
   const [form, setForm] = useState(() => ({
@@ -47,6 +48,15 @@ export default function HubSettingsScreen({ navigation }) {
     roles: profile?.roles ?? [],
   }));
   const { vibe, setVibe, customColor, setCustomColor } = useChatVibe();
+  // A vibe picked here shows whole, its own bubbles over a Chat Appearance colour.
+  const pickVibe = (id) => {
+    setVibe(id);
+    if (chatTheme) setChatTheme?.(null)?.catch?.(() => {});
+  };
+  const pickCustom = (hex) => {
+    setCustomColor(hex);
+    if (chatTheme) setChatTheme?.(null)?.catch?.(() => {});
+  };
   const [saving, setSaving] = useState(false);
   const [busy, setBusy] = useState(null);
   const [blockedPeople, setBlockedPeople] = useState([]);
@@ -274,7 +284,7 @@ export default function HubSettingsScreen({ navigation }) {
           </View>
 
           <Slate style={styles.section}>Chat vibe</Slate>
-          <VibePicker value={vibe.id} onChange={setVibe} customColor={customColor} onCustomColor={setCustomColor} />
+          <VibePicker value={vibe.id} onChange={pickVibe} customColor={customColor} onCustomColor={pickCustom} />
 
           <Slate style={styles.section}>Make it yours</Slate>
           <View style={styles.group}>

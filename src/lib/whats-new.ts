@@ -21,24 +21,24 @@ export const WHATS_NEW: { headline: string; notes: PatchNote[] } = {
   headline: 'Fresh in BOA HUB',
   notes: [
     {
-      icon: 'videocam',
-      title: 'Video calls, redesigned',
-      body: 'A floating glass dock with big, easy controls, flip camera, and Studio filters: Studio Lighting, Flawless HD, Tone Enhancer and Soft Glow.',
-    },
-    {
-      icon: 'shield-checkmark',
-      title: 'Privacy Mode',
-      body: 'Turn off screenshots during a call. The other person sees that you have.',
+      icon: 'call',
+      title: 'Calls ring straight away',
+      body: "A call now wakes the other phone even when BOA is closed or asleep in a pocket. Tap the call notification to answer, and a missed call stays in your notifications.",
     },
     {
       icon: 'color-palette',
-      title: '12 chat vibes, and your own',
-      body: 'From Turntable to The Block, or pick any colour with Custom. Make your bubbles yours in Chat Appearance.',
+      title: 'Chat vibes, brighter',
+      body: 'Every vibe now has its own colours, from Neon blue and violet to Golden Hour amber and The Block concrete. Picking one changes the whole thread, bubbles included.',
     },
     {
-      icon: 'musical-notes',
-      title: 'BOA ringtones',
-      body: 'Hip Hop, R&B, Afrobeats or Bashment: choose what rings when someone calls.',
+      icon: 'videocam',
+      title: 'A cleaner call screen',
+      body: 'Your Studio filter levels now sit above the controls, and the dock is solid glass, so nothing shows through the buttons.',
+    },
+    {
+      icon: 'notifications',
+      title: 'Notifications that stay',
+      body: "Messages and hearts pop up and stay in your notification shade, even when the app is open.",
     },
   ],
 };

@@ -77,7 +77,14 @@ export function toAgora({ studio = 0, flawless = 0, tone = 0, glow = 0, enabled 
 /** A short line under the call controls: "Studio 50% · HD 50% · Tone 50% · Glow 30%". */
 const SHORT = { studio: 'Studio', flawless: 'HD', tone: 'Tone', glow: 'Glow' };
 export function describe(beauty) {
-  if (!beauty?.enabled) return 'Filters off';
-  const parts = FILTERS.filter((f) => beauty[f.id] > 0).map((f) => `${SHORT[f.id]} ${Math.round(beauty[f.id] * 100)}%`);
-  return parts.length ? parts.join(' · ') : 'Filters off';
+  return describeParts(beauty)
+    .map((p) => (p.value == null ? p.label : `${p.label} ${p.value}`))
+    .join(' · ');
+}
+
+/** The same, one { id, label, value } per filter that's on, for laying out as chips. */
+export function describeParts(beauty) {
+  const on = beauty?.enabled ? FILTERS.filter((f) => beauty[f.id] > 0) : [];
+  if (!on.length) return [{ id: 'off', label: 'Filters off', value: null }];
+  return on.map((f) => ({ id: f.id, label: SHORT[f.id], value: `${Math.round(beauty[f.id] * 100)}%` }));
 }

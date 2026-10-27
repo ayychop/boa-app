@@ -126,7 +126,7 @@ export default function AmbientGlow({ vibe = vibeById() }) {
           <StarSet key={set} stars={STARS.filter((s) => s.set === set)} set={set} width={width} height={height} still={still} max={vibe.stars.max} />
         ))}
         {vibe.stars.deep ? <StarSet stars={DEEP_STARS} set={STAR_SETS} width={width} height={height} still={still} max={vibe.stars.max} /> : null}
-        <Grain width={width} height={height} opacity={0.07} running={!still} />
+        {vibe.grain === false ? null : <Grain width={width} height={height} opacity={0.07} running={!still} />}
       </Animated.View>
     </View>
   );

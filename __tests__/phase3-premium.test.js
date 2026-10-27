@@ -23,6 +23,7 @@ jest.mock('../src/calls/signaling', () => ({
     };
   }),
   send: jest.fn(async () => true),
+  pushRing: jest.fn(async () => true),
 }));
 jest.mock('../modules/boa-eq', () => ({ isAvailable: true, apply: jest.fn(() => true), release: jest.fn() }));
 jest.mock('expo-image-picker', () => ({

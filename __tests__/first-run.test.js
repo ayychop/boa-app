@@ -25,8 +25,8 @@ jest.mock('../src/lib/supabase', () => ({
 const FirstRun = require('../src/components/FirstRun').default;
 const { SCENES } = require('../src/components/onboarding/FeatureTour');
 const { replayTour } = require('../src/api/onboarding');
-// The installed build: version 1.2.0 (app.json), build 14.
-jest.mock('expo-application', () => ({ nativeApplicationVersion: '1.2.0', nativeBuildVersion: '14' }));
+// The installed build: version 1.3.0 (app.json), build 14.
+jest.mock('expo-application', () => ({ nativeApplicationVersion: '1.3.0', nativeBuildVersion: '14' }));
 const { WHATS_NEW, LAST_SEEN_KEY, shouldShowWhatsNew, currentRelease } = require('../src/lib/whats-new');
 
 async function show(props = {}) {
@@ -126,19 +126,19 @@ describe("What's New", () => {
   });
 
   test('an update is the installed version plus its build number, so every new build counts', async () => {
-    expect(currentRelease()).toBe('1.2.0+14');
+    expect(currentRelease()).toBe('1.3.0+14');
     // The old hardcoded note version, from before this fix: a phone that saw it gets the new notes.
     await AsyncStorage.setItem(LAST_SEEN_KEY, '1.1.0');
     await show();
     expect(screen.getByTestId('whats-new')).toBeTruthy();
-    expect(screen.getByText("What's new · v1.2.0")).toBeTruthy();
+    expect(screen.getByText("What's new · v1.3.0")).toBeTruthy();
     await fireEvent.press(screen.getByTestId('whats-new-done'));
     await act(async () => {});
     // Same build again: nothing. A new build of the same version: the notes again.
     await screen.unmount();
     await show();
     expect(screen.queryByTestId('whats-new')).toBeNull();
-    await AsyncStorage.setItem(LAST_SEEN_KEY, '1.2.0+13');
+    await AsyncStorage.setItem(LAST_SEEN_KEY, '1.3.0+13');
     await screen.unmount();
     await show();
     expect(screen.getByTestId('whats-new')).toBeTruthy();

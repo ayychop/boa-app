@@ -63,3 +63,21 @@ export async function send(toId, event, payload) {
     if (!existed) supabase.removeChannel(channel);
   }
 }
+
+/**
+ * Rings their phone by push as well (supabase/functions/call-push): Android
+ * freezes a backgrounded app's Realtime socket, so the push is what wakes a
+ * phone in a pocket. Resolves to whether at least one phone was sent it.
+ */
+export async function pushRing(toId, callId) {
+  if (!supabase || !toId || !callId) return false;
+  try {
+    const { data, error } = await supabase.functions.invoke('call-push', { body: { to: toId, callId } });
+    if (error) throw error;
+    console.log('[call] push sent', data);
+    return (data?.sent ?? 0) > 0;
+  } catch (err) {
+    console.warn('[call] push not sent', err?.message ?? err);
+    return false;
+  }
+}

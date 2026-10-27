@@ -8,7 +8,7 @@ import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import Slider from '@react-native-community/slider';
 import { useCall, END_REASONS } from '../../context/CallContext';
-import { FILTERS, describe } from '../../calls/beauty';
+import { FILTERS, describeParts } from '../../calls/beauty';
 import { LocalVideo, RemoteVideo } from '../../calls/media';
 import { haptics } from '../../utils/haptics';
 import { SPRING, usePress } from '../../utils/motion';
@@ -476,17 +476,23 @@ export default function CallScreen({ me }) {
                   maxHeight={Math.max(180, height - dockH - insets.top - insets.bottom - 260)}
                 />
               ) : null}
-              {!filtersOpen && !controlsHidden ? (
-                <Text style={styles.filterLine} numberOfLines={1}>
-                  {describe(beauty)}
-                </Text>
-              ) : null}
-              {/* Keyed by phase so it slides up again the moment the call connects. */}
-              <Animated.View key={phase} entering={SlideInDown.springify().damping(SPRING.damping).stiffness(SPRING.stiffness)} style={{ width: dockWidth }}>
+              {/* One block from ringing to connected: the readout and the dock
+                  move together and nothing remounts when the call connects. */}
+              <Animated.View entering={SlideInDown.springify().damping(SPRING.damping).stiffness(SPRING.stiffness)} style={{ width: dockWidth }}>
+                {!filtersOpen && !controlsHidden ? (
+                  <View style={styles.filterRow} testID="call-filter-line">
+                    {describeParts(beauty).map((p) => (
+                      <View key={p.id} style={styles.filterChip}>
+                        <Text style={styles.filterChipLabel}>{p.label}</Text>
+                        {p.value ? <Text style={styles.filterChipValue}>{p.value}</Text> : null}
+                      </View>
+                    ))}
+                  </View>
+                ) : null}
                 <Animated.View style={[styles.dock, dockStyle]} pointerEvents={controlsHidden ? 'none' : 'auto'} onLayout={(e) => setDockH(e.nativeEvent.layout.height)} testID="call-controls">
                   <View style={styles.dockGlass}>
                     <BlurView intensity={60} tint="dark" blurMethod="dimezisBlurView" style={StyleSheet.absoluteFill} />
-                    <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(18,18,22,0.4)' }]} />
+                    <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(14,14,18,0.86)' }]} />
                   </View>
                   <Pressable onPress={hideControls} hitSlop={10} accessibilityRole="button" accessibilityLabel="Hide controls" style={styles.dockHandle} testID="call-hide-controls">
                     <View style={styles.grabber} />
@@ -736,20 +742,47 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.lg,
     gap: space.md,
   },
-  filterLine: {
+  // The filter readout: chips in a row, 40px clear of the dock.
+  filterRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: space.sm,
+    marginBottom: 40,
+  },
+  filterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: radius.pill,
+    backgroundColor: 'rgba(12,12,15,0.72)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(243,239,232,0.18)',
+  },
+  filterChipLabel: {
     fontFamily: fonts.mono,
     fontSize: 10,
-    letterSpacing: 1.2,
+    letterSpacing: 1,
     color: colors.textMuted,
     textTransform: 'uppercase',
-    textShadowColor: 'rgba(0,0,0,0.6)',
-    textShadowRadius: 6,
+  },
+  filterChipValue: {
+    fontFamily: fonts.mono,
+    fontSize: 10,
+    color: colors.gold,
+    fontVariant: ['tabular-nums'],
   },
   dock: {
     paddingHorizontal: DOCK_PAD,
     paddingBottom: DOCK_PAD,
     borderRadius: 34,
     boxShadow: '0px 16px 40px rgba(0,0,0,0.5)',
+    // Above everything else on the call screen, so nothing shows through it.
+    zIndex: 20,
+    elevation: 20,
   },
   dockGlass: {
     ...StyleSheet.absoluteFillObject,

@@ -287,6 +287,8 @@ export function HubProvider({ children }) {
       if (data.type === 'chat' && data.conversationId) openPage('HubThread', { id: data.conversationId });
       // A heart: their profile, to look them over (they're never told).
       if (data.type === 'heart' && data.likerId) openPage('HubProfile', { id: data.likerId });
+      // A missed call: the caller's profile, to call them back.
+      if (data.type === 'missed-call' && data.peerId) openPage('HubProfile', { id: data.peerId });
     });
     return () => tapped.remove();
   }, []);

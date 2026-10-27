@@ -3,8 +3,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import { CHAT_SOUNDS, DEFAULT_CHAT_SOUND, RETIRED_CHAT_SOUNDS, chatChannel, chatSoundById } from './sounds';
+import { RINGTONES } from '../calls/ringtone';
 
 // New-message notifications for BOA HUB Chat.
+//
+// Incoming calls push too (supabase/functions/call-push) on their own
+// channels, one per ringtone; CallContext turns them into the call screen.
 //
 // Push (the app closed): the phone registers its Expo push token with the
 // database (push_tokens, with its chosen sound); a trigger on new messages
@@ -52,12 +56,37 @@ export async function ensureChatChannels() {
       }).catch(() => null),
     ),
   );
+  await ensureCallChannels();
+}
+
+// The incoming-call buzz: long, pause, long.
+export const CALL_VIBRATION = [0, 800, 600, 800, 1600];
+/** The Android channel an incoming-call push rings on: one per ringtone (supabase/functions/call-push). */
+export const callChannel = (id) => `boa-call-${(RINGTONES.find((r) => r.id === id) ?? RINGTONES[0]).id}`;
+
+/** One channel per ringtone, at max importance, shown on the lock screen. */
+export async function ensureCallChannels() {
+  if (Platform.OS !== 'android') return;
+  await Promise.all(
+    RINGTONES.map((r) =>
+      Notifications.setNotificationChannelAsync(callChannel(r.id), {
+        name: `Calls: ${r.label}`,
+        importance: Notifications.AndroidImportance.MAX,
+        sound: `${r.id}.wav`,
+        vibrationPattern: CALL_VIBRATION,
+        enableVibrate: true,
+        bypassDnd: false,
+        lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+      }).catch(() => null),
+    ),
+  );
 }
 
 /**
- * How notifications show while the app is open: a chat message pops up
- * unless its thread is on screen. Anything else (alarms) stays as before:
- * the app handles it itself.
+ * How notifications show while the app is open: messages, hearts and
+ * missed calls always go in the notification shade, and pop up unless
+ * their thread is on screen. A ringing call is the call screen's job, and
+ * anything else (alarms) the app handles itself.
  */
 let handlerInstalled = false;
 export function installChatHandler() {
@@ -66,8 +95,13 @@ export function installChatHandler() {
   Notifications.setNotificationHandler({
     handleNotification: async (n) => {
       const data = n?.request?.content?.data ?? {};
-      const show = (data.type === 'chat' && data.conversationId !== openThread) || data.type === 'heart';
-      return { shouldShowBanner: show, shouldShowList: show, shouldPlaySound: show, shouldSetBadge: false };
+      // A call with the app open: the call screen rings it (CallContext), not a banner.
+      if (data.type === 'call') return { shouldShowBanner: false, shouldShowList: false, shouldPlaySound: false, shouldSetBadge: false };
+      // Every message and heart stays in the pull-down; it pops up and
+      // rings unless you're already looking at that thread.
+      const keep = data.type === 'chat' || data.type === 'heart' || data.type === 'missed-call';
+      const pop = keep && !(data.type === 'chat' && data.conversationId === openThread);
+      return { shouldShowBanner: pop, shouldShowList: keep, shouldPlaySound: pop, shouldSetBadge: false };
     },
   });
 }
@@ -144,4 +178,18 @@ export function previewOf(message) {
     default:
       return (message?.body ?? '').slice(0, 140);
   }
+}
+
+/** "Missed video call": left in the shade when a call that rang here wasn't answered. */
+export async function notifyMissedCall({ name, peerId, sound }) {
+  const tone = chatSoundById(sound);
+  return Notifications.scheduleNotificationAsync({
+    content: {
+      title: name,
+      body: 'Missed video call',
+      sound: tone.file,
+      data: { type: 'missed-call', peerId },
+    },
+    trigger: Platform.OS === 'android' ? { channelId: chatChannel(tone.id) } : null,
+  }).catch(() => null);
 }

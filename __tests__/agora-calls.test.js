@@ -21,6 +21,7 @@ jest.mock('../src/calls/signaling', () => ({
     };
   }),
   send: jest.fn(async () => true),
+  pushRing: jest.fn(async () => true),
 }));
 // Our backend's answer: the Agora App ID, a token and this person's uid.
 jest.mock('../src/calls/token', () => ({ fetchToken: jest.fn(async () => ({ appId: 'boa-app-id', token: 'tok-1', uid: 4242 })) }));
@@ -94,6 +95,8 @@ describe('Agora video calls', () => {
     await user.press(screen.getByText('Call Kofi'));
     const { callId } = signal.send.mock.calls.at(-1)[2];
     await act(async () => {});
+    // The ring also goes by push, to wake their phone if the app is asleep.
+    expect(signal.pushRing).toHaveBeenCalledWith(signal.send.mock.calls.at(-1)[0], callId);
 
     // While it rings: the token is fetched for this call and your camera comes on, set up for HD and low light.
     expect(fetchToken).toHaveBeenCalledWith(callId);
@@ -416,5 +419,44 @@ describe('Android camera and microphone', () => {
       await user.press(screen.getByTestId('call-end'));
       await act(async () => jest.advanceTimersByTime(2000));
     });
+  });
+});
+
+describe('incoming calls by push', () => {
+  const Notifications = require('expo-notifications');
+  const push = (data) => ({ request: { identifier: 'n-1', content: { data: { type: 'call', ...data } } } });
+  const received = () => Notifications.addNotificationReceivedListener.mock.calls.at(-1)[0];
+
+  test('a call push rings the call screen, once, even when Realtime rings the same call too', async () => {
+    signal.send.mockClear();
+    await mount();
+    const callId = 'b2c3e1f0-0000-4000-8000-000000000001';
+    await act(async () => received()(push({ callId, sentAt: Date.now(), from: { id: 'user-kofi', name: 'Kofi Boateng' } })));
+    expect(screen.getByTestId('call-accept')).toBeOnTheScreen();
+    // The same call arriving over Realtime is the same call, not a second one to turn away.
+    await act(async () => mockSignal('ring', { callId, from: { id: 'user-kofi', name: 'Kofi Boateng' } }));
+    expect(signal.send).not.toHaveBeenCalledWith('user-kofi', 'busy', expect.anything());
+    await user().press(screen.getByTestId('call-decline'));
+    await act(async () => jest.advanceTimersByTime(2000));
+  });
+
+  test('a push for a call that has already stopped ringing does nothing', async () => {
+    await mount();
+    await act(async () => received()(push({ callId: 'b2c3e1f0-0000-4000-8000-000000000002', sentAt: Date.now() - 60000, from: { id: 'user-kofi', name: 'Kofi Boateng' } })));
+    expect(screen.queryByTestId('call-accept')).toBeNull();
+  });
+
+  const user = () => userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+});
+
+describe('the filter readout', () => {
+  test('one chip per filter that is on, and "Filters off" otherwise', () => {
+    const { describeParts } = require('../src/calls/beauty');
+    expect(describeParts({ studio: 0.5, flawless: 0, tone: 0.35, glow: 0.3, enabled: true })).toEqual([
+      { id: 'studio', label: 'Studio', value: '50%' },
+      { id: 'tone', label: 'Tone', value: '35%' },
+      { id: 'glow', label: 'Glow', value: '30%' },
+    ]);
+    expect(describeParts({ studio: 0.5, enabled: false })).toEqual([{ id: 'off', label: 'Filters off', value: null }]);
   });
 });

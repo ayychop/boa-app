@@ -124,7 +124,8 @@ const styles = StyleSheet.create({
   },
   card: { maxHeight: '100%', borderRadius: radius.xl, boxShadow: '0px 30px 80px rgba(0,0,0,0.6)' },
   glass: { backgroundColor: 'transparent', borderColor: 'rgba(255,255,255,0.16)' },
-  glassTint: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(14,14,17,0.55)' },
+  // Dense enough to read on its own: Android doesn't always draw the blur.
+  glassTint: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(14,14,17,0.9)' },
   // Taller than the grabber itself so it's easy to catch.
   handleZone: { marginTop: -space.md, paddingTop: space.md, cursor: 'grab' },
   grabber: {

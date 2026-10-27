@@ -112,7 +112,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     borderWidth: 1.5,
     borderColor: 'rgba(255,255,255,0.1)',
-    backgroundColor: 'rgba(255,255,255,0.04)',
+    backgroundColor: colors.bgElevated,
   },
   preview: { height: PREVIEW_H, borderRadius: radius.md, overflow: 'hidden', padding: 8, justifyContent: 'flex-end', gap: 5 },
   light: { position: 'absolute', width: 80, height: 80, borderRadius: 40, top: -26, left: -20, opacity: 0.5 },

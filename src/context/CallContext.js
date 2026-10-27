@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Vibration } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Notifications from 'expo-notifications';
 import * as Crypto from 'expo-crypto';
 import { useHub } from './HubContext';
 import { usePremium } from './PremiumContext';
@@ -11,6 +12,7 @@ import { DEFAULT_BEAUTY, fromStored } from '../calls/beauty';
 import CallScreen from '../components/calls/CallScreen';
 import { haptics } from '../utils/haptics';
 import { blockScreenshots } from '../calls/privacy';
+import { notifyMissedCall } from '../chat/notifications';
 
 const CallContext = createContext(null);
 
@@ -46,7 +48,9 @@ const NO_CONTROLS = Object.freeze({ muted: false, cameraOff: false, speaker: tru
  * Starting a call is BOA Premium; answering one never is.
  */
 export function CallProvider({ children }) {
-  const { userId, profile, blocked, ringtone } = useHub();
+  const { userId, profile, blocked, ringtone, chatSound } = useHub();
+  const chatSoundRef = useRef(chatSound);
+  chatSoundRef.current = chatSound;
   const ringtoneRef = useRef(ringtone);
   ringtoneRef.current = ringtone;
   const { requirePremium } = usePremium();
@@ -91,7 +95,10 @@ export function CallProvider({ children }) {
     // Screenshots come back the moment the call ends, not when the screen closes.
     if (controlsRef.current.privacy) blockScreenshots(false);
     setControls((c) => (c.privacy ? { ...c, privacy: false } : c));
-    setCall((c) => (c && c.phase !== 'ended' ? { ...c, phase: 'ended', reason } : c));
+    const c = callRef.current;
+    // A call that rang here and wasn't picked up stays in the notification shade.
+    if (c && c.phase === 'ringing' && c.direction === 'in' && reason === 'missed') notifyMissedCall({ name: c.peer.name, peerId: c.peer.id, sound: chatSoundRef.current });
+    setCall((cur) => (cur && cur.phase !== 'ended' ? { ...cur, phase: 'ended', reason } : cur));
     timers.current.close = setTimeout(() => {
       setCall(null);
       setControls(NO_CONTROLS);
@@ -120,24 +127,44 @@ export function CallProvider({ children }) {
     });
   }, []);
 
-  // Signals sent to this phone.
+  // Calls this phone has already rung for: the same call arrives twice
+  // (Realtime and push), and a late push must not ring a call that's over.
+  const seen = useRef(new Set());
+  const blockedRef = useRef(blocked);
+  blockedRef.current = blocked;
+
+  /** Someone is calling: ring, unless it's a call already heard or we're busy. ms: how long it has left. */
+  const ringIn = useCallback(
+    ({ callId, from }, ms = RING_MS) => {
+      if (!from?.id || !callId || blockedRef.current.has(from.id) || seen.current.has(callId)) return;
+      seen.current.add(callId);
+      const current = callRef.current;
+      if (current && current.phase !== 'ended') {
+        signal.send(from.id, 'busy', { callId });
+        return;
+      }
+      clearTimers();
+      setCall({ id: callId, peer: from, direction: 'in', phase: 'ringing', startedAt: null, reason: null });
+      setVideo(NO_MEDIA);
+      Vibration.vibrate(RING_VIBRATION, true);
+      startRingtone(ringtoneRef.current);
+      timers.current.ring = setTimeout(() => finish('missed'), ms);
+    },
+    [finish],
+  );
+
+  // Signals sent to this phone, over Realtime (the app in the foreground).
   useEffect(() => {
     if (!userId) return undefined;
     return signal.listen(userId, (event, p) => {
       const current = callRef.current;
       if (event === 'ring') {
-        const from = p.from;
-        if (!from?.id || !p.callId || blocked.has(from.id)) return;
-        if (current && current.phase !== 'ended') {
-          signal.send(from.id, 'busy', { callId: p.callId });
-          return;
-        }
-        clearTimers();
-        setCall({ id: p.callId, peer: from, direction: 'in', phase: 'ringing', startedAt: null, reason: null });
-        setVideo(NO_MEDIA);
-        Vibration.vibrate(RING_VIBRATION, true);
-        startRingtone(ringtoneRef.current);
-        timers.current.ring = setTimeout(() => finish('missed'), RING_MS);
+        ringIn(p);
+        return;
+      }
+      // They answered a call that's already over here (a late push): tell them.
+      if (event === 'accept' && p.by && (!current || p.callId !== current.id)) {
+        signal.send(p.by, 'end', { callId: p.callId });
         return;
       }
       if (!current || p.callId !== current.id || current.phase === 'ended') return;
@@ -146,7 +173,33 @@ export function CallProvider({ children }) {
       else if (event === 'busy') finish('busy');
       else if (event === 'end') finish(current.phase === 'ringing' && current.direction === 'in' ? 'missed' : 'ended');
     });
-  }, [userId, blocked, finish, goLive]);
+  }, [userId, ringIn, finish, goLive]);
+
+  // The same ring by push (supabase/functions/call-push): it wakes the
+  // phone when Android has frozen the app. Received with the app open, it
+  // rings straight away; tapped (from the background, or from a cold
+  // start), it opens the call screen with whatever ring time is left.
+  useEffect(() => {
+    if (!userId) return undefined;
+    const fromPush = (n) => {
+      const data = n?.request?.content?.data ?? {};
+      if (data.type !== 'call') return;
+      Notifications.dismissNotificationAsync?.(n.request.identifier)?.catch?.(() => {});
+      const age = Math.max(0, Date.now() - (Number(data.sentAt) || Date.now()));
+      const left = RING_MS - age;
+      if (left < 2000) return;
+      ringIn({ callId: data.callId, from: data.from }, left);
+    };
+    const received = Notifications.addNotificationReceivedListener(fromPush);
+    const tapped = Notifications.addNotificationResponseReceivedListener((r) => fromPush(r?.notification));
+    Notifications.getLastNotificationResponseAsync?.()
+      ?.then((r) => r && fromPush(r.notification))
+      .catch(() => {});
+    return () => {
+      received.remove();
+      tapped.remove();
+    };
+  }, [userId, ringIn]);
 
   useEffect(
     () => () => {
@@ -171,9 +224,13 @@ export function CallProvider({ children }) {
         haptics.selection();
         // Your camera comes on while it rings, so you can check how you look.
         media.prepare(id, beautyRef.current).catch(() => {});
-        const sent = await signal.send(peer.id, 'ring', { callId: id, video: true, from: personOf(profile) ?? { id: userId, name: 'BOA HUB member' } });
+        // Realtime reaches a phone with the app open; the push wakes one in a pocket.
+        const [live, pushed] = await Promise.all([
+          signal.send(peer.id, 'ring', { callId: id, video: true, from: personOf(profile) ?? { id: userId, name: 'BOA HUB member' } }),
+          signal.pushRing(peer.id, id),
+        ]);
         if (callRef.current?.id !== id) return;
-        if (!sent) return finish('unreachable');
+        if (!live && !pushed) return finish('unreachable');
         timers.current.ring = setTimeout(() => {
           signal.send(peer.id, 'end', { callId: id });
           finish('missed');
@@ -185,9 +242,9 @@ export function CallProvider({ children }) {
   const accept = useCallback(() => {
     const c = callRef.current;
     if (!c || c.direction !== 'in' || c.phase !== 'ringing') return;
-    signal.send(c.peer.id, 'accept', { callId: c.id });
+    signal.send(c.peer.id, 'accept', { callId: c.id, by: userId });
     goLive();
-  }, [goLive]);
+  }, [goLive, userId]);
 
   const decline = useCallback(() => {
     const c = callRef.current;
