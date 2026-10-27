@@ -1,6 +1,8 @@
+import { Platform, Vibration } from 'react-native';
 import { createAudioPlayer } from 'expo-audio';
 import { ensureAudioSession } from '../audio/session';
 import { claim } from '../audio/focus';
+import { RINGTONE_HAPTICS } from './ringtoneHaptics';
 
 // The incoming-call ringtone: one looping expo-audio player, alongside the
 // vibration. It claims the app's audio focus (src/audio/focus.js) so the
@@ -20,6 +22,22 @@ export const RINGTONES = [
 export const DEFAULT_RINGTONE = 'hiphop';
 export const ringtoneById = (id) => RINGTONES.find((r) => r.id === id) ?? RINGTONES[0];
 
+// The buzz when there's no pattern for a ringtone: long, pause, long, rest.
+const FALLBACK_BUZZ = [0, 800, 600, 800, 1600];
+
+/**
+ * The ringtone's vibration: a buzz on every bass hit of its loop, one loop
+ * long, so it repeats in step with the sound (src/calls/ringtoneHaptics.js,
+ * made from the loops by scripts/ringtone-haptics.py).
+ */
+export const ringtoneHaptics = (id) => RINGTONE_HAPTICS[ringtoneById(id).id] ?? FALLBACK_BUZZ;
+
+// Started with the sound, not before it, so the first buzz lands on the first hit.
+// iOS plays one fixed buzz however a pattern is written, so it gets one per loop instead.
+function buzz(id, repeat) {
+  Vibration.vibrate(Platform.OS === 'ios' ? 400 : ringtoneHaptics(id), repeat);
+}
+
 let player = null;
 
 /** Starts ringing with that ringtone (a second call while ringing does nothing). */
@@ -31,10 +49,13 @@ export function startRingtone(id = DEFAULT_RINGTONE) {
     p.loop = true;
     player = p;
     ensureAudioSession().then(() => {
-      if (player === p) p.play();
+      if (player !== p) return;
+      p.play();
+      buzz(id, true);
     });
   } catch (err) {
     player = null;
+    buzz(id, true);
     console.warn('[call] ringtone failed', err?.message ?? err);
   }
 }
@@ -43,6 +64,7 @@ export function startRingtone(id = DEFAULT_RINGTONE) {
 export function stopRingtone() {
   const p = player;
   player = null;
+  Vibration.cancel();
   if (!p) return;
   try {
     p.pause();
@@ -66,7 +88,10 @@ export function previewRingtone(id, onEnd) {
     const sub = p.addListener?.('playbackStatusUpdate', (s) => s?.didJustFinish && stopPreview());
     preview = { player: p, sub, onEnd };
     ensureAudioSession().then(() => {
-      if (preview?.player === p) p.play();
+      if (preview?.player !== p) return;
+      p.play();
+      // Feel it too: the preview buzzes on the bass, once through.
+      buzz(id, false);
     });
   } catch (err) {
     preview = null;
@@ -81,6 +106,7 @@ export function stopPreview() {
   const cur = preview;
   preview = null;
   if (!cur) return;
+  Vibration.cancel();
   try {
     cur.sub?.remove?.();
     cur.player.pause();

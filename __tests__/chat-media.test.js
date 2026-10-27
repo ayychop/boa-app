@@ -7,7 +7,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as Notifications from 'expo-notifications';
 import * as hub from '../src/api/hub';
 import { RINGTONES } from '../src/calls/ringtone';
-import HubThreadScreen, { keyboardBehavior } from '../src/screens/hub/HubThreadScreen';
+import HubThreadScreen, { keyboardBehavior } from '../src/screens/hub/NewChatScreen';
 import HubSettingsScreen from '../src/screens/hub/HubSettingsScreen';
 import { CHAT_SOUNDS, chatChannel } from '../src/chat/sounds';
 import { ensureChatChannels, notifyLocal, previewOf, setOpenThread } from '../src/chat/notifications';
@@ -78,7 +78,7 @@ describe('the thread', () => {
     expect(screen.getByTestId('hub-thread-keyboard')).toBeOnTheScreen();
     expect(keyboardBehavior('ios')).toBe('padding');
     expect(keyboardBehavior('android')).toBe('height');
-    expect(screen.getByTestId('chat-ambient')).toBeOnTheScreen();
+    expect(screen.getByTestId('chat-backdrop')).toBeOnTheScreen();
   });
 
   test('sends a photo: HD from the library, shown at once, then saved', async () => {
@@ -116,7 +116,15 @@ describe('the thread', () => {
     });
     hub.uploadChatMedia.mockResolvedValue({ path: 'conv-1/user-me/image-2.jpg', size: 1_000_000, mime: 'image/jpeg' });
     hub.sendMedia.mockImplementation(async (_c, f) => ({
-      id: 'm11', conversation_id: 'conv-1', sender_id: ME, kind: 'image', body: '', media_path: f.path, view_once: f.viewOnce, viewed_at: null, created_at: at(11),
+      id: 'm11',
+      conversation_id: 'conv-1',
+      sender_id: ME,
+      kind: 'image',
+      body: '',
+      media_path: f.path,
+      view_once: f.viewOnce,
+      viewed_at: null,
+      created_at: at(11),
     }));
     await openThread();
     await user.press(screen.getByTestId('hub-attach'));
@@ -198,9 +206,7 @@ describe('the thread', () => {
 
   test('disappearing messages show their time left and vanish when it runs out', async () => {
     const soon = new Date(Date.now() + 20000).toISOString();
-    hub.listMessages.mockResolvedValue([
-      { id: 'm2', conversation_id: 'conv-1', sender_id: AMA.id, body: 'This will self-destruct', kind: 'text', created_at: at(2), expires_at: soon },
-    ]);
+    hub.listMessages.mockResolvedValue([{ id: 'm2', conversation_id: 'conv-1', sender_id: AMA.id, body: 'This will self-destruct', kind: 'text', created_at: at(2), expires_at: soon }]);
     await openThread();
     expect(screen.getByText('This will self-destruct')).toBeOnTheScreen();
     expect(screen.getByText(/1m left/)).toBeOnTheScreen();
@@ -235,11 +241,13 @@ describe('notifications', () => {
     } finally {
       Platform.OS = os;
     }
-    expect(Notifications.setNotificationChannelAsync).toHaveBeenCalledTimes(CHAT_SOUNDS.length + RINGTONES.length);
+    // One per sound, one per ringtone, and the quiet one for message requests.
+    expect(Notifications.setNotificationChannelAsync).toHaveBeenCalledTimes(CHAT_SOUNDS.length + RINGTONES.length + 1);
     expect(Notifications.setNotificationChannelAsync).toHaveBeenCalledWith(
-      chatChannel('airhorn'),
-      expect.objectContaining({ sound: 'chat_airhorn.wav', vibrationPattern: expect.any(Array) }),
+      'boa-chat-requests',
+      expect.objectContaining({ importance: Notifications.AndroidImportance.LOW, sound: null, enableVibrate: false }),
     );
+    expect(Notifications.setNotificationChannelAsync).toHaveBeenCalledWith(chatChannel('airhorn'), expect.objectContaining({ sound: 'chat_airhorn.wav', vibrationPattern: expect.any(Array) }));
     // Calls ring on their own channel, with the ringtone the call-push function names.
     expect(Notifications.setNotificationChannelAsync).toHaveBeenCalledWith('boa-call-rnb', expect.objectContaining({ sound: 'rnb.wav', importance: Notifications.AndroidImportance.MAX }));
     for (const r of RINGTONES) expect(require('../app.json').expo.plugins.find((p) => p[0] === 'expo-notifications')[1].sounds).toContain(`./assets/sounds/ringtones/${r.id}.wav`);

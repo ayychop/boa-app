@@ -4,7 +4,7 @@ import { fetchToken } from './token';
 import { toAgora } from './beauty';
 import { lutPath } from './luts';
 import { decodeMessage, encodePrivacy } from './privacy';
-import { AINS_BALANCED, AUDIO, AUDIO_PROCESSING, CAPTURE, DENOISER, ENCODER, LOW_LIGHT, PREVIEW, STABILIZATION_OFF, VIDEO_SCENARIO } from './quality';
+import { AINS_BALANCED, AUDIO, AUDIO_PROCESSING, CAPTURE, DENOISER, ENCODER, LOW_LIGHT, MIRROR_OFF, MIRROR_ON, PREVIEW, STABILIZATION_OFF, VIDEO_SCENARIO } from './quality';
 
 // The picture and sound of a BOA video call, over Agora. Ringing stays on
 // Supabase Realtime (src/calls/signaling.js); once both phones agree, each
@@ -27,6 +27,14 @@ const CLEAR_VISION = { provider: 'agora_video_filters_clear_vision', extension: 
 const PRIMARY_CAMERA = MediaSourceType?.PrimaryCameraSource ?? 2;
 let engineAppId = null;
 let session = null; // { channel, token, uid, camera, mic, joined, live, speaker, privacy, streamId, handler, timer }
+// The look last asked for (src/calls/beauty.js), applied again whenever the
+// camera restarts: some phones (Samsung's Flip and Fold among them) reset
+// the camera's filters and exposure when it reopens at a new size, which
+// it does when a call steps up from the ringing preview to HD.
+let look = null;
+// Which way the camera faces: front is mirrored in your preview, back isn't.
+let facing = 'front';
+const facingListeners = new Set();
 // Tokens fetched ahead of time, by channel: { pass, at }.
 const passes = new Map();
 
@@ -44,6 +52,7 @@ const REMOTE_FAILED = 4;
 const CONNECTION_RECONNECTING = 4;
 const CONNECTION_FAILED = 5;
 const CONNECTION_CONNECTED = 3;
+const LOCAL_VIDEO_CAPTURING = 1;
 
 /** What a call can't do without, for the alert. */
 export function missingLabel({ camera, mic }) {
@@ -120,19 +129,28 @@ function setup(appId) {
   return engine;
 }
 
+/** Whether this phone's camera takes an exposure setting (asked once the camera is open). */
+function exposureSupported() {
+  try {
+    return engine?.isCameraExposureSupported?.() !== false;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Applies the call look (src/calls/beauty.js: a preset and Brightness) to
- * your camera, before it's encoded, so they see what you see. Each call's
- * result is logged: a refusal shows up as Agora's error code.
+ * your camera, before it's encoded, so they see what you see. In order:
+ * the grade, colour, beauty, then the camera's exposure. Each call's result
+ * is logged: a refusal shows up as Agora's error code.
  */
 export function setBeauty(beauty) {
+  look = beauty;
   if (!engine) return;
-  const { beauty: b, colorEnhance: c, filter: f } = toAgora(beauty);
-  const codes = {
-    beauty: engine.setBeautyEffectOptions(b.enabled, b, PRIMARY_CAMERA),
-    colour: engine.setColorEnhanceOptions(c.enabled, c, PRIMARY_CAMERA),
-    grade: null,
-  };
+  const os = Platform.OS === 'ios' ? 'ios' : 'android';
+  const exposure = exposureSupported();
+  const { beauty: b, colorEnhance: c, filter: f, exposure: e } = toAgora(beauty, { os, exposure });
+  const codes = { grade: null, colour: null, beauty: null, exposure: null };
   if (!f.enabled) codes.grade = engine.setFilterEffectOptions?.(false, { strength: 0 }, PRIMARY_CAMERA) ?? null;
   else {
     try {
@@ -141,8 +159,49 @@ export function setBeauty(beauty) {
       console.warn('[call] grade not written', f.lut, err?.message ?? err);
     }
   }
-  if (Object.values(codes).some((v) => v != null && v !== 0)) console.warn('[call] filters refused', codes);
-  else console.log('[call] filters', beauty?.preset, codes);
+  codes.colour = engine.setColorEnhanceOptions(c.enabled, c, PRIMARY_CAMERA);
+  codes.beauty = engine.setBeautyEffectOptions(b.enabled, b, PRIMARY_CAMERA);
+  if (exposure) codes.exposure = engine.setCameraExposureFactor?.(e.factor) ?? null;
+  if (Object.values(codes).some((v) => v != null && v !== 0)) console.warn('[call] filters refused', beauty?.preset, codes);
+  else console.log('[call] filters', beauty?.preset, { exposure: e.factor, codes });
+}
+
+/**
+ * Brightness alone, while the slider moves: only the camera's exposure (or,
+ * where there's none, the lightening), nothing written to disk and no grade
+ * reloaded, so it can follow a finger smoothly.
+ */
+export function setBrightness(brightness) {
+  if (!look) return;
+  const next = { ...look, brightness };
+  look = next;
+  // Brightness works with filters off too: it's the camera's exposure.
+  if (!engine) return;
+  const os = Platform.OS === 'ios' ? 'ios' : 'android';
+  if (exposureSupported()) engine.setCameraExposureFactor?.(toAgora(next, { os }).exposure.factor);
+  else {
+    const { beauty: b } = toAgora(next, { os, exposure: false });
+    engine.setBeautyEffectOptions(b.enabled, b, PRIMARY_CAMERA);
+  }
+}
+
+/** The camera opened again (a new size, a flip, back on): the look goes back on. */
+function reapply() {
+  if (look) setBeauty(look);
+}
+
+/** Which way the camera faces now: 'front' or 'back'. */
+export const cameraFacing = () => facing;
+
+/** Calls fn(facing) when the camera flips; returns an unsubscribe function. */
+export function onFacing(fn) {
+  facingListeners.add(fn);
+  return () => facingListeners.delete(fn);
+}
+
+function setFacing(next) {
+  facing = next;
+  facingListeners.forEach((fn) => fn(next));
 }
 
 /** The call's token: the one fetched ahead if it's still fresh, else a new one. */
@@ -188,6 +247,7 @@ export async function prepare(channel, beauty) {
     if (session !== s) return false;
     Object.assign(s, { token: pass.token, uid: pass.uid, camera: perm.camera, mic: perm.mic });
     setup(pass.appId);
+    setFacing('front');
     setBeauty(beauty);
     // Small and fast while it rings; join success steps it up to HD.
     engine.setVideoEncoderConfiguration(PREVIEW);
@@ -234,6 +294,8 @@ export async function join(channel, opts, attempt = 0) {
       clearTimeout(s.timer);
       s.live = true;
       engine.setVideoEncoderConfiguration(ENCODER);
+      // The camera reopens at 1080p: put the look back on it.
+      reapply();
       // One small, reliable data stream for call messages (Privacy Mode).
       s.streamId = engine.createDataStream({ syncWithAudio: false, ordered: true });
       if (s.privacy) sendPrivacy(s);
@@ -252,6 +314,10 @@ export async function join(channel, opts, attempt = 0) {
     onStreamMessage: (_c, remoteUid, _id, data) => {
       const msg = decodeMessage(data);
       if (msg?.type === 'privacy') onEvent({ remotePrivacy: !!msg.active });
+    },
+    // Your camera (re)started capturing: some phones drop the filters and exposure when it does.
+    onLocalVideoStateChanged: (source, state) => {
+      if (state === LOCAL_VIDEO_CAPTURING && session === s) reapply();
     },
     onRemoteVideoStateChanged: (_c, remoteUid, state) => onEvent({ remoteUid, remoteVideo: state !== REMOTE_STOPPED && state !== REMOTE_FAILED }),
     onConnectionStateChanged: (_c, state, reason) => {
@@ -357,12 +423,21 @@ export function setCameraOff(off) {
   engine.enableLocalVideo(!off);
   engine.muteLocalVideoStream(off);
   if (!off && session.joined) engine.updateChannelMediaOptions({ publishCameraTrack: true });
+  if (!off) reapply();
 }
 
-/** Front to back camera and back again. */
+/**
+ * Front to back camera and back again. Your preview is mirrored for the
+ * front camera only; what's sent is never mirrored (ENCODER.mirrorMode).
+ */
 export function switchCamera() {
   if (!engine || !session?.camera) return;
   engine.switchCamera();
+  const next = facing === 'front' ? 'back' : 'front';
+  setFacing(next);
+  engine.setLocalRenderMode?.(RENDER_HIDDEN, next === 'front' ? MIRROR_ON : MIRROR_OFF);
+  // The other camera has its own exposure range: set it again.
+  reapply();
 }
 
 /** Remembered until the join succeeds, then applied (see onJoinChannelSuccess). */
@@ -376,12 +451,16 @@ export function setSpeaker(on) {
 // clipped by rounded corners and follows the window as you drag it.
 const SelfView = Platform.OS === 'android' ? RtcTextureView : RtcSurfaceView;
 
-/** You, from your camera. */
-export function LocalVideo({ style }) {
-  return <SelfView canvas={{ uid: 0, renderMode: RENDER_HIDDEN }} zOrderMediaOverlay style={style} testID="call-local-video" />;
+/** You, from your camera: mirrored like a mirror on the front camera, true to life on the back. */
+export function LocalVideo({ style, mirror = true }) {
+  return <SelfView canvas={{ uid: 0, renderMode: RENDER_HIDDEN, mirrorMode: mirror ? MIRROR_ON : MIRROR_OFF }} zOrderMediaOverlay style={style} testID="call-local-video" />;
 }
 
-/** The other person. */
-export function RemoteVideo({ uid, style }) {
-  return <RtcSurfaceView canvas={{ uid, renderMode: RENDER_HIDDEN }} style={style} testID="call-remote-video" />;
+/**
+ * The other person. texture: drawn as a TextureView on Android (the floating
+ * call window), so it's clipped by rounded corners and moves with a drag.
+ */
+export function RemoteVideo({ uid, style, texture = false }) {
+  const View = texture && Platform.OS === 'android' ? RtcTextureView : RtcSurfaceView;
+  return <View canvas={{ uid, renderMode: RENDER_HIDDEN }} style={style} zOrderMediaOverlay={texture || undefined} testID="call-remote-video" />;
 }

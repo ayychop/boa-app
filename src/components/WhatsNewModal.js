@@ -67,7 +67,7 @@ export default function WhatsNewModal({ visible, onClose, notes = WHATS_NEW }) {
 }
 
 const styles = StyleSheet.create({
-  backdrop: { ...StyleSheet.absoluteFillObject },
+  backdrop: { ...StyleSheet.absoluteFill },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   card: {
     borderRadius: radius.xl,

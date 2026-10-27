@@ -6,5 +6,5 @@ import expo.modules.core.interfaces.ReactActivityLifecycleListener
 
 class BoaCallPackage : Package {
   override fun createReactActivityLifecycleListeners(activityContext: Context?): List<ReactActivityLifecycleListener> =
-    listOf(CallLockScreen)
+    listOf(CallLockScreen, CallPip)
 }

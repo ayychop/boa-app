@@ -2,6 +2,7 @@ import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import * as BoaCall from '../../modules/boa-call';
 import { callChannel } from '../chat/notifications';
+import { ringtoneHaptics } from './ringtone';
 
 // An incoming call while the app isn't on screen. On Android the ring
 // arrives as a data-only push (supabase/functions/call-push), which wakes
@@ -86,9 +87,12 @@ export async function ringNotification({ callId, from, sentAt, ringtone }) {
     return BoaCall.showIncoming({
       callId,
       name: from.name,
+      avatar: from.avatar_url ?? '',
       link: callLink(call),
       acceptLink: callLink(call, 'accept'),
       channelId: callChannel(ringtone),
+      // The buzz on the ringtone's bass hits, as in the app.
+      vibration: ringtoneHaptics(ringtone),
       // A moment past the ring, so the app ends it as missed first.
       timeoutMs: left + 1500,
     });

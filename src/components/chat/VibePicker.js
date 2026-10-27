@@ -3,7 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeInDown, FadeOutUp, useReducedMotion } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { CUSTOM_ID, customVibe, VIBES } from '../../chat/vibes';
+import { CUSTOM_ID, customVibe, isPremiumVibe, VIBES } from '../../chat/vibes';
 import { haptics } from '../../utils/haptics';
 import { usePress } from '../../utils/motion';
 import ColorPicker from './ColorPicker';
@@ -27,12 +27,15 @@ const MINI_STARS = [
 ];
 function MiniStars() {
   return MINI_STARS.map(([x, y, s], i) => (
-    <View key={i} style={{ position: 'absolute', left: `${x * 100}%`, top: `${y * 100}%`, width: s, height: s, borderRadius: s, backgroundColor: '#FFFFFF', boxShadow: '0px 0px 4px rgba(201,214,255,0.9)' }} />
+    <View
+      key={i}
+      style={{ position: 'absolute', left: `${x * 100}%`, top: `${y * 100}%`, width: s, height: s, borderRadius: s, backgroundColor: '#FFFFFF', boxShadow: '0px 0px 4px rgba(201,214,255,0.9)' }}
+    />
   ));
 }
 
 /** One vibe as a small window onto its look: mesh, texture, one of their bubbles and one of yours. */
-function VibeCard({ v, on, onPress, custom }) {
+function VibeCard({ v, on, onPress, custom, locked }) {
   const press = usePress({ haptic: false });
   const still = useReducedMotion();
   return (
@@ -42,7 +45,7 @@ function VibeCard({ v, on, onPress, custom }) {
       onPressOut={press.onPressOut}
       accessibilityRole="radio"
       accessibilityState={{ selected: on }}
-      accessibilityLabel={`${v.label}: ${v.detail}`}
+      accessibilityLabel={`${v.label}: ${v.detail}${locked ? '. BOA Premium' : ''}`}
       testID={`chat-vibe-${v.id}`}
     >
       <Animated.View style={[styles.card, on && { borderColor: v.accentEdge, boxShadow: `0px 0px 16px ${v.accentSoft}` }, press.style]}>
@@ -53,6 +56,13 @@ function VibeCard({ v, on, onPress, custom }) {
           {v.stars.max >= 0.5 ? <MiniStars /> : null}
           {/* Only the record moves: twelve animating cards would cost frames. */}
           <VibeTexture vibe={v} width={CARD - 12} height={PREVIEW_H} still={still || v.texture !== 'vinyl'} mini />
+          {/* Premium, and you haven't got it: a gold lock, and the card dims a little. */}
+          {locked ? (
+            <View style={styles.lock} testID={`chat-vibe-${v.id}-locked`}>
+              <Ionicons name="diamond" size={10} color="#0B0906" />
+              <Text style={styles.lockText}>Premium</Text>
+            </View>
+          ) : null}
           {custom ? (
             <View style={styles.customBadge}>
               <Ionicons name="color-palette" size={18} color={v.accent} />
@@ -92,11 +102,13 @@ function VibeCard({ v, on, onPress, custom }) {
  * picking one applies it at once (the thread crossfades to it). Custom
  * opens a colour picker below the row.
  */
-export default function VibePicker({ value, onChange, customColor, onCustomColor }) {
+export default function VibePicker({ value, onChange, customColor, onCustomColor, locked = false }) {
   const [picking, setPicking] = useState(false);
   const custom = customVibe(customColor);
   const choose = (id) => {
     haptics.selection();
+    // Locked: the parent shows what Premium unlocks instead.
+    if (locked && isPremiumVibe(id)) return onChange(id);
     if (id === CUSTOM_ID) {
       setPicking((p) => !p || value !== CUSTOM_ID);
       if (value !== CUSTOM_ID) onChange(CUSTOM_ID);
@@ -117,9 +129,9 @@ export default function VibePicker({ value, onChange, customColor, onCustomColor
         testID="chat-vibe-list"
       >
         {VIBES.map((v) => (
-          <VibeCard key={v.id} v={v} on={v.id === value} onPress={() => choose(v.id)} />
+          <VibeCard key={v.id} v={v} on={v.id === value} onPress={() => choose(v.id)} locked={locked && isPremiumVibe(v.id)} />
         ))}
-        <VibeCard v={custom} on={value === CUSTOM_ID} onPress={() => choose(CUSTOM_ID)} custom />
+        <VibeCard v={custom} on={value === CUSTOM_ID} onPress={() => choose(CUSTOM_ID)} custom locked={locked} />
       </ScrollView>
       {picking && onCustomColor ? (
         <Animated.View entering={FadeInDown.springify().damping(15).stiffness(150)} exiting={FadeOutUp.duration(160)} style={styles.pickerWrap}>
@@ -137,6 +149,21 @@ export default function VibePicker({ value, onChange, customColor, onCustomColor
 }
 
 const styles = StyleSheet.create({
+  lock: {
+    position: 'absolute',
+    top: 6,
+    left: 6,
+    zIndex: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: radius.pill,
+    backgroundColor: '#F6D38A',
+    boxShadow: '0px 0px 10px rgba(226,168,75,0.6)',
+  },
+  lockText: { fontFamily: fonts.semibold, fontSize: 9, letterSpacing: 0.4, color: '#0B0906' },
   row: { gap: GAP, paddingRight: space.lg },
   card: {
     width: CARD,

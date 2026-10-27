@@ -160,7 +160,7 @@ export default function ProfileScreen({ navigation }) {
             <Ionicons name="diamond" size={18} color={colors.gold} />
             <View style={{ flex: 1 }}>
               <Text style={styles.linkText}>BOA Premium is active</Text>
-              <Text style={styles.linkDetail}>Saving, Hi-Fi, early access and downloads unlocked</Text>
+              <Text style={styles.linkDetail}>HD calls, BOA Studio, Hi-Fi and living vibes unlocked</Text>
             </View>
             <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
           </Pressable>
@@ -179,7 +179,7 @@ export default function ProfileScreen({ navigation }) {
             <View style={{ flex: 1 }}>
               <Text style={styles.bannerKicker}>BOA PREMIUM · {PRICE}/MONTH</Text>
               <Text style={styles.bannerTitle}>Go Premium</Text>
-              <Text style={styles.bannerBody}>Save stations, Hi-Fi audio, ad-free, early access.</Text>
+              <Text style={styles.bannerBody}>HD video calls, BOA Studio camera, Hi-Fi radio and living chat vibes.</Text>
             </View>
             <Ionicons name="arrow-forward" size={20} color={colors.bg} />
           </Tappable>

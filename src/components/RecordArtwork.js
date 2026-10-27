@@ -243,6 +243,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  logo: { ...StyleSheet.absoluteFillObject },
-  boa: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'flex-start', paddingTop: LABEL * 0.16 },
+  logo: { ...StyleSheet.absoluteFill },
+  boa: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'flex-start', paddingTop: LABEL * 0.16 },
 });

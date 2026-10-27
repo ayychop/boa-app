@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -49,10 +49,12 @@ function GlowRing({ children, size = 42, testID, vibe }) {
  * videos, and a mic for voice notes (tap to record, then send or bin it).
  * onSend(text), onAttach(), onVoice({ uri, durationMs, waveform }),
  * onTyping(true) while you type (at most every few seconds), false on send
- * or when the field empties. `vibe` sets its colours; on Android the glass
- * blurs `blurTarget` (the view holding what's behind it).
+ * or when the field empties. `vibe` sets its colours. It floats over the
+ * chat's backdrop on tinted glass: blurred on iOS; on Android, tint only
+ * (Android's blur needs a blur target view, and that view painted opaque
+ * over the backdrop, which left the thread flat black).
  */
-export default function Composer({ onSend, onAttach, onVoice, onTyping, bottomInset = 0, onFocus, vibe = vibeById(), blurTarget, onLayout, style }) {
+export default function Composer({ onSend, onAttach, onVoice, onTyping, bottomInset = 0, onFocus, vibe = vibeById(), onLayout, style }) {
   const [draft, setDraft] = useState('');
   const lastPing = useRef(0);
   const change = (text) => {
@@ -132,7 +134,7 @@ export default function Composer({ onSend, onAttach, onVoice, onTyping, bottomIn
 
   return (
     <View style={[styles.wrap, { paddingBottom: bottomInset + space.sm }, style]} onLayout={onLayout} testID="hub-composer-bar">
-      <BlurView intensity={50} tint={vibe.light ? 'light' : 'dark'} blurMethod="dimezisBlurView" blurTarget={blurTarget} style={StyleSheet.absoluteFill} />
+      {Platform.OS === 'ios' ? <BlurView intensity={50} tint={vibe.light ? 'light' : 'dark'} style={StyleSheet.absoluteFill} /> : null}
       {/* The glass's tint, which is also its look wherever blur isn't drawn. */}
       <View style={[StyleSheet.absoluteFill, { backgroundColor: vibe.bar }]} />
       {recording ? (
@@ -175,12 +177,7 @@ export default function Composer({ onSend, onAttach, onVoice, onTyping, bottomIn
             maxLength={MAX_LENGTH}
             // The field flips with the vibe: dark ink on a light theme,
             // and a tint of the backdrop so it never reads as a black box.
-            style={[
-              styles.input,
-              vibe.light
-                ? { backgroundColor: 'rgba(17,17,19,0.05)', borderColor: 'rgba(17,17,19,0.14)', color: '#111113' }
-                : { color: vibe.ink },
-            ]}
+            style={[styles.input, vibe.light ? { backgroundColor: 'rgba(17,17,19,0.05)', borderColor: 'rgba(17,17,19,0.14)', color: '#111113' } : { color: vibe.ink }]}
             accessibilityLabel="Message"
             testID="hub-composer"
           />
@@ -193,7 +190,13 @@ export default function Composer({ onSend, onAttach, onVoice, onTyping, bottomIn
             </GlowRing>
           ) : (
             <GlowRing testID="hub-mic-glow" vibe={vibe}>
-              <Pressable onPress={start} accessibilityRole="button" accessibilityLabel="Record a voice note" style={({ pressed }) => [styles.mic, { backgroundColor: vibe.accentSoft }, pressed && styles.pressed]} testID="hub-mic">
+              <Pressable
+                onPress={start}
+                accessibilityRole="button"
+                accessibilityLabel="Record a voice note"
+                style={({ pressed }) => [styles.mic, { backgroundColor: vibe.accentSoft }, pressed && styles.pressed]}
+                testID="hub-mic"
+              >
                 <Ionicons name="mic" size={20} color={vibe.accent} />
               </Pressable>
             </GlowRing>

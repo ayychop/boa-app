@@ -1,20 +1,12 @@
 package expo.modules.boacall
 
 import android.app.NotificationManager
-import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import android.graphics.Color
 import android.net.Uri
 import android.os.Build
-import android.os.PowerManager
 import android.provider.Settings
-import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
-import androidx.core.app.Person
-import androidx.core.graphics.drawable.IconCompat
 import expo.modules.kotlin.functions.Queues
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
@@ -25,24 +17,30 @@ import expo.modules.kotlin.records.Record
 class IncomingCall : Record {
   @Field val callId: String = ""
   @Field val name: String = ""
+  // Their photo (https), shown on the call screen; empty for the BOA logo.
+  @Field val avatar: String = ""
   // network.boa://call/... links: opening the call, and answering it.
   @Field val link: String = ""
   @Field val acceptLink: String = ""
   // The ringtone's channel (boa-call-<ringtone>, src/chat/notifications.js).
   @Field val channelId: String = ""
   @Field val timeoutMs: Double = 45000.0
+  // The buzz: [wait, buzz, wait, ...] ms on the ringtone's bass hits (src/calls/ringtoneHaptics.js).
+  @Field val vibration: List<Double> = emptyList()
+
+  fun info() = CallInfo(callId, name, avatar, link, acceptLink, channelId, timeoutMs.toLong(), vibration.map { it.toLong() }.toLongArray())
 }
 
 /**
- * An incoming BOA video call, rung like a phone call: a call-style
- * notification (Answer and Decline, the caller, the BOA logo) with a
- * full-screen intent, so a locked or sleeping phone wakes straight to the
- * call screen, and an unlocked one in use gets the heads-up. Its category
- * is CALL, so Do Not Disturb lets it through when calls are allowed.
+ * An incoming BOA video call, rung like a phone call. IncomingCallService
+ * (a phoneCall foreground service) rings: the ringtone on a loop and the
+ * buzz (Ringer), and the call-style notification, whose full-screen intent
+ * opens IncomingCallActivity over the lock screen. A locked or sleeping
+ * phone wakes straight to it; an unlocked one in use gets the heads-up.
  *
- * Answering or tapping opens the app on a network.boa://call link, which
- * CallContext turns into the call. Decline (or swiping it away) only
- * reaches JS if it's running; otherwise the caller hears "No answer".
+ * Answering opens the app on a network.boa://call link, which CallContext
+ * turns into the call. Decline (or swiping it away) stops the ring at once
+ * and reaches JS if it's running; otherwise the caller hears "No answer".
  */
 class BoaCallModule : Module() {
   private val context: Context
@@ -51,78 +49,41 @@ class BoaCallModule : Module() {
   private val manager: NotificationManagerCompat
     get() = NotificationManagerCompat.from(context)
 
-  private fun smallIcon(): Int {
-    // Drawn by the expo-notifications config plugin from app.json's icon.
-    val id = context.resources.getIdentifier("notification_icon", "drawable", context.packageName)
-    return if (id != 0) id else context.applicationInfo.icon
-  }
-
-  private fun logo(): Bitmap? = runCatching { BitmapFactory.decodeResource(context.resources, R.drawable.boa_call_logo) }.getOrNull()
-
-  private fun opener(link: String, requestCode: Int): PendingIntent? {
-    val launch = context.packageManager.getLaunchIntentForPackage(context.packageName) ?: return null
-    // ACTION_VIEW with the link, so React Native's Linking hands it to JS
-    // (cold start or not).
-    val intent = Intent(launch).apply {
-      action = Intent.ACTION_VIEW
-      data = Uri.parse(link)
-      addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-    }
-    return PendingIntent.getActivity(context, requestCode, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-  }
-
-  private fun decliner(callId: String): PendingIntent {
-    val intent = Intent(context, CallDeclineReceiver::class.java).putExtra(CallDeclineReceiver.EXTRA_CALL_ID, callId)
-    return PendingIntent.getBroadcast(context, REQUEST_DECLINE, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-  }
-
   override fun definition() = ModuleDefinition {
     Name("BoaCall")
 
-    Events("onDecline")
+    Events("onDecline", "onPipChange")
 
     OnCreate {
       CallDeclineReceiver.onDecline = { id -> sendEvent("onDecline", mapOf("callId" to id)) }
+      CallPip.onChange = { active -> sendEvent("onPipChange", mapOf("active" to active)) }
     }
 
     OnDestroy {
       CallDeclineReceiver.onDecline = null
+      CallPip.onChange = null
     }
 
-    /** Rings: posts the call notification. False if it couldn't be posted (no permission). */
+    /** A call is on (true) or over (false): leaving the app now floats it picture in picture. */
+    AsyncFunction("setPipReady") { ready: Boolean ->
+      CallPip.setReady(ready)
+    }.runOnQueue(Queues.MAIN)
+
+    /** Whether this phone does picture in picture. */
+    Function("isPipSupported") {
+      CallPip.supported(appContext.currentActivity)
+    }
+
+    /** Rings. False if it couldn't (notifications off), so JS can say so. */
     AsyncFunction("showIncoming") { call: IncomingCall ->
       if (!manager.areNotificationsEnabled()) return@AsyncFunction false
-      val open = opener(call.link, REQUEST_OPEN) ?: return@AsyncFunction false
-      val answer = opener(call.acceptLink, REQUEST_ANSWER) ?: return@AsyncFunction false
-      val decline = decliner(call.callId)
-      val logo = logo()
-      val caller = Person.Builder()
-        .setName(call.name)
-        .setImportant(true)
-        .apply { logo?.let { setIcon(IconCompat.createWithBitmap(it)) } }
-        .build()
-      val notification = NotificationCompat.Builder(context, call.channelId)
-        .setSmallIcon(smallIcon())
-        .setLargeIcon(logo)
-        .setColor(GOLD)
-        .setContentTitle(call.name)
-        .setContentText("Incoming video call")
-        .setCategory(NotificationCompat.CATEGORY_CALL)
-        .setPriority(NotificationCompat.PRIORITY_MAX)
-        .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-        .setOngoing(true)
-        .setAutoCancel(false)
-        .setOnlyAlertOnce(true)
-        .setTimeoutAfter(call.timeoutMs.toLong())
-        .setContentIntent(open)
-        .setFullScreenIntent(open, true)
-        // Swiping it away (Android 14 lets you) is declining.
-        .setDeleteIntent(decline)
-        .addPerson(caller)
-        .setStyle(NotificationCompat.CallStyle.forIncomingCall(caller, decline, answer).setIsVideo(true))
-        .build()
+      val info = call.info()
+      if (IncomingCallService.ring(context, info)) return@AsyncFunction true
+      // Android wouldn't start the service: the notification and the ring without it.
+      val notification = CallNotification.build(context, info) ?: return@AsyncFunction false
       try {
-        manager.notify(NOTIFICATION_ID, notification)
+        manager.notify(CallNotification.ID, notification)
+        Ringer.start(context, info.channelId, info.timeoutMs, info.vibration)
         true
       } catch (e: SecurityException) {
         false
@@ -131,7 +92,7 @@ class BoaCallModule : Module() {
 
     /** Stops ringing: the call was answered, declined, ended or missed. */
     AsyncFunction("cancelIncoming") {
-      manager.cancel(NOTIFICATION_ID)
+      IncomingCallService.stop(context)
     }
 
     /**
@@ -153,51 +114,9 @@ class BoaCallModule : Module() {
       context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }.runOnQueue(Queues.MAIN)
 
-    /**
-     * Whether Android leaves the app alone in the background. Battery
-     * optimised (most phones' default), a call's push can be held back and
-     * the full-screen ring dropped, and some phones (Samsung's "deep
-     * sleeping" apps, Xiaomi, Oppo) stop it outright.
-     */
-    Function("isIgnoringBatteryOptimizations") {
-      (context.getSystemService(Context.POWER_SERVICE) as? PowerManager)?.isIgnoringBatteryOptimizations(context.packageName) == true
-    }
-
-    /** Asks to be left alone (the system's Allow/Deny), or opens the list if the phone won't ask. */
-    AsyncFunction("openBatterySettings") {
-      val ask = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:${context.packageName}"))
-      val list = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
-      val intent = if (ask.resolveActivity(context.packageManager) != null) ask else list
-      context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-    }.runOnQueue(Queues.MAIN)
-
-    /**
-     * Whether the app may display over other apps. Stock Android doesn't
-     * need it for a full-screen call, but Xiaomi, Oppo, Vivo and some
-     * Samsung builds won't open one from the background without it.
-     */
-    Function("canDrawOverlays") {
-      Settings.canDrawOverlays(context)
-    }
-
-    /** Opens "Display over other apps" for BOA HUB. */
-    AsyncFunction("openOverlaySettings") {
-      val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${context.packageName}"))
-      context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-    }.runOnQueue(Queues.MAIN)
-
     /** Stops showing over the lock screen once the call is over. */
     AsyncFunction("leaveLockScreen") {
       CallLockScreen.leave()
     }.runOnQueue(Queues.MAIN)
-  }
-
-  companion object {
-    // One ringing call at a time, so one id.
-    const val NOTIFICATION_ID = 0xB0AC
-    private const val REQUEST_OPEN = 0xB0A1
-    private const val REQUEST_ANSWER = 0xB0A2
-    private const val REQUEST_DECLINE = 0xB0A3
-    private val GOLD = Color.parseColor("#E2A84B")
   }
 }

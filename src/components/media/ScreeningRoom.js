@@ -179,7 +179,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     boxShadow: '0px 30px 80px rgba(0,0,0,0.75), 0px 0px 0px 1px rgba(243,239,232,0.08)',
   },
-  soonOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
+  soonOverlay: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center' },
   soonTitle: { fontFamily: fonts.semibold, fontSize: 26, color: colors.text, letterSpacing: -0.8 },
   info: { alignSelf: 'center', paddingHorizontal: space.xl, paddingTop: space.xl },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: space.md, marginTop: space.xl },

@@ -9,7 +9,7 @@ import { usePremium } from './PremiumContext';
 import * as signal from '../calls/signaling';
 import * as media from '../calls/media';
 import { startRingtone, stopRingtone } from '../calls/ringtone';
-import { DEFAULT_BEAUTY, fromStored } from '../calls/beauty';
+import { DEFAULT_BEAUTY, fromStored, toStored } from '../calls/beauty';
 import CallScreen from '../components/calls/CallScreen';
 import { haptics } from '../utils/haptics';
 import { blockScreenshots } from '../calls/privacy';
@@ -25,10 +25,10 @@ export { RING_MS };
 // How long "Call ended" stays up before the screen closes.
 const ENDED_MS = 1600;
 const BEAUTY_KEY = 'boa.call.beauty';
+// Whether you've hidden your own picture (it's still sent; you just don't see it).
+const SELF_VIEW_KEY = 'boa.call.selfHidden';
 // How long a call got ready ahead of time stays usable (its token lasts an hour).
 const PRIMED_MS = 40 * 60 * 1000;
-// The incoming-call buzz: long, pause, long, repeating.
-const RING_VIBRATION = [0, 800, 600, 800, 1600];
 // Unknown (just started) counts as on screen; only a known background rings by notification.
 const onScreen = () => AppState.currentState !== 'background';
 
@@ -101,19 +101,53 @@ export function CallProvider({ children }) {
   const [prep, setPrep] = useState('idle'); // idle | preparing | ready | error
   const [starting, setStarting] = useState(false);
 
+  const [selfHidden, setSelfHiddenState] = useState(false);
+  // The call shrunk to a floating window, so the rest of the app is usable while it goes on.
+  const [minimized, setMinimized] = useState(false);
+  const minimize = useCallback(() => setMinimized(true), []);
+  const restore = useCallback(() => setMinimized(false), []);
+  const [facing, setFacing] = useState(media.cameraFacing());
+  useEffect(() => media.onFacing(setFacing), []);
+
   useEffect(() => {
     AsyncStorage.getItem(BEAUTY_KEY)
       .then((raw) => raw && setBeautyState(fromStored(JSON.parse(raw))))
       .catch(() => {});
+    AsyncStorage.getItem(SELF_VIEW_KEY)
+      .then((v) => v === '1' && setSelfHiddenState(true))
+      .catch(() => {});
   }, []);
 
+  // Saved and sent to the camera once, here: never inside a state updater, which React may run twice.
   const setBeauty = useCallback((patch) => {
-    setBeautyState((b) => {
-      const next = { ...b, ...patch };
-      AsyncStorage.setItem(BEAUTY_KEY, JSON.stringify(next)).catch(() => {});
-      media.setBeauty(next);
-      return next;
-    });
+    const next = { ...beautyRef.current, ...patch };
+    beautyRef.current = next;
+    setBeautyState(next);
+    AsyncStorage.setItem(BEAUTY_KEY, JSON.stringify(toStored(next))).catch(() => {});
+    media.setBeauty(next);
+  }, []);
+
+  // Brightness while the slider moves: straight to the camera, nothing saved
+  // or re-rendered until it's let go (setBeauty then).
+  const previewBrightness = useCallback((v) => media.setBrightness(v), []);
+
+  // Every call starts full screen.
+  const callId = call?.id ?? null;
+  useEffect(() => setMinimized(false), [callId]);
+
+  // System picture in picture (Android): while you're on a call (not one
+  // still ringing in), leaving the app floats it over the home screen.
+  const [pip, setPip] = useState(false);
+  useEffect(() => BoaCall.addPipListener(setPip), []);
+  const onCall = !!call && call.phase !== 'ended' && !(call.direction === 'in' && call.phase === 'ringing');
+  useEffect(() => {
+    BoaCall.setPipReady(onCall);
+    if (!onCall) setPip(false);
+  }, [onCall]);
+
+  const setSelfHidden = useCallback((hidden) => {
+    setSelfHiddenState(hidden);
+    AsyncStorage.setItem(SELF_VIEW_KEY, hidden ? '1' : '0').catch(() => {});
   }, []);
 
   const clearTimers = () => {
@@ -152,6 +186,9 @@ export function CallProvider({ children }) {
       setVideo(NO_MEDIA);
       // A call that opened the app over the lock screen leaves it there.
       BoaCall.leaveLockScreen();
+      // After a call you were part of, and only if this phone would stop the
+      // next one from ringing full screen, one plain question about it.
+      if (c && reason === 'ended' && AppState.currentState === 'active') askForCallWakeUp();
     }, ENDED_MS);
   }, []);
 
@@ -185,10 +222,8 @@ export function CallProvider({ children }) {
 
   // An incoming call rings on the call screen with the app on screen, and
   // as a phone-call notification when it isn't (src/calls/incoming.js).
-  const ringHere = () => {
-    Vibration.vibrate(RING_VIBRATION, true);
-    startRingtone(ringtoneRef.current);
-  };
+  // The buzz comes with the ringtone, on its bass hits (src/calls/ringtone.js).
+  const ringHere = () => startRingtone(ringtoneRef.current);
   const ringAway = (c) => {
     Vibration.cancel();
     stopRingtone();
@@ -368,17 +403,6 @@ export function CallProvider({ children }) {
     };
   }, [userId, ringIn]);
 
-  // Signed in on Android: make sure a locked phone can ring (full-screen
-  // calls, no battery restrictions, display over other apps). After the
-  // notification prompt has had its turn.
-  useEffect(() => {
-    if (!userId) return undefined;
-    const t = setTimeout(() => {
-      if (AppState.currentState === 'active' && !callRef.current) askForCallWakeUp();
-    }, 6000);
-    return () => clearTimeout(t);
-  }, [userId]);
-
   useEffect(
     () => () => {
       clearTimers();
@@ -543,6 +567,14 @@ export function CallProvider({ children }) {
       video,
       beauty,
       setBeauty,
+      previewBrightness,
+      facing,
+      selfHidden,
+      setSelfHidden,
+      minimized,
+      minimize,
+      restore,
+      pip,
       startCall,
       accept,
       decline,
@@ -552,7 +584,30 @@ export function CallProvider({ children }) {
       primeCall,
       callPrep: starting ? 'starting' : prep,
     }),
-    [call, controls, video, beauty, setBeauty, startCall, accept, decline, hangUp, toggle, flipCamera, primeCall, starting, prep],
+    [
+      call,
+      controls,
+      video,
+      beauty,
+      setBeauty,
+      previewBrightness,
+      facing,
+      selfHidden,
+      setSelfHidden,
+      minimized,
+      minimize,
+      restore,
+      pip,
+      startCall,
+      accept,
+      decline,
+      hangUp,
+      toggle,
+      flipCamera,
+      primeCall,
+      starting,
+      prep,
+    ],
   );
 
   return (

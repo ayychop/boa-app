@@ -15,5 +15,8 @@ export const setSpeaker = () => {};
 export const switchCamera = () => {};
 export const setPrivacy = () => {};
 export const setBeauty = () => {};
+export const setBrightness = () => {};
+export const cameraFacing = () => 'front';
+export const onFacing = () => () => {};
 export const LocalVideo = () => null;
 export const RemoteVideo = () => null;

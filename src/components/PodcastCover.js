@@ -96,7 +96,7 @@ export default function PodcastCover({ podcast, size, rounded = Math.round(size 
 
 const styles = StyleSheet.create({
   frame: { overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
-  pad: { ...StyleSheet.absoluteFillObject },
+  pad: { ...StyleSheet.absoluteFill },
   mark: { fontFamily: fonts.monoMedium },
   stack: { fontFamily: fonts.extrabold },
   mono: { fontFamily: fonts.mono, color: colors.textMuted },

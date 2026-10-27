@@ -102,7 +102,7 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
   },
-  content: { ...StyleSheet.absoluteFillObject, padding: 14, justifyContent: 'space-between' },
+  content: { ...StyleSheet.absoluteFill, padding: 14, justifyContent: 'space-between' },
   title: { fontFamily: fonts.semibold, color: colors.text, letterSpacing: -0.6 },
   meta: { fontFamily: fonts.medium, fontSize: 11.5, color: colors.textMuted, marginTop: 3 },
 });

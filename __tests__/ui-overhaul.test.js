@@ -8,7 +8,7 @@ jest.useFakeTimers();
 
 const { VIBES, CUSTOM_ID, customVibe, resetChatVibe, default: useChatVibe } = require('../src/chat/vibes');
 const { contrast } = require('../src/chat/bubbleTheme');
-const AmbientGlow = require('../src/components/chat/AmbientGlow').default;
+const ChatBackdrop = require('../src/components/chat/ChatBackdrop').default;
 const VibePicker = require('../src/components/chat/VibePicker').default;
 const { hsvToHex, hexToHsv } = require('../src/components/chat/ColorPicker');
 
@@ -32,7 +32,20 @@ const over = (top, bottom) => {
 
 describe('12 chat vibes and Custom', () => {
   test('the twelve, in order, each with its own texture where it has one', () => {
-    expect(VIBES.map((v) => v.label)).toEqual(['Noir', 'Neon', 'Midnight', 'Turntable', 'Street Luxury', 'Afro-Futurism', 'Y2K Luxe', 'Cinema Classic', 'Golden Hour', 'Cyberpunk', 'Minimalist', 'The Block']);
+    expect(VIBES.map((v) => v.label)).toEqual([
+      'Noir',
+      'Neon',
+      'Midnight Drive',
+      'Turntable',
+      'Street Luxury',
+      'Afro-Futurism',
+      'Y2K Luxe',
+      'Cinema Classic',
+      'Golden Hour',
+      'Cyberpunk',
+      'Minimalist',
+      'The Block',
+    ]);
     expect(Object.fromEntries(VIBES.filter((v) => v.texture).map((v) => [v.id, v.texture]))).toEqual({
       turntable: 'vinyl',
       'street-luxury': 'gold',
@@ -64,9 +77,21 @@ describe('12 chat vibes and Custom', () => {
     expect(customVibe('not a colour').customColor).toBe('#2F7BFF');
   });
 
-  test.each(VIBES.filter((v) => v.texture).map((v) => [v.id, v.texture]))('%s draws its %s texture in the thread backdrop', async (id, texture) => {
-    await render(<AmbientGlow vibe={VIBES.find((v) => v.id === id)} />);
+  // The record is the turntable scene's own; every other texture is drawn as a texture.
+  test.each(VIBES.filter((v) => v.texture && v.texture !== 'vinyl').map((v) => [v.id, v.texture]))('%s draws its %s texture in the thread backdrop', async (id, texture) => {
+    await render(<ChatBackdrop vibe={VIBES.find((v) => v.id === id)} />);
     expect(screen.getByTestId(`chat-texture-${texture}`)).toBeOnTheScreen();
+    await screen.unmount();
+  });
+
+  test.each([
+    ['turntable', 'chat-turntable'],
+    ['midnight', 'chat-particles-stars'],
+    ['golden-hour', 'chat-particles-embers'],
+    ['cyberpunk', 'chat-particles-rain'],
+  ])('%s draws its scene in the thread backdrop', async (id, testID) => {
+    await render(<ChatBackdrop vibe={VIBES.find((v) => v.id === id)} />);
+    expect(screen.getByTestId(testID)).toBeOnTheScreen();
     await screen.unmount();
   });
 
@@ -172,7 +197,9 @@ function containsNode(root, node) {
 
 describe('copy and assets', () => {
   const read = (dir) =>
-    fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? read(path.join(dir, e.name)) : /\.(js|ts|tsx)$/.test(e.name) ? [fs.readFileSync(path.join(dir, e.name), 'utf8')] : []));
+    fs
+      .readdirSync(dir, { withFileTypes: true })
+      .flatMap((e) => (e.isDirectory() ? read(path.join(dir, e.name)) : /\.(js|ts|tsx)$/.test(e.name) ? [fs.readFileSync(path.join(dir, e.name), 'utf8')] : []));
   test('"melanin" appears nowhere in the app', () => {
     for (const src of read(path.join(__dirname, '../src'))) expect(src).not.toMatch(/melanin/i);
   });

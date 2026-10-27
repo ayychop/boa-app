@@ -21,6 +21,7 @@ export const PREVIEW = Object.freeze({
   orientationMode: 0,
   degradationPreference: 0,
   advanceOptions: { compressionPreference: 1 },
+  mirrorMode: 2, // VideoMirrorModeDisabled: see ENCODER
 });
 
 /** setVideoEncoderConfiguration once the call is connected. */
@@ -35,7 +36,15 @@ export const ENCODER = Object.freeze({
   // than a soft, blocky one.
   degradationPreference: 0,
   advanceOptions: { compressionPreference: 1 }, // PreferQuality
+  // VideoMirrorModeDisabled: they see you the right way round (text on your
+  // shirt reads), while your own preview is mirrored like a mirror
+  // (LocalVideo's canvas).
+  mirrorMode: 2,
 });
+
+/** The preview's mirror (VideoCanvas.mirrorMode): mirrored for the front camera, true to life for the back. */
+export const MIRROR_ON = 1; // VideoMirrorModeEnabled
+export const MIRROR_OFF = 2; // VideoMirrorModeDisabled
 
 /**
  * setCameraCapturerConfiguration: front camera. No fixed format, so the

@@ -71,7 +71,7 @@ import HubSettingsScreen from './src/screens/hub/HubSettingsScreen';
 import ChatAppearanceScreen from './src/screens/hub/ChatAppearanceScreen';
 import RingtoneScreen from './src/screens/hub/RingtoneScreen';
 import HubChatsScreen from './src/screens/hub/HubChatsScreen';
-import HubThreadScreen from './src/screens/hub/HubThreadScreen';
+import NewChatScreen from './src/screens/hub/NewChatScreen';
 import AdminDashboard from './src/screens/admin/AdminDashboard';
 import HubNewPostScreen from './src/screens/hub/HubNewPostScreen';
 import HubPostScreen from './src/screens/hub/HubPostScreen';
@@ -139,7 +139,13 @@ function TabTransition({ children }) {
     else progress.value = withTiming(1, { duration: reduceMotion ? 180 : 340, easing: EASE_OUT_EXPO });
   }, [focused, reduceMotion, progress]);
 
-  const style = useAnimatedStyle(() => ({ flex: 1, opacity: progress.value }));
+  // The tab settles in: it fades up from a touch lower and a hair smaller.
+  // Reduced motion keeps the fade alone.
+  const style = useAnimatedStyle(() => ({
+    flex: 1,
+    opacity: progress.value,
+    transform: reduceMotion ? [] : [{ translateY: (1 - progress.value) * 10 }, { scale: 0.985 + progress.value * 0.015 }],
+  }));
 
   return <Animated.View style={[style, { paddingHorizontal: side }]}>{children}</Animated.View>;
 }
@@ -370,7 +376,12 @@ function DeepLinks({ navReady }) {
   return null;
 }
 
-const PAGE_OPTIONS = { headerShown: false, animation: 'slide_from_right', contentStyle: { backgroundColor: colors.bg } };
+// Pages push in like iOS on every phone: the new page slides over while the
+// one under it eases back a little and dims (Android's own slide is flat).
+// Native, so it stays smooth however busy JS is.
+const PAGE_OPTIONS = { headerShown: false, animation: 'ios_from_right', contentStyle: { backgroundColor: colors.bg } };
+// A photo or reel rises into view, the way media opens in a gallery.
+const MEDIA_OPTIONS = { animation: 'fade_from_bottom' };
 
 // The tabs, with the full-screen pages (the forecast, alarms, the Creative
 // Hub) stacked over them.
@@ -395,10 +406,10 @@ function MainTabs({ freshInstall = false }) {
         <Stack.Screen name="ChatAppearance" component={ChatAppearanceScreen} />
         <Stack.Screen name="Ringtone" component={RingtoneScreen} />
         <Stack.Screen name="HubChats" component={HubChatsScreen} />
-        <Stack.Screen name="HubThread" component={HubThreadScreen} />
+        <Stack.Screen name="HubThread" component={NewChatScreen} />
         <Stack.Screen name="AdminDashboard" component={AdminDashboard} />
         <Stack.Screen name="HubNewPost" component={HubNewPostScreen} options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
-        <Stack.Screen name="HubPost" component={HubPostScreen} />
+        <Stack.Screen name="HubPost" component={HubPostScreen} options={MEDIA_OPTIONS} />
         <Stack.Screen name="HubSplits" component={HubSplitsScreen} />
         <Stack.Screen name="HubSplitSheet" component={HubSplitSheetScreen} />
         <Stack.Screen name="HubInvoice" component={HubInvoiceScreen} />

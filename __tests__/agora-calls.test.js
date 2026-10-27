@@ -208,6 +208,156 @@ describe('Agora video calls', () => {
     expect(screen.queryByTestId('call-screen')).toBeNull();
   });
 
+  test('Brightness moves the camera exposure smoothly; hide yourself; flip un-mirrors your preview; the look survives the camera reopening', async () => {
+    const AsyncStorage = jest.requireMock('@react-native-async-storage/async-storage').default ?? jest.requireMock('@react-native-async-storage/async-storage');
+    // Filters on, Brightness on Auto (an earlier test switched filters off and it's saved).
+    await AsyncStorage.removeItem('boa.call.beauty');
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    await mount();
+    await user.press(screen.getByText('Call Kofi'));
+    const { callId } = signal.send.mock.calls.at(-1)[2];
+    await act(async () => {});
+    // The ringing preview: your camera at Auto exposure, mirrored like a mirror.
+    expect(engine.setCameraExposureFactor).toHaveBeenLastCalledWith(0);
+    expect(screen.getByTestId('call-local-video').props.canvas.mirrorMode).toBe(1);
+    await act(async () => mockSignal('accept', { callId }));
+    engine.setBeautyEffectOptions.mockClear();
+    await act(async () => handler().onJoinChannelSuccess({}, 10));
+    // Stepping up to HD reopens the camera: the look goes back on.
+    expect(engine.setBeautyEffectOptions).toHaveBeenCalled();
+    engine.setBeautyEffectOptions.mockClear();
+    await act(async () => handler().onLocalVideoStateChanged(2, 1, 0));
+    expect(engine.setBeautyEffectOptions).toHaveBeenCalled();
+
+    // The slider: exposure straight to the camera as it moves, saved only when let go.
+    await user.press(screen.getByTestId('call-filters-button'));
+    const slider = screen.getByTestId('call-brightness');
+    expect(slider.props.step).toBe(0);
+    // setItem is already a mock: read its calls from here on (never restore it, that wipes it for later tests).
+    const from = AsyncStorage.setItem.mock.calls.length;
+    const saves = () => AsyncStorage.setItem.mock.calls.slice(from).filter(([k, v]) => k === 'boa.call.beauty' && JSON.parse(v).brightness !== 0.5);
+    await act(async () => slider.props.onValueChange(1));
+    // The platform's own range: up to +14 on Android, +5 on iOS.
+    const { exposureOf } = require('../src/calls/beauty');
+    const os = require('react-native').Platform.OS === 'ios' ? 'ios' : 'android';
+    expect(engine.setCameraExposureFactor).toHaveBeenLastCalledWith(exposureOf(1, os));
+    expect(Math.abs(exposureOf(1, os))).toBeGreaterThanOrEqual(5);
+    expect(screen.getByTestId('call-brightness-value')).toHaveTextContent('+100');
+    expect(saves()).toHaveLength(0);
+    await act(async () => slider.props.onSlidingComplete(0.75));
+    expect(engine.setCameraExposureFactor).toHaveBeenLastCalledWith(exposureOf(0.75, os));
+    expect(JSON.parse(saves().at(-1)[1])).toEqual(expect.objectContaining({ brightness: 0.75, v: 2 }));
+    await user.press(screen.getByTestId('call-brightness-auto'));
+    expect(engine.setCameraExposureFactor).toHaveBeenLastCalledWith(0);
+    await user.press(screen.getByRole('button', { name: 'Close filters' }));
+
+    // One tap on the strip changes the look.
+    await user.press(screen.getByTestId('call-strip-golden'));
+    expect(engine.setFilterEffectOptions).toHaveBeenLastCalledWith(true, expect.objectContaining({ strength: 0.75 }), 2);
+
+    // The back camera isn't mirrored; the front one is again after flipping back.
+    await user.press(screen.getByTestId('call-flip'));
+    expect(screen.getByTestId('call-local-video').props.canvas.mirrorMode).toBe(2);
+    await user.press(screen.getByTestId('call-flip'));
+    expect(screen.getByTestId('call-local-video').props.canvas.mirrorMode).toBe(1);
+
+    // Hide yourself: you're still sent (nothing stops the camera), just not shown to you.
+    const enables = engine.enableLocalVideo.mock.calls.length;
+    await user.press(screen.getByTestId('call-self-hide'));
+    expect(screen.queryByTestId('call-self-view')).toBeNull();
+    expect(screen.queryByTestId('call-local-video')).toBeNull();
+    expect(engine.enableLocalVideo.mock.calls.length).toBe(enables);
+    expect(engine.muteLocalVideoStream).not.toHaveBeenLastCalledWith(true);
+    await user.press(screen.getByTestId('call-self-show'));
+    expect(screen.getByTestId('call-self-view')).toBeOnTheScreen();
+
+    await user.press(screen.getByTestId('call-end'));
+    await act(async () => jest.advanceTimersByTime(2000));
+  });
+
+  test('picture in picture: the call shrinks to a floating window, the call goes on, a tap brings it back, End ends it', async () => {
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    await mount();
+    await user.press(screen.getByText('Call Kofi'));
+    const { callId } = signal.send.mock.calls.at(-1)[2];
+    await act(async () => {});
+    await act(async () => mockSignal('accept', { callId }));
+    await act(async () => handler().onJoinChannelSuccess({}, 10));
+    await act(async () => {
+      handler().onUserJoined({}, 777, 0);
+      handler().onRemoteVideoStateChanged({}, 777, 2, 0, 0);
+    });
+    const leaves = engine.leaveChannel.mock.calls.length;
+
+    await user.press(screen.getByTestId('call-minimize'));
+    // The full screen goes; the app is usable under a floating window with their picture in it.
+    expect(screen.queryByTestId('call-screen')).toBeNull();
+    expect(screen.getByTestId('call-mini')).toBeOnTheScreen();
+    expect(screen.getByTestId('call-mini-layer').props.pointerEvents).toBe('box-none');
+    expect(screen.getByTestId('call-remote-video').props.canvas).toEqual(expect.objectContaining({ uid: 777 }));
+    expect(screen.getByText('Call Kofi')).toBeOnTheScreen();
+    // Nothing about the call changed.
+    expect(engine.leaveChannel.mock.calls.length).toBe(leaves);
+
+    await user.press(screen.getByRole('button', { name: 'Back to your call with Kofi Boateng' }));
+    expect(screen.getByTestId('call-screen')).toBeOnTheScreen();
+    expect(screen.queryByTestId('call-mini')).toBeNull();
+
+    await user.press(screen.getByTestId('call-minimize'));
+    await user.press(screen.getByTestId('call-mini-end'));
+    expect(engine.leaveChannel.mock.calls.length).toBe(leaves + 1);
+    await act(async () => jest.advanceTimersByTime(2000));
+    expect(screen.queryByTestId('call-mini')).toBeNull();
+  });
+
+  test('system picture in picture: ready while you are on a call, their picture alone in the window, off when it ends', async () => {
+    const BoaCall = require('../modules/boa-call');
+    BoaCall.setPipReady.mockClear();
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    await mount();
+    await user.press(screen.getByText('Call Kofi'));
+    const { callId } = signal.send.mock.calls.at(-1)[2];
+    await act(async () => {});
+    // Ringing out counts: leave the app and it floats.
+    expect(BoaCall.setPipReady).toHaveBeenLastCalledWith(true);
+    await act(async () => mockSignal('accept', { callId }));
+    await act(async () => handler().onJoinChannelSuccess({}, 10));
+    await act(async () => {
+      handler().onUserJoined({}, 777, 0);
+      handler().onRemoteVideoStateChanged({}, 777, 2, 0, 0);
+    });
+    // Android puts it in the window: their picture, edge to edge, no controls, no Modal.
+    await act(async () => BoaCall.__pip(true));
+    expect(screen.getByTestId('call-pip')).toBeOnTheScreen();
+    expect(screen.queryByTestId('call-screen')).toBeNull();
+    expect(screen.queryByTestId('call-controls')).toBeNull();
+    expect(screen.getByTestId('call-remote-video').props.canvas).toEqual(expect.objectContaining({ uid: 777 }));
+    // Tapped back to full screen.
+    await act(async () => BoaCall.__pip(false));
+    expect(screen.getByTestId('call-screen')).toBeOnTheScreen();
+    await user.press(screen.getByTestId('call-end'));
+    expect(BoaCall.setPipReady).toHaveBeenLastCalledWith(false);
+    await act(async () => jest.advanceTimersByTime(2000));
+  });
+
+  test('the app manifest allows picture in picture, and the activity never restarts going in or out', () => {
+    const plugins = require('../app.json').expo.plugins;
+    expect(plugins).toContain('./plugins/withCallPictureInPicture');
+    const activity = { $: { 'android:name': '.MainActivity' } };
+    let mod;
+    jest.isolateModules(() => {
+      jest.doMock('expo/config-plugins', () => ({
+        AndroidConfig: { Manifest: { getMainActivityOrThrow: () => activity } },
+        withAndroidManifest: (config, fn) => ((mod = fn), config),
+      }));
+      require('../plugins/withCallPictureInPicture')({});
+    });
+    mod({ modResults: {} });
+    expect(activity.$['android:supportsPictureInPicture']).toBe('true');
+    const changes = plugins.find((p) => Array.isArray(p) && p[0] === './plugins/withAndroidConfigChanges')[1].configChanges;
+    expect(changes).toEqual(expect.arrayContaining(['screenSize', 'smallestScreenSize', 'screenLayout', 'orientation']));
+  });
+
   test('an answered incoming call joins; a token that fails twice says so instead of hanging', async () => {
     const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
     fetchToken.mockClear();
@@ -488,8 +638,10 @@ describe('the filter readout', () => {
     const { describeParts } = require('../src/calls/beauty');
     expect(describeParts({ preset: 'golden', brightness: 0.5, enabled: true })).toEqual([
       { id: 'preset', label: 'Golden', value: null },
-      { id: 'brightness', label: 'Bright', value: '50%' },
+      { id: 'brightness', label: 'Bright', value: 'Auto' },
     ]);
+    expect(describeParts({ preset: 'golden', brightness: 0.7, enabled: true })[1].value).toBe('+40');
+    expect(describeParts({ preset: 'golden', brightness: 0.25, enabled: true })[1].value).toBe('-50');
     expect(describeParts({ preset: 'golden', enabled: false })).toEqual([{ id: 'off', label: 'Filters off', value: null }]);
   });
 });
@@ -526,15 +678,39 @@ describe('the call presets', () => {
     expect(sb).toBeGreaterThan(sr);
   });
 
-  test('each preset reaches Agora as beauty, colour and its grade; Brightness is lightening', () => {
+  test('each preset reaches Agora as beauty, colour and its grade; Brightness is the camera exposure', () => {
     const bw = toAgora({ preset: 'bw', brightness: 1, enabled: true });
     expect(bw.filter).toEqual({ enabled: true, lut: 'bw', strength: 1 });
     expect(bw.colorEnhance.enabled).toBe(false);
-    expect(bw.beauty.lighteningLevel).toBe(0.5);
-    expect(toAgora({ preset: 'glow', brightness: 0, enabled: true }).beauty).toEqual(expect.objectContaining({ lighteningLevel: 0, lighteningContrastLevel: 0 }));
-    const off = toAgora({ preset: 'cinematic', enabled: false });
+    // The preset sets its own light; Brightness doesn't touch the lightening when the camera takes exposure.
+    expect(bw.beauty.lighteningLevel).toBe(toAgora({ preset: 'bw', brightness: 0, enabled: true }).beauty.lighteningLevel);
+    expect(toAgora({ preset: 'glow', brightness: 0, enabled: true }).beauty.lighteningContrastLevel).toBe(0);
+    // Auto in the middle; strong at the ends, Android's range bigger than iOS's.
+    expect(toAgora({ preset: 'natural', brightness: 0.5 }).exposure.factor).toBe(0);
+    expect(toAgora({ preset: 'natural', brightness: 1 }).exposure.factor).toBe(14);
+    expect(toAgora({ preset: 'natural', brightness: 0 }).exposure.factor).toBe(-14);
+    expect(toAgora({ preset: 'natural', brightness: 1 }, { os: 'ios' }).exposure.factor).toBe(5);
+    // A camera without exposure: Brightness above Auto lifts the lightening instead, still capped.
+    const noExposure = toAgora({ preset: 'natural', brightness: 1 }, { exposure: false });
+    expect(noExposure.exposure.factor).toBe(0);
+    expect(noExposure.beauty.lighteningLevel).toBeGreaterThan(toAgora({ preset: 'natural', brightness: 1 }).beauty.lighteningLevel);
+    expect(noExposure.beauty.lighteningLevel).toBeLessThanOrEqual(0.5);
+    const off = toAgora({ preset: 'cinematic', brightness: 1, enabled: false });
     expect(off.beauty.enabled).toBe(false);
     expect(off.filter.enabled).toBe(false);
+    // Filters off leaves Brightness where you left it.
+    expect(off.exposure.factor).toBe(toAgora({ preset: 'cinematic', brightness: 1 }).exposure.factor);
+    const offNoExposure = toAgora({ preset: 'cinematic', brightness: 1, enabled: false }, { exposure: false });
+    expect(offNoExposure.beauty).toEqual(expect.objectContaining({ enabled: true, smoothnessLevel: 0, lighteningLevel: 0.5 }));
+    expect(offNoExposure.filter.enabled).toBe(false);
+  });
+
+  test('the outgoing video is never mirrored; your preview is, on the front camera only', () => {
+    expect(ENCODER.mirrorMode).toBe(2);
+    expect(PREVIEW.mirrorMode).toBe(2);
+    const { LocalVideo } = require('../src/calls/media');
+    expect(LocalVideo({ mirror: true }).props.canvas.mirrorMode).toBe(1);
+    expect(LocalVideo({ mirror: false }).props.canvas.mirrorMode).toBe(2);
   });
 });
 
@@ -801,23 +977,46 @@ describe('waking a locked Android phone', () => {
     jest.restoreAllMocks();
   });
 
-  test('asks for no battery restrictions, then Display over other apps, and opens the setting', async () => {
-    BoaCall.isIgnoringBatteryOptimizations.mockReturnValue(false);
-    BoaCall.canDrawOverlays.mockReturnValue(false);
-    expect((await nextWakeStep()).id).toBe('battery');
+  test('asks nothing when calls can already ring full screen: no battery or overlay prompts, ever', async () => {
     const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
-    await askForCallWakeUp();
-    expect(alert).toHaveBeenCalledWith('Let calls reach you', expect.stringMatching(/battery/), expect.any(Array));
-    alert.mock.calls[0][2].find((b) => b.text === 'Open settings').onPress();
-    expect(BoaCall.openBatterySettings).toHaveBeenCalled();
-    BoaCall.isIgnoringBatteryOptimizations.mockReturnValue(true);
-    expect((await nextWakeStep()).id).toBe('overlay');
-    BoaCall.canDrawOverlays.mockReturnValue(true);
     expect(await nextWakeStep()).toBeNull();
+    await askForCallWakeUp();
+    expect(alert).not.toHaveBeenCalled();
+    expect(BoaCall.isIgnoringBatteryOptimizations).toBeUndefined();
+    expect(BoaCall.canDrawOverlays).toBeUndefined();
   });
 
-  test('the app declares both permissions', () => {
+  test('if full-screen calls are switched off, one plain question, then not again for a month', async () => {
+    const AsyncStorage = jest.requireMock('@react-native-async-storage/async-storage').default ?? jest.requireMock('@react-native-async-storage/async-storage');
+    await AsyncStorage.clear();
+    BoaCall.canUseFullScreen.mockReturnValue(false);
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    await askForCallWakeUp();
+    expect(alert).toHaveBeenCalledWith('Ring like a phone call?', expect.stringMatching(/full-screen/), expect.any(Array));
+    alert.mock.calls[0][2].find((b) => b.text === 'Allow').onPress();
+    expect(BoaCall.openFullScreenSettings).toHaveBeenCalled();
+    await act(async () => {});
+    expect(await nextWakeStep()).toBeNull();
+    BoaCall.canUseFullScreen.mockReturnValue(true);
+  });
+
+  test('no prompt-only permissions; a phone-call foreground service rings, with a native call screen', () => {
     const perms = require('../app.json').expo.android.permissions;
-    expect(perms).toEqual(expect.arrayContaining(['android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS', 'android.permission.SYSTEM_ALERT_WINDOW']));
+    expect(perms).not.toEqual(expect.arrayContaining(['android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS']));
+    expect(perms).not.toEqual(expect.arrayContaining(['android.permission.SYSTEM_ALERT_WINDOW']));
+    const manifest = fs.readFileSync(path.join(__dirname, '../modules/boa-call/android/src/main/AndroidManifest.xml'), 'utf8');
+    expect(manifest).not.toMatch(/BATTERY|SYSTEM_ALERT_WINDOW/);
+    expect(manifest).toMatch(/FOREGROUND_SERVICE_PHONE_CALL/);
+    expect(manifest).toMatch(/foregroundServiceType="phoneCall"/);
+    expect(manifest).toMatch(/IncomingCallActivity[\s\S]*showWhenLocked="true"[\s\S]*turnScreenOn="true"/);
+    const kt = (f) => fs.readFileSync(path.join(__dirname, '../modules/boa-call/android/src/main/java/expo/modules/boacall', f), 'utf8');
+    // The full-screen intent opens the native call screen; the ring loops until it's over.
+    expect(kt('CallNotification.kt')).toMatch(/setFullScreenIntent\(fullScreen, true\)/);
+    expect(kt('CallNotification.kt')).toMatch(/IncomingCallActivity::class.java/);
+    expect(kt('Ringer.kt')).toMatch(/isLooping = true/);
+    expect(kt('Ringer.kt')).toMatch(/RINGER_MODE_SILENT/);
+    expect(kt('IncomingCallService.kt')).toMatch(/FOREGROUND_SERVICE_TYPE_PHONE_CALL/);
+    // Decline anywhere stops the ring at once.
+    expect(kt('CallDeclineReceiver.kt')).toMatch(/IncomingCallService.stop\(context\)/);
   });
 });

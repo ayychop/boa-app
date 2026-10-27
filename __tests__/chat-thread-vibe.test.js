@@ -1,8 +1,9 @@
 import { act, render, screen, userEvent } from '@testing-library/react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import * as hub from '../src/api/hub';
-import HubThreadScreen from '../src/screens/hub/HubThreadScreen';
-import AmbientGlow, { STARS } from '../src/components/chat/AmbientGlow';
+import HubThreadScreen from '../src/screens/hub/NewChatScreen';
+import ChatBackdrop, { particlesOf } from '../src/components/chat/ChatBackdrop';
+import { vibeById } from '../src/chat/vibes';
 import { TYPING_EVERY_MS, TYPING_HOLD_MS } from '../src/chat/typing';
 
 jest.useFakeTimers();
@@ -173,11 +174,12 @@ test('leaving the thread closes its typing room', async () => {
   expect(typingRoom()).toBeUndefined();
 });
 
-test('the chat background has a faint starfield in three twinkling sets', async () => {
-  await render(<AmbientGlow />);
-  for (const set of [0, 1, 2]) expect(screen.getByTestId(`chat-stars-${set}`)).toBeOnTheScreen();
-  expect(STARS).toHaveLength(27);
-  for (const s of STARS) {
+test('Midnight Drive has a starfield; every star sits on the screen', async () => {
+  await render(<ChatBackdrop vibe={vibeById('midnight')} />);
+  expect(screen.getByTestId('chat-particles-stars')).toBeOnTheScreen();
+  const stars = particlesOf('stars');
+  expect(stars.length).toBeGreaterThan(20);
+  for (const s of stars) {
     expect(s.x).toBeGreaterThanOrEqual(0);
     expect(s.x).toBeLessThan(1);
     expect(s.size).toBeLessThanOrEqual(3);

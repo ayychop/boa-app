@@ -11,7 +11,11 @@
 //   - A colour grade: a Cube LUT (src/calls/luts.js) for the looks the
 //     beauty options can't make (warm gold, teal and orange film, black
 //     and white).
-// Brightness is Agora's lightening, on top of whichever preset is on.
+// Brightness is the camera's own exposure (setCameraExposureFactor): the
+// sensor takes in more or less light, so the picture brightens or darkens
+// like a phone camera's exposure dial, not a filter over it. The middle is
+// Auto (the camera's own exposure). On a camera that can't take an
+// exposure setting, Brightness falls back to Agora's lightening.
 //
 // Every strength is capped (the MAX_ values) inside Agora's range, so no
 // preset or slider position can wash a face out or turn it plastic.
@@ -26,6 +30,7 @@ export const PRESETS = [
     flush: 0.15,
     sharp: 0.35,
     contrast: 1,
+    lift: 0.4,
     colour: 0.2,
     grade: null,
   },
@@ -38,6 +43,7 @@ export const PRESETS = [
     flush: 0.2,
     sharp: 0.55,
     contrast: 2,
+    lift: 0.6,
     colour: 0.3,
     grade: { lut: 'studio', strength: 0.6 },
   },
@@ -50,6 +56,7 @@ export const PRESETS = [
     flush: 0.35,
     sharp: 0.35,
     contrast: 1,
+    lift: 0.4,
     colour: 0.45,
     grade: { lut: 'golden', strength: 0.75 },
   },
@@ -62,6 +69,7 @@ export const PRESETS = [
     flush: 0.1,
     sharp: 0.6,
     contrast: 2,
+    lift: 0.15,
     colour: 0.15,
     grade: { lut: 'cinematic', strength: 0.85 },
   },
@@ -74,6 +82,7 @@ export const PRESETS = [
     flush: 0.6,
     sharp: 0.2,
     contrast: 0,
+    lift: 0.7,
     colour: 0.35,
     grade: { lut: 'glow', strength: 0.7 },
   },
@@ -86,6 +95,7 @@ export const PRESETS = [
     flush: 0,
     sharp: 0.6,
     contrast: 2,
+    lift: 0.3,
     colour: 0,
     grade: { lut: 'bw', strength: 1 },
   },
@@ -93,7 +103,10 @@ export const PRESETS = [
 
 export const presetById = (id) => PRESETS.find((p) => p.id === id) ?? PRESETS[0];
 
-export const DEFAULT_BEAUTY = Object.freeze({ preset: 'natural', brightness: 0.4, enabled: true });
+// Brightness 0.5 is Auto: the camera's own exposure.
+export const DEFAULT_BEAUTY = Object.freeze({ preset: 'natural', brightness: 0.5, enabled: true });
+// Saved settings carry this; before it, brightness meant lightening, not exposure.
+export const BEAUTY_VERSION = 2;
 
 // The most each setting is ever allowed to do, whatever the preset or
 // slider says: beyond these, faces start to look plastic, ashy or washed out.
@@ -102,36 +115,73 @@ export const MAX_REDNESS = 0.3;
 export const MAX_LIGHTENING = 0.5;
 export const MAX_SHARPNESS = 0.8;
 export const MAX_SATURATION = 0.7;
+// Exposure at the slider's ends, in Agora's units (Android takes -20..20,
+// iOS -8..8; the SDK clamps to what each camera can do). Strong on purpose:
+// the slider should visibly brighten a dim room.
+export const MAX_EXPOSURE = { android: 14, ios: 5 };
 
 const unit = (v) => Math.max(0, Math.min(1, Number(v) || 0));
 const round = (v) => Math.round(v * 100) / 100;
 
 /**
- * Saved settings, brought up to date. The old sliders are gone: their
- * brightness (studio) carries over as Brightness, the rest starts on Natural.
+ * Saved settings, brought up to date. Brightness saved before it became
+ * exposure (no version) meant something else, so it starts again on Auto.
  */
 export function fromStored(raw) {
   const saved = raw && typeof raw === 'object' ? raw : {};
   const next = { ...DEFAULT_BEAUTY };
   if (PRESETS.some((p) => p.id === saved.preset)) next.preset = saved.preset;
-  if (saved.brightness != null) next.brightness = unit(saved.brightness);
-  else if (saved.studio != null) next.brightness = unit(saved.studio);
+  if (saved.v === BEAUTY_VERSION && saved.brightness != null) next.brightness = unit(saved.brightness);
   if (typeof saved.enabled === 'boolean') next.enabled = saved.enabled;
   return next;
 }
 
+/** What's saved: the settings and the version they're in. */
+export const toStored = (beauty) => ({ preset: beauty.preset, brightness: beauty.brightness, enabled: beauty.enabled, v: BEAUTY_VERSION });
+
 /**
- * Agora's options for a look: { beauty, colorEnhance, filter }. Off
- * (enabled false), everything is off. Skin protection is always full.
+ * Brightness as the camera's exposure factor: 0 at Auto (0.5), up to
+ * MAX_EXPOSURE either way, on a gentle curve so the middle of the slider
+ * is fine control and the ends are strong.
  */
-export function toAgora({ preset, brightness = DEFAULT_BEAUTY.brightness, enabled = true } = {}) {
+export function exposureOf(brightness = DEFAULT_BEAUTY.brightness, os = 'android') {
+  const d = (unit(brightness) - 0.5) * 2;
+  const max = MAX_EXPOSURE[os] ?? MAX_EXPOSURE.android;
+  return round(Math.sign(d) * Math.pow(Math.abs(d), 1.4) * max);
+}
+
+/** "Auto", "+40" or "-25": Brightness as the slider shows it. */
+export function brightnessLabel(brightness = DEFAULT_BEAUTY.brightness) {
+  const d = Math.round((unit(brightness) - 0.5) * 200);
+  return d === 0 ? 'Auto' : `${d > 0 ? '+' : ''}${d}`;
+}
+
+/**
+ * Agora's options for a look: { beauty, colorEnhance, filter, exposure }.
+ * Off (enabled false), every filter is off, but Brightness stays where you
+ * left it: it's the camera's exposure, not a filter. Skin protection is always full. exposure: false (a camera that can't
+ * take an exposure setting) moves Brightness into the lightening instead.
+ */
+export function toAgora({ preset, brightness = DEFAULT_BEAUTY.brightness, enabled = true } = {}, { os = 'android', exposure = true } = {}) {
   const p = presetById(preset);
   const on = !!enabled;
+  // Without exposure, Brightness above Auto becomes lightening: on top of
+  // the preset's own, or, with filters off, the only thing switched on.
+  const extra = !exposure ? Math.max(0, unit(brightness) - 0.5) * 2 * (1 - (on ? p.lift : 0)) : 0;
+  if (!on && extra > 0) {
+    return {
+      exposure: { factor: 0 },
+      beauty: { enabled: true, lighteningContrastLevel: 1, lighteningLevel: round(extra * MAX_LIGHTENING), smoothnessLevel: 0, rednessLevel: 0, sharpnessLevel: 0 },
+      colorEnhance: { enabled: false, strengthLevel: 0, skinProtectLevel: 1.0 },
+      filter: { enabled: false, lut: null, strength: 0 },
+    };
+  }
   return {
+    exposure: { factor: exposure ? exposureOf(brightness, os) : 0 },
     beauty: {
       enabled: on,
       lighteningContrastLevel: on ? p.contrast : 1,
-      lighteningLevel: on ? round(unit(brightness) * MAX_LIGHTENING) : 0,
+      lighteningLevel: on ? round((p.lift + extra) * MAX_LIGHTENING) : 0,
       smoothnessLevel: on ? round(p.smooth * MAX_SMOOTHNESS) : 0,
       rednessLevel: on ? round(p.flush * MAX_REDNESS) : 0,
       sharpnessLevel: on ? round(p.sharp * MAX_SHARPNESS) : 0,
@@ -145,7 +195,7 @@ export function toAgora({ preset, brightness = DEFAULT_BEAUTY.brightness, enable
   };
 }
 
-/** A short line under the call controls: "Golden · Bright 40%". */
+/** A short line under the call controls: "Golden · Bright +40". */
 export function describe(beauty) {
   return describeParts(beauty)
     .map((p) => (p.value == null ? p.label : `${p.label} ${p.value}`))
@@ -157,6 +207,6 @@ export function describeParts(beauty) {
   if (!beauty?.enabled) return [{ id: 'off', label: 'Filters off', value: null }];
   return [
     { id: 'preset', label: presetById(beauty.preset).label, value: null },
-    { id: 'brightness', label: 'Bright', value: `${Math.round(unit(beauty.brightness ?? DEFAULT_BEAUTY.brightness) * 100)}%` },
+    { id: 'brightness', label: 'Bright', value: brightnessLabel(beauty.brightness) },
   ];
 }

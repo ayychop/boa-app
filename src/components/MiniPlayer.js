@@ -293,7 +293,7 @@ const styles = StyleSheet.create({
     boxShadow: '0px 22px 44px rgba(0,0,0,0.6), 0px 6px 14px rgba(0,0,0,0.4)',
   },
   halo: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     borderRadius: radius.pill,
     boxShadow: '0px 0px 0px 1px rgba(226,168,75,0.55), 0px 0px 28px rgba(226,168,75,0.45)',
   },
@@ -308,7 +308,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.16)',
   },
-  tint: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(18,18,22,0.32)' },
+  tint: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(18,18,22,0.32)' },
   sheen: { position: 'absolute', left: 0, right: 0, top: 0, height: '60%' },
   progress: { position: 'absolute', left: 28, right: 28, bottom: 0, height: 2, backgroundColor: 'rgba(243,239,232,0.12)' },
   progressFill: { height: '100%' },

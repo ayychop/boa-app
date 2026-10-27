@@ -10,6 +10,7 @@ import { Avatar, IconButton, PageHeader, BoaStarBadge, DayOneBadge } from '../..
 import { Button } from '../../components/ui';
 import NowPlaying from '../../components/hub/NowPlaying';
 import { colors, fonts, radius, space, type } from '../../theme';
+import { haptics } from '../../utils/haptics';
 
 /** "14:05" today, "Mon" this week, "12 Oct" before that. */
 export function chatTime(iso, now = new Date()) {
@@ -26,15 +27,26 @@ export function chatTime(iso, now = new Date()) {
  * they're online), their name, the last message and when. Unread threads
  * glow gold at the edge. Rows rise in one after another.
  */
-export function ThreadRow({ conv, online, onPress, index, myId, dayOne = false }) {
+export function ThreadRow({ conv, online, onPress, onLongPress, index, myId, dayOne = false }) {
   const name = conv.other?.display_name || (conv.other?.username ? `@${conv.other.username}` : 'BOA HUB member');
   const preview = `${conv.last_sender_id === myId ? 'You: ' : ''}${conv.last_message_preview ?? ''}`;
   return (
-    <Animated.View entering={FadeInDown.delay(Math.min(index, 8) * 50).springify().damping(20)} layout={LinearTransition.springify().damping(22)}>
+    <Animated.View
+      entering={FadeInDown.delay(Math.min(index, 8) * 50)
+        .springify()
+        .damping(20)}
+      layout={LinearTransition.springify().damping(22)}
+    >
       <Pressable
-        onPress={onPress}
+        onPress={() => {
+          haptics.tap();
+          onPress?.();
+        }}
+        onLongPress={onLongPress}
+        delayLongPress={350}
         accessibilityRole="button"
-        accessibilityLabel={`${name}${conv.unread ? ', unread' : ''}${online ? ', online' : ''}: ${preview}`}
+        accessibilityLabel={`${name}${conv.request ? ', message request' : ''}${conv.unread ? ', unread' : ''}${online ? ', online' : ''}: ${preview}`}
+        accessibilityHint={onLongPress ? 'Hold for options' : undefined}
         style={({ pressed }) => [styles.row, conv.unread && styles.rowUnread, pressed && { transform: [{ scale: 0.985 }], opacity: 0.92 }]}
         testID={`hub-thread-${conv.id}`}
       >
@@ -92,14 +104,7 @@ export default function HubChatsScreen({ navigation, inTab = false, bottomPaddin
         data={visible}
         keyExtractor={(c) => c.id}
         renderItem={({ item, index }) => (
-          <ThreadRow
-            conv={item}
-            index={index}
-            myId={userId}
-            online={isOnline(item.otherId)}
-            dayOne={dayOnes.has(item.otherId)}
-            onPress={() => navigation.navigate('HubThread', { id: item.id })}
-          />
+          <ThreadRow conv={item} index={index} myId={userId} online={isOnline(item.otherId)} dayOne={dayOnes.has(item.otherId)} onPress={() => navigation.navigate('HubThread', { id: item.id })} />
         )}
         refreshControl={<RefreshControl refreshing={state === 'refreshing'} onRefresh={() => load(true)} tintColor={colors.gold} />}
         contentContainerStyle={{ paddingBottom: bottomPadding ?? insets.bottom + space.xxl, flexGrow: 1 }}
@@ -109,12 +114,8 @@ export default function HubChatsScreen({ navigation, inTab = false, bottomPaddin
           ) : (
             <View style={styles.empty}>
               <Ionicons name={state === 'error' ? 'cloud-offline-outline' : 'chatbubbles-outline'} size={30} color={colors.gold} />
-              <Text style={[type.title, { marginTop: space.md, textAlign: 'center' }]}>
-                {state === 'error' ? "Couldn't reach the Hub" : 'No messages yet'}
-              </Text>
-              <Text style={[type.bodyMuted, { textAlign: 'center', marginTop: space.sm }]}>
-                {state === 'error' ? error : 'Find someone in the directory and say hello.'}
-              </Text>
+              <Text style={[type.title, { marginTop: space.md, textAlign: 'center' }]}>{state === 'error' ? "Couldn't reach the Hub" : 'No messages yet'}</Text>
+              <Text style={[type.bodyMuted, { textAlign: 'center', marginTop: space.sm }]}>{state === 'error' ? error : 'Find someone in the directory and say hello.'}</Text>
               {state === 'error' ? (
                 <Button label="Try again" icon="refresh" onPress={() => load(true)} style={{ marginTop: space.xl }} />
               ) : (

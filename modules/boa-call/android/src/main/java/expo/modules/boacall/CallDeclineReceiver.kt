@@ -3,7 +3,6 @@ package expo.modules.boacall
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import androidx.core.app.NotificationManagerCompat
 
 /**
  * Decline on the call notification (or swiping it away): stops the ringing
@@ -12,7 +11,7 @@ import androidx.core.app.NotificationManagerCompat
  */
 class CallDeclineReceiver : BroadcastReceiver() {
   override fun onReceive(context: Context, intent: Intent) {
-    NotificationManagerCompat.from(context).cancel(BoaCallModule.NOTIFICATION_ID)
+    IncomingCallService.stop(context)
     val id = intent.getStringExtra(EXTRA_CALL_ID) ?: return
     onDecline?.invoke(id)
   }

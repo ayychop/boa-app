@@ -151,7 +151,7 @@ const styles = StyleSheet.create({
   tile: { flexDirection: 'row', alignItems: 'center', gap: space.md, minWidth: 190, paddingHorizontal: space.xs, paddingVertical: space.sm },
   tileTitle: { fontFamily: fonts.semibold, fontSize: 15 },
   tileSub: { fontFamily: fonts.medium, fontSize: 12, opacity: 0.7, marginTop: 2 },
-  viewer: { ...StyleSheet.absoluteFillObject, backgroundColor: '#000', zIndex: 50, elevation: 50 },
+  viewer: { ...StyleSheet.absoluteFill, backgroundColor: '#000', zIndex: 50, elevation: 50 },
   viewerTop: { position: 'absolute', left: space.lg, right: space.lg, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   viewerBadge: {
     flexDirection: 'row',
@@ -177,7 +177,7 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
   },
-  previewOnce: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(5,5,6,0.55)' },
+  previewOnce: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(5,5,6,0.55)' },
   onceRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, marginTop: space.lg },
   onceTitle: { fontFamily: fonts.semibold, fontSize: 15, color: colors.text },
   onceBody: { fontSize: 12.5, lineHeight: 17, marginTop: 2 },

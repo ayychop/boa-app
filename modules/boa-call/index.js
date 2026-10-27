@@ -1,8 +1,11 @@
 import { Platform } from 'react-native';
 import { requireOptionalNativeModule } from 'expo';
 
-// Incoming calls rung like phone calls (Android): a full-screen, call-style
-// notification that wakes the phone. Elsewhere, and in builds without the
+// Incoming calls rung like phone calls (Android): a foreground service
+// rings (the chosen ringtone, looping, and the buzz), posts a call-style
+// notification, and its full-screen intent opens BOA's own native incoming
+// call screen over the lock screen, so a locked or sleeping phone wakes
+// straight to Answer and Decline without waiting for React Native. Elsewhere, and in builds without the
 // native module, isAvailable is false and calls ring with an ordinary
 // notification instead (src/calls/incoming.js).
 const native = Platform.OS === 'android' ? requireOptionalNativeModule('BoaCall') : null;
@@ -10,7 +13,7 @@ const native = Platform.OS === 'android' ? requireOptionalNativeModule('BoaCall'
 export const isAvailable = !!native;
 
 /**
- * Rings: { callId, name, link, acceptLink, channelId, timeoutMs }.
+ * Rings: { callId, name, avatar, link, acceptLink, channelId, timeoutMs, vibration }.
  * Resolves to whether the notification went up.
  */
 export async function showIncoming(call) {
@@ -52,36 +55,18 @@ export async function openFullScreenSettings() {
   } catch {}
 }
 
-/** Whether Android leaves the app alone in the background (not battery optimised). True without the module. */
-export function isIgnoringBatteryOptimizations() {
+/** Picture in picture: a call is on (true) or over (false), so leaving the app floats it in a window. */
+export async function setPipReady(ready) {
   try {
-    return native?.isIgnoringBatteryOptimizations ? !!native.isIgnoringBatteryOptimizations() : true;
-  } catch {
-    return true;
-  }
-}
-
-/** Asks Android to stop battery-optimising the app (or opens the list where it's done). */
-export async function openBatterySettings() {
-  try {
-    await native?.openBatterySettings?.();
+    await native?.setPipReady?.(!!ready);
   } catch {}
 }
 
-/** Whether the app may display over other apps. True without the module. */
-export function canDrawOverlays() {
-  try {
-    return native?.canDrawOverlays ? !!native.canDrawOverlays() : true;
-  } catch {
-    return true;
-  }
-}
-
-/** Opens "Display over other apps" for the app. */
-export async function openOverlaySettings() {
-  try {
-    await native?.openOverlaySettings?.();
-  } catch {}
+/** Calls fn(active) as the call goes into or comes out of its picture-in-picture window; returns an unsubscribe function. */
+export function addPipListener(fn) {
+  if (!native) return () => {};
+  const sub = native.addListener('onPipChange', (e) => fn(!!e?.active));
+  return () => sub.remove();
 }
 
 /** Stops showing over the lock screen (a call opened the app there, and it's over). */

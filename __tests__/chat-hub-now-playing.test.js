@@ -9,10 +9,10 @@ import { CHAT_SOUNDS, DEFAULT_CHAT_SOUND, RETIRED_CHAT_SOUNDS, chatChannel, chat
 import { ensureChatChannels } from '../src/chat/notifications';
 import { STATUS_STALE_MS, statusLine } from '../src/components/hub/hubNav';
 import NowPlaying from '../src/components/hub/NowPlaying';
-import AmbientGlow from '../src/components/chat/AmbientGlow';
+import ChatBackdrop from '../src/components/chat/ChatBackdrop';
 import { VIBES } from '../src/chat/vibes';
 import { ThreadRow } from '../src/screens/hub/HubChatsScreen';
-import HubThreadScreen from '../src/screens/hub/HubThreadScreen';
+import HubThreadScreen from '../src/screens/hub/NewChatScreen';
 import { zenStatusText } from '../src/context/HubContext';
 import { TAB_BAR_HEIGHT, tabSizing } from '../App';
 
@@ -53,7 +53,7 @@ describe('urban notification sounds', () => {
   // sample bytes (ffmpeg puts a LIST chunk between them).
   const wavSeconds = (buf) => {
     let fmt = null;
-    for (let at = 12; at + 8 <= buf.length; ) {
+    for (let at = 12; at + 8 <= buf.length;) {
       const id = buf.toString('ascii', at, at + 4);
       const size = buf.readUInt32LE(at + 4);
       if (id === 'fmt ') fmt = { channels: buf.readUInt16LE(at + 10), rate: buf.readUInt32LE(at + 12), bits: buf.readUInt16LE(at + 22) };
@@ -191,8 +191,8 @@ describe('chat ambiance and layout', () => {
         }
         expect(Math.min(...l.opacity)).toBeGreaterThan(0.15);
       }
-      await render(<AmbientGlow vibe={vibe} />);
-      for (const l of vibe.lights) expect(screen.getByTestId(`chat-ambient-${l.id}`)).toBeOnTheScreen();
+      await render(<ChatBackdrop vibe={vibe} />);
+      for (const l of vibe.lights) expect(screen.getByTestId(`chat-glow-${l.id}`)).toBeOnTheScreen();
       await screen.unmount();
     }
   });

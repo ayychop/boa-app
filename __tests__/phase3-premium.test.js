@@ -176,10 +176,11 @@ describe('beauty filters', () => {
       expect(colorEnhance.strengthLevel).toBeLessThanOrEqual(0.7);
       expect(colorEnhance.skinProtectLevel).toBe(1);
     }
-    expect(describeBeauty({ preset: 'cinematic', brightness: 0.4, enabled: true })).toBe('Cinematic · Bright 40%');
-    // Settings saved from the old sliders keep their brightness and start on Natural.
-    expect(fromStored({ studio: 0.7, flawless: 0.2, enabled: false })).toEqual({ preset: 'natural', brightness: 0.7, enabled: false });
-    expect(fromStored({ preset: 'golden', brightness: 0.3 })).toEqual({ preset: 'golden', brightness: 0.3, enabled: true });
+    expect(describeBeauty({ preset: 'cinematic', brightness: 0.7, enabled: true })).toBe('Cinematic · Bright +40');
+    // Brightness saved before it became exposure meant lightening: it starts again on Auto.
+    expect(fromStored({ studio: 0.7, flawless: 0.2, enabled: false })).toEqual({ preset: 'natural', brightness: 0.5, enabled: false });
+    expect(fromStored({ preset: 'golden', brightness: 0.3 })).toEqual({ preset: 'golden', brightness: 0.5, enabled: true });
+    expect(fromStored({ preset: 'golden', brightness: 0.3, v: 2 })).toEqual({ preset: 'golden', brightness: 0.3, enabled: true });
     expect(fromStored({ preset: 'nope' }).preset).toBe('natural');
   });
 
@@ -295,6 +296,10 @@ describe('push notifications', () => {
     expect(fn).toMatch(/priority: 'high'/);
     expect(fn).toMatch(/channelId: `boa-chat-\$\{t\.sound\}`/);
     expect(fn).toMatch(/x-boa-push-secret/);
+    // Message requests arrive quietly: no sound, the low-importance channel, passive on iPhone, never the message itself.
+    expect(fn).toMatch(/channelId: 'boa-chat-requests'/);
+    expect(fn).toMatch(/interruptionLevel: 'passive'/);
+    expect(fn).toMatch(/body: `\$\{title\} wants to message you`/);
     expect(SQL).toMatch(/private\.push_settings/);
     const app = require('../app.json').expo;
     const notif = app.plugins.find((p) => Array.isArray(p) && p[0] === 'expo-notifications')[1];

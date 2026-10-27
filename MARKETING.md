@@ -44,8 +44,8 @@ along the bottom. In `src/brand.ts`:
 
 - `SAFE`: keep all type 220 px from the top, 480 px from the bottom, 120 px
   from the left and 160 px from the right.
-- `STATEMENT_MARGIN` (72 px each side): only for statements in the upper
-  half, which sit above the button rail.
+- No exceptions: big statements keep to the same margins as everything
+  else (the 72 px statement margin was dropped on 2026-10-27).
 - Statement type is sized to fit with 5% headroom for the slam-in overshoot
   and camera shake (`fitSize` in each template).
 

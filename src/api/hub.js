@@ -475,7 +475,33 @@ export function shapeConversation(c, myId, byId = {}) {
     other: byId[otherId] ?? null,
     theirReadAt: theirRead,
     unread: !!c.last_message_at && c.last_sender_id !== myId && (!myRead || new Date(myRead) < new Date(c.last_message_at)),
+    // A request: they wrote and you've never answered or accepted. Before the
+    // inbox migration has run there's no accepted column, and nothing is one.
+    request: `${mine}_accepted_at` in c ? !c[`${mine}_accepted_at`] && !!c.last_message_at : false,
+    folder: c[`${mine}_folder`] === 'general' ? 'general' : 'primary',
   };
+}
+
+/** The inbox's three filters: Primary and General are accepted chats, Requests are not. */
+export const INBOX_FILTERS = [
+  { id: 'primary', label: 'Primary' },
+  { id: 'general', label: 'General' },
+  { id: 'requests', label: 'Requests' },
+];
+
+/** Which filter a conversation shows under. */
+export const inboxOf = (conv) => (conv.request ? 'requests' : conv.folder === 'general' ? 'general' : 'primary');
+
+/** Accept a message request without replying. */
+export async function acceptConversation(id) {
+  const { error } = await need().rpc('accept_conversation', { conv: id });
+  if (error) check({ error });
+}
+
+/** Move a conversation to Primary or General, in your inbox only. */
+export async function setConversationFolder(id, folder) {
+  const { error } = await need().rpc('set_conversation_folder', { conv: id, folder });
+  if (error) check({ error });
 }
 
 export async function startConversation(otherId) {

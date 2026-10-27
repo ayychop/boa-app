@@ -111,7 +111,7 @@ export default function RingtoneScreen({ navigation }) {
       <LinearGradient colors={['rgba(226,168,75,0.16)', 'rgba(226,168,75,0)']} locations={[0, 0.45]} style={StyleSheet.absoluteFill} pointerEvents="none" />
       <PageHeader kicker="Calls" title="Ringtone" onBack={() => navigation.goBack()} />
       <ScrollView contentContainerStyle={{ padding: space.lg, paddingBottom: insets.bottom + space.xxl }}>
-        <Text style={styles.intro}>What plays when someone video calls you. Made for BOA, from the beat up.</Text>
+        <Text style={styles.intro}>What plays when someone video calls you. Made for BOA, from the beat up, and your phone buzzes on every bass hit. Play one to feel it.</Text>
         <Slate style={styles.section}>Your ringtone</Slate>
         <Animated.View entering={FadeInDown.springify().damping(20)} style={styles.card}>
           <BlurView intensity={30} tint="dark" blurMethod="dimezisBlurView" style={StyleSheet.absoluteFill} />

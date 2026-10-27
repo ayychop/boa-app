@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Animated, { FadeIn, FadeInDown, ZoomIn } from 'react-native-reanimated';
+import Animated, { Easing, FadeIn, FadeInDown, useAnimatedStyle, useReducedMotion, useSharedValue, withDelay, withRepeat, withTiming, ZoomIn } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { usePremium, trialLeft } from '../../context/PremiumContext';
@@ -13,15 +13,58 @@ import { PRICE } from './price';
 
 export { PRICE };
 
+// Only what Premium really unlocks in this build: every line here is a
+// gate in the code (calls, the EQ, saving stations, the vibes).
 const BENEFITS = [
-  { icon: 'videocam', title: 'Unlimited HD video calls', body: 'Face to face with anyone on the Hub, as long as you like.' },
-  { icon: 'sparkles', title: 'Exclusive filters', body: 'Brightness, Smooth Skin, Tone, Clarity and Saturation, done by the camera in 1080p.' },
-  { icon: 'heart', title: 'Save playlists & stations', body: 'Build your own library of stations and come back to it any time.' },
-  { icon: 'ban', title: 'Ad-free', body: 'No interruptions between you and the music.' },
-  { icon: 'pulse', title: 'Hi-Fi audio', body: 'Bass, treble and spatial sound on every station, and the best streams we can find.' },
-  { icon: 'flash', title: 'Early access', body: 'New BOA Originals and episodes before anyone else.' },
-  { icon: 'cloud-download', title: 'Offline downloads', body: 'Take podcasts and episodes with you, no signal needed.' },
+  { icon: 'videocam', title: 'HD video calls, unlimited', body: '1080p face to face with anyone on the Hub, for as long as you like. Shrink a call and keep using the app.' },
+  { icon: 'aperture', title: 'BOA Studio camera', body: 'Six looks from Natural to Cinematic, and real exposure control, done by the camera before your video is sent.' },
+  { icon: 'pulse', title: 'Hi-Fi radio with Bass Boost', body: 'Bass, treble and spatial sound, shaped on every station you play.' },
+  { icon: 'color-palette', title: 'Living chat vibes', body: 'Midnight Drive, Turntable, Golden Hour and more, in motion, or any colour you like.' },
+  { icon: 'heart', title: 'Your station library', body: 'Save the stations you love and find them again in a tap, in the app and in your car.' },
 ];
+
+const CARD_RATIO = 0.6;
+
+/**
+ * The membership card: black with gold foil, the BOA mark, and a slow band
+ * of light crossing it every few seconds, like a metal card turned in the
+ * hand. Held still with reduced motion.
+ */
+function MemberCard({ width, member, status }) {
+  const still = useReducedMotion();
+  const t = useSharedValue(0);
+  useEffect(() => {
+    if (still) return undefined;
+    t.value = withRepeat(withDelay(1200, withTiming(1, { duration: 1600, easing: Easing.inOut(Easing.quad) })), -1, false);
+    return () => {
+      t.value = 0;
+    };
+  }, [still, t]);
+  const sheen = useAnimatedStyle(() => ({ opacity: still ? 0 : 1, transform: [{ translateX: -width + t.value * width * 2 }, { rotate: '18deg' }] }));
+  return (
+    <Animated.View entering={ZoomIn.springify().damping(16)} style={[styles.card, { width, height: Math.round(width * CARD_RATIO) }]} testID="premium-card">
+      <LinearGradient colors={['#1B1710', '#0B0A08', '#14110B']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+      <LinearGradient colors={['rgba(246,211,138,0.22)', 'rgba(246,211,138,0)']} start={{ x: 0, y: 0 }} end={{ x: 0.7, y: 0.7 }} style={StyleSheet.absoluteFill} />
+      <Animated.View pointerEvents="none" style={[styles.sheen, { height: width }, sheen]}>
+        <LinearGradient colors={['rgba(255,236,190,0)', 'rgba(255,236,190,0.22)', 'rgba(255,236,190,0)']} start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={StyleSheet.absoluteFill} />
+      </Animated.View>
+      <View style={styles.cardTop}>
+        <BoaLogo height={22} />
+        <Ionicons name="diamond" size={18} color={colors.gold} />
+      </View>
+      <View style={styles.chip} />
+      <View style={styles.cardFoot}>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={styles.cardKicker}>BEST OF ALL</Text>
+          <Text style={styles.cardName} numberOfLines={1}>
+            {member}
+          </Text>
+        </View>
+        {status ? <Text style={styles.cardStatus}>{status}</Text> : null}
+      </View>
+    </Animated.View>
+  );
+}
 
 /** Full-screen BOA Premium pitch, and where your trial or membership stands. */
 export default function PremiumScreen({ open, onClose }) {
@@ -48,11 +91,7 @@ export default function PremiumScreen({ open, onClose }) {
     <Modal visible transparent animationType="slide" onRequestClose={close} statusBarTranslucent>
       <View style={styles.screen}>
         {/* A warm gold aura over the charcoal: the only gold-lit screen in the app. */}
-        <LinearGradient
-          colors={['rgba(226,168,75,0.32)', 'rgba(226,168,75,0.06)', colors.bg]}
-          locations={[0, 0.4, 0.8]}
-          style={StyleSheet.absoluteFill}
-        />
+        <LinearGradient colors={['rgba(226,168,75,0.32)', 'rgba(226,168,75,0.06)', colors.bg]} locations={[0, 0.4, 0.8]} style={StyleSheet.absoluteFill} />
         <Fog opacity={0.22} />
         <Viewfinder inset={16} />
         <ScrollView contentContainerStyle={{ alignItems: 'center', paddingTop: insets.top + space.lg, paddingBottom: insets.bottom + space.xxl }}>
@@ -71,9 +110,7 @@ export default function PremiumScreen({ open, onClose }) {
               <Text style={[type.display, { textAlign: 'center', marginTop: space.xl }]}>
                 You're <Text style={type.serif}>Premium.</Text>
               </Text>
-              <Text style={[type.bodyMuted, { textAlign: 'center', marginTop: space.md }]}>
-                Saving, Hi-Fi and early access are on. Look for the gold badge.
-              </Text>
+              <Text style={[type.bodyMuted, { textAlign: 'center', marginTop: space.md }]}>HD calls, BOA Studio, Hi-Fi and living vibes are on. Look for the gold badge.</Text>
               <Button label="Start listening" icon="arrow-forward" onPress={close} style={{ marginTop: space.xl, alignSelf: 'stretch' }} />
             </Animated.View>
           ) : (
@@ -86,12 +123,21 @@ export default function PremiumScreen({ open, onClose }) {
                 <Text style={[type.display, styles.headline]}>
                   The <Text style={type.serif}>best</Text> of all networks.
                 </Text>
-                <Text style={[type.bodyMuted, { marginTop: space.md }]}>Everything in BOA, with nothing in the way.</Text>
+                <Text style={[type.bodyMuted, { marginTop: space.md }]}>The members' side of BOA: HD calls, a studio camera, Hi-Fi radio and chats that come alive.</Text>
               </Animated.View>
+              <View style={{ marginTop: space.xl, alignItems: 'center' }}>
+                <MemberCard width={contentWidth} member={isPremium ? 'BOA PREMIUM MEMBER' : 'BOA PREMIUM'} status={isPremium ? (access.status === 'trial' && !isAdmin ? 'TRIAL' : 'ACTIVE') : null} />
+              </View>
 
               <View style={styles.benefits}>
                 {BENEFITS.map((b, i) => (
-                  <Animated.View key={b.title} entering={FadeInDown.delay(80 + i * 60).springify().damping(18)} style={styles.benefit}>
+                  <Animated.View
+                    key={b.title}
+                    entering={FadeInDown.delay(80 + i * 60)
+                      .springify()
+                      .damping(18)}
+                    style={styles.benefit}
+                  >
                     <View style={styles.benefitIcon}>
                       <Ionicons name={b.icon} size={18} color={colors.gold} />
                     </View>
@@ -106,9 +152,7 @@ export default function PremiumScreen({ open, onClose }) {
               {isPremium ? (
                 <>
                   <Button label={standing ?? "You're a Premium member"} icon="checkmark" variant="ghost" disabled style={{ marginTop: space.xl, alignSelf: 'stretch' }} />
-                  {access.status === 'trial' && !isAdmin ? (
-                    <Text style={styles.fineText}>After the trial, BOA Premium is {PRICE}/month.</Text>
-                  ) : null}
+                  {access.status === 'trial' && !isAdmin ? <Text style={styles.fineText}>After the trial, BOA Premium is {PRICE}/month.</Text> : null}
                 </>
               ) : (
                 <Animated.View entering={FadeInDown.delay(420).springify().damping(18)}>
@@ -155,7 +199,23 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
   },
-  benefitIcon: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.goldSoft },
+  benefitIcon: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.goldSoft, borderWidth: 1, borderColor: 'rgba(226,168,75,0.45)' },
+  card: {
+    borderRadius: 22,
+    overflow: 'hidden',
+    padding: space.lg,
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: 'rgba(246,211,138,0.6)',
+    boxShadow: '0px 18px 50px rgba(0,0,0,0.6), 0px 0px 30px rgba(226,168,75,0.25)',
+  },
+  sheen: { position: 'absolute', top: '-50%', left: 0, width: '45%' },
+  cardTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  chip: { width: 38, height: 28, borderRadius: 6, backgroundColor: 'rgba(226,168,75,0.55)', borderWidth: 1, borderColor: 'rgba(255,236,190,0.7)' },
+  cardFoot: { flexDirection: 'row', alignItems: 'flex-end', gap: space.md },
+  cardKicker: { fontFamily: fonts.mono, fontSize: 9.5, letterSpacing: 3, color: 'rgba(246,211,138,0.85)' },
+  cardName: { fontFamily: fonts.semibold, fontSize: 17, letterSpacing: 1.2, color: colors.text, marginTop: 4 },
+  cardStatus: { fontFamily: fonts.mono, fontSize: 10, letterSpacing: 2, color: colors.gold },
   benefitTitle: { fontFamily: fonts.semibold, fontSize: 15.5, color: colors.text },
   benefitBody: { fontFamily: fonts.regular, fontSize: 13.5, lineHeight: 19, color: colors.textMuted, marginTop: 2 },
   priceCard: { flexDirection: 'row', alignItems: 'baseline', gap: 6, marginTop: space.xl, marginBottom: space.lg, flexWrap: 'wrap' },

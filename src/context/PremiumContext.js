@@ -20,7 +20,6 @@ export const PAYWALL_PITCH = `Upgrade to BOA Premium for unlimited HD Video Call
 const NO_ACCESS = { status: 'expired', hasAccess: false, isAdmin: false, trialEndsAt: null };
 const cacheKey = (userId) => `boa.premium.v1:${userId}`;
 
-
 /** "1 day 4 hrs left" / "3 hrs left" / "40 min left" until a trial ends. */
 export function trialLeft(endsAt, now = Date.now()) {
   const ms = new Date(endsAt).getTime() - now;
@@ -62,10 +61,7 @@ export function PremiumProvider({ children }) {
     }
     // Asked together: the admin check works even before the Premium
     // migration has been run.
-    const [answer, admin] = await Promise.all([
-      hub.getPremiumAccess().catch(() => NO_ACCESS),
-      hub.amIAdmin().catch(() => false),
-    ]);
+    const [answer, admin] = await Promise.all([hub.getPremiumAccess().catch(() => NO_ACCESS), hub.amIAdmin().catch(() => false)]);
     const next = { ...answer, isAdmin: answer.isAdmin || admin, hasAccess: answer.hasAccess || admin };
     setAccess(next);
     setChecked(true);
@@ -228,6 +224,22 @@ const styles = StyleSheet.create({
   },
   perkText: { fontFamily: fonts.semibold, fontSize: 12, color: '#F6D38A' },
 });
+
+/** The Premium context, or null outside the provider (screens rendered on their own). */
+export function usePremiumMaybe() {
+  return useContext(PremiumContext);
+}
+
+/**
+ * Whether Premium-only looks may show. True with Premium, and while the
+ * answer is still coming (so a member never sees their vibe flash to the
+ * free one at launch), and outside the provider, where there's nothing to
+ * check against.
+ */
+export function usePremiumUnlocked() {
+  const ctx = useContext(PremiumContext);
+  return !ctx || !ctx.checked || !!ctx.hasPremium;
+}
 
 /** Whether this member has BOA Premium; false outside the provider. */
 export function useHasPremium() {

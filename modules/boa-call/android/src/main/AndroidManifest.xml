@@ -1,16 +1,37 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
   <!-- Lets an incoming call take over the screen, even locked. Android 14+
-       grants it by default only to calling apps, and Play asks for a
-       declaration of it (Policy > App content > Full-screen intent). -->
+       grants it to calling apps (Play asks for a declaration of it: Policy >
+       App content > Full-screen intent); people can switch it off, and only
+       then does the app ask (src/calls/wakeUp.js). -->
   <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
-  <!-- So a call's push isn't held back and its ring dropped (asked for in
-       src/calls/wakeUp.js). Play allows it for apps whose calls must ring
-       in real time; it asks for a declaration of that. -->
-  <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
-  <!-- Display over other apps: some phones (Xiaomi, Oppo, Vivo) won't open
-       a call's full screen from the background without it. -->
-  <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+  <!-- The ringing call is a phoneCall foreground service, so Android keeps
+       the app alive for as long as it rings. MANAGE_OWN_CALLS is what lets
+       a VoIP app use that type; it's granted with the app (no prompt). Play
+       asks for a foreground service declaration of it. -->
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_PHONE_CALL" />
+  <uses-permission android:name="android.permission.MANAGE_OWN_CALLS" />
+  <!-- The call buzz. -->
+  <uses-permission android:name="android.permission.VIBRATE" />
   <application>
     <receiver android:name="expo.modules.boacall.CallDeclineReceiver" android:exported="false" />
+    <service
+      android:name="expo.modules.boacall.IncomingCallService"
+      android:exported="false"
+      android:foregroundServiceType="phoneCall" />
+    <!-- The incoming call screen: over the lock screen, screen on, in a task
+         of its own (so it never drags the app's screens over the lock
+         screen) and out of Recents. Folding or turning the phone doesn't
+         restart it. -->
+    <activity
+      android:name="expo.modules.boacall.IncomingCallActivity"
+      android:exported="false"
+      android:showWhenLocked="true"
+      android:turnScreenOn="true"
+      android:launchMode="singleTop"
+      android:taskAffinity="${applicationId}.incomingcall"
+      android:excludeFromRecents="true"
+      android:theme="@android:style/Theme.DeviceDefault.NoActionBar"
+      android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden" />
   </application>
 </manifest>

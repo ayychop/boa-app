@@ -302,6 +302,7 @@ jest.mock('./modules/boa-screen', () => {
 // Incoming calls rung like phone calls (Android).
 jest.mock('./modules/boa-call', () => {
   const declines = new Set();
+  const pips = new Set();
   return {
     isAvailable: true,
     showIncoming: jest.fn(async () => true),
@@ -312,12 +313,14 @@ jest.mock('./modules/boa-call', () => {
     }),
     canUseFullScreen: jest.fn(() => true),
     openFullScreenSettings: jest.fn(async () => {}),
-    isIgnoringBatteryOptimizations: jest.fn(() => true),
-    openBatterySettings: jest.fn(async () => {}),
-    canDrawOverlays: jest.fn(() => true),
-    openOverlaySettings: jest.fn(async () => {}),
     leaveLockScreen: jest.fn(async () => {}),
+    setPipReady: jest.fn(async () => {}),
+    addPipListener: jest.fn((fn) => {
+      pips.add(fn);
+      return () => pips.delete(fn);
+    }),
     __decline: (callId) => declines.forEach((fn) => fn(callId)),
+    __pip: (active) => pips.forEach((fn) => fn(active)),
   };
 });
 
@@ -325,7 +328,7 @@ jest.mock('./modules/boa-call', () => {
 jest.mock('expo-notifications', () => {
   const sub = () => ({ remove: jest.fn() });
   return {
-    AndroidImportance: { MAX: 5, HIGH: 4 },
+    AndroidImportance: { MAX: 5, HIGH: 4, LOW: 2 },
     AndroidNotificationPriority: { MAX: 'max' },
     AndroidNotificationVisibility: { PUBLIC: 1, PRIVATE: 0 },
     getExpoPushTokenAsync: jest.fn(() => Promise.resolve({ data: 'ExponentPushToken[test]' })),

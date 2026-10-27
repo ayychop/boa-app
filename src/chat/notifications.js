@@ -22,7 +22,7 @@ const SOUND_KEY = 'boa.chat.sound';
 export const CHAT_VIBRATION = [0, 220, 110, 220];
 
 let openThread = null;
-/** The conversation on screen (HubThreadScreen sets it), so it doesn't ring. */
+/** The conversation on screen (NewChatScreen sets it), so it doesn't ring. */
 export const setOpenThread = (id) => {
   openThread = id;
 };
@@ -56,8 +56,19 @@ export async function ensureChatChannels() {
       }).catch(() => null),
     ),
   );
+  // Message requests: in the shade, never a sound, a buzz or a popup.
+  await Notifications.setNotificationChannelAsync(REQUESTS_CHANNEL, {
+    name: 'Message requests',
+    importance: Notifications.AndroidImportance.LOW,
+    sound: null,
+    enableVibrate: false,
+    lockscreenVisibility: Notifications.AndroidNotificationVisibility.PRIVATE,
+  }).catch(() => null);
   await ensureCallChannels();
 }
+
+/** The quiet channel message requests arrive on (supabase/functions/message-push). */
+export const REQUESTS_CHANNEL = 'boa-chat-requests';
 
 // The incoming-call buzz: long, pause, long.
 export const CALL_VIBRATION = [0, 800, 600, 800, 1600];
@@ -100,7 +111,8 @@ export function installChatHandler() {
       // Every message and heart stays in the pull-down; it pops up and
       // rings unless you're already looking at that thread.
       const keep = data.type === 'chat' || data.type === 'heart' || data.type === 'missed-call';
-      const pop = keep && !(data.type === 'chat' && data.conversationId === openThread);
+      // A message request never pops or plays a sound; it waits in the shade and in Requests.
+      const pop = keep && !data.request && !(data.type === 'chat' && data.conversationId === openThread);
       return { shouldShowBanner: pop, shouldShowList: keep, shouldPlaySound: pop, shouldSetBadge: false };
     },
   });

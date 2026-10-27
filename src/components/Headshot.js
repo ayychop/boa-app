@@ -87,7 +87,7 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
   },
-  center: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
+  center: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center' },
   initials: { fontFamily: fonts.serif, letterSpacing: -1, opacity: 0.9 },
   tag: { position: 'absolute', top: 12, left: 12, opacity: 0.55 },
   glass: {

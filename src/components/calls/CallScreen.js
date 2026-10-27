@@ -1,14 +1,28 @@
-import { useEffect, useState } from 'react';
-import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Image, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Animated, { Easing, FadeIn, FadeInDown, FadeOut, FadeOutDown, SlideInDown, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSpring, withTiming } from 'react-native-reanimated';
+import Animated, {
+  Easing,
+  FadeIn,
+  FadeInDown,
+  FadeOut,
+  FadeOutDown,
+  SlideInDown,
+  ZoomIn,
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withRepeat,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
 import { GestureDetector, GestureHandlerRootView, usePanGesture } from 'react-native-gesture-handler';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import Slider from '@react-native-community/slider';
 import { useCall, END_REASONS } from '../../context/CallContext';
-import { PRESETS, describeParts, presetById } from '../../calls/beauty';
+import { PRESETS, brightnessLabel, presetById } from '../../calls/beauty';
 import { LocalVideo, RemoteVideo } from '../../calls/media';
 import { haptics } from '../../utils/haptics';
 import { SPRING, usePress } from '../../utils/motion';
@@ -29,6 +43,9 @@ const DOCK_PAD = space.lg;
 const DOCK_GAP = 14;
 const WIDE = 600; // unfolded: every control in one row
 const PILL_ROOM = 44; // the privacy pill, when it's showing
+// Brightness reaches the camera at most this often while the slider moves (about 30 a second).
+const BRIGHTNESS_EVERY_MS = 33;
+const SHRINK_SIZE = 40;
 // Each preset's swatch: a hint of its grade.
 const PRESET_SWATCH = {
   natural: ['#C9A27E', '#8A6A50'],
@@ -38,6 +55,19 @@ const PRESET_SWATCH = {
   glow: ['#FFC9D6', '#E89AB0'],
   bw: ['#F2F2F2', '#3A3A3A'],
 };
+
+/**
+ * Frosted glass: blurred on iOS; on Android, a tint alone (Android's blur
+ * needs a blur target view, which paints opaque over what's behind it).
+ */
+function Glass({ tint = 'rgba(12,12,15,0.62)', intensity = 50 }) {
+  return (
+    <>
+      {Platform.OS === 'ios' ? <BlurView intensity={intensity} tint="dark" style={StyleSheet.absoluteFill} /> : null}
+      <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: tint }]} />
+    </>
+  );
+}
 
 const clock = (ms) => {
   const s = Math.max(0, Math.floor(ms / 1000));
@@ -132,11 +162,88 @@ function CallButton({ icon, label, caption, onPress, on = false, onColor, tone, 
   );
 }
 
-function BeautyPanel({ beauty, setBeauty, onClose, width, maxHeight }) {
+/**
+ * Brightness: the camera's exposure. The slider runs on its own while your
+ * finger is on it (nothing re-renders the call), sends the exposure straight
+ * to the camera about 30 times a second, and saves where you let go.
+ */
+function BrightnessSlider({ value, enabled, onPreview, onCommit }) {
+  const [shown, setShown] = useState(value);
+  const dragging = useRef(false);
+  const last = useRef(0);
+  // A change from elsewhere (Auto, a saved value) moves it, unless you're holding it.
+  useEffect(() => {
+    if (!dragging.current) setShown(value);
+  }, [value]);
+  const move = (v) => {
+    dragging.current = true;
+    setShown(v);
+    const now = Date.now();
+    if (now - last.current >= BRIGHTNESS_EVERY_MS) {
+      last.current = now;
+      onPreview(v);
+    }
+  };
+  const done = (v) => {
+    dragging.current = false;
+    last.current = 0;
+    setShown(v);
+    onPreview(v);
+    onCommit(v);
+  };
+  return (
+    <View style={[styles.filter, !enabled && { opacity: 0.4 }]}>
+      <View style={styles.filterHead}>
+        <Ionicons name="sunny-outline" size={16} color={colors.gold} />
+        <Text style={styles.filterLabel}>Brightness</Text>
+        <Text style={styles.filterValue} testID="call-brightness-value">
+          {brightnessLabel(shown)}
+        </Text>
+        {Math.abs(shown - 0.5) > 0.005 ? (
+          <Pressable
+            onPress={() => done(0.5)}
+            disabled={!enabled}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Brightness back to Auto"
+            style={styles.auto}
+            testID="call-brightness-auto"
+          >
+            <Text style={styles.autoText}>Auto</Text>
+          </Pressable>
+        ) : null}
+      </View>
+      <View style={styles.sliderRow}>
+        <Ionicons name="moon-outline" size={14} color={colors.textMuted} />
+        <View style={{ flex: 1 }}>
+          {/* Auto, in the middle. */}
+          <View pointerEvents="none" style={styles.sliderMid} />
+          <Slider
+            style={{ height: 40 }}
+            minimumValue={0}
+            maximumValue={1}
+            step={0}
+            value={shown}
+            disabled={!enabled}
+            onValueChange={move}
+            onSlidingComplete={done}
+            minimumTrackTintColor={colors.gold}
+            maximumTrackTintColor="rgba(243,239,232,0.18)"
+            thumbTintColor={colors.gold}
+            accessibilityLabel="Brightness"
+            testID="call-brightness"
+          />
+        </View>
+        <Ionicons name="sunny" size={16} color={colors.gold} />
+      </View>
+    </View>
+  );
+}
+
+function BeautyPanel({ beauty, setBeauty, previewBrightness, onClose, width, maxHeight }) {
   return (
     <Animated.View entering={FadeInDown.springify().damping(18)} exiting={FadeOutDown.duration(160)} style={[styles.panel, { width }]} testID="call-filters">
-      <BlurView intensity={50} tint="dark" blurMethod="dimezisBlurView" style={StyleSheet.absoluteFill} />
-      <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(10,10,12,0.55)' }]} />
+      <Glass tint="rgba(10,10,12,0.82)" />
       <View style={styles.panelHead}>
         <Ionicons name="sparkles" size={16} color={colors.gold} />
         <Text style={styles.panelTitle}>BOA Studio</Text>
@@ -146,7 +253,7 @@ function BeautyPanel({ beauty, setBeauty, onClose, width, maxHeight }) {
           <Ionicons name="chevron-down" size={22} color={colors.textMuted} />
         </Pressable>
       </View>
-      <Text style={styles.panelNote}>Done by the camera itself in 1080p, before your video is sent. What you see is what they see.</Text>
+      <Text style={styles.panelNote}>Done by the camera itself in 1080p, before your video is sent. What you see is what they see (your preview is mirrored; they see you the right way round).</Text>
       <ScrollView style={{ maxHeight: maxHeight }} showsVerticalScrollIndicator={false}>
         {/* Six looks, one tap each: a swatch of the grade, its name and what it does. */}
         <View style={[styles.presetGrid, !beauty.enabled && { opacity: 0.4 }]} accessibilityRole="radiogroup" testID="call-presets">
@@ -177,27 +284,7 @@ function BeautyPanel({ beauty, setBeauty, onClose, width, maxHeight }) {
           })}
         </View>
         <Text style={styles.presetDetail}>{presetById(beauty.preset).detail}</Text>
-        <View style={[styles.filter, !beauty.enabled && { opacity: 0.4 }]}>
-          <View style={styles.filterHead}>
-            <Ionicons name="sunny-outline" size={16} color={colors.gold} />
-            <Text style={styles.filterLabel}>Brightness</Text>
-            <Text style={styles.filterValue}>{Math.round((beauty.brightness ?? 0) * 100)}%</Text>
-          </View>
-          <Slider
-            style={{ height: 36, marginHorizontal: -4 }}
-            minimumValue={0}
-            maximumValue={1}
-            step={0.05}
-            value={beauty.brightness ?? 0}
-            disabled={!beauty.enabled}
-            onValueChange={(v) => setBeauty({ brightness: v })}
-            minimumTrackTintColor={colors.gold}
-            maximumTrackTintColor="rgba(243,239,232,0.18)"
-            thumbTintColor={colors.gold}
-            accessibilityLabel="Brightness"
-            testID="call-brightness"
-          />
-        </View>
+        <BrightnessSlider value={beauty.brightness ?? 0.5} enabled onPreview={previewBrightness} onCommit={(v) => setBeauty({ brightness: v })} />
       </ScrollView>
     </Animated.View>
   );
@@ -207,7 +294,7 @@ function BeautyPanel({ beauty, setBeauty, onClose, width, maxHeight }) {
  * You, floating over their picture. Starts top right; drag it anywhere and
  * it springs to the nearest corner, clear of the controls.
  */
-function SelfView({ size, top, bottomRoom, width, height, children }) {
+function SelfView({ size, top, bottomRoom, width, height, onHide, children }) {
   const margin = space.lg;
   const minX = -(width - size.width - margin * 2);
   const maxY = Math.max(0, height - top - size.height - bottomRoom);
@@ -251,6 +338,10 @@ function SelfView({ size, top, bottomRoom, width, height, children }) {
     <GestureDetector gesture={pan}>
       <Animated.View entering={FadeIn.delay(150).duration(300)} style={[styles.pip, size, { top, right: margin }, style]} testID="call-self-view">
         <View style={styles.pipInner}>{children}</View>
+        {/* Hide yourself: you're still sent, you just stop seeing you. */}
+        <Pressable onPress={onHide} hitSlop={10} accessibilityRole="button" accessibilityLabel="Hide your video" style={styles.pipHide} testID="call-self-hide">
+          <Ionicons name="eye-off" size={13} color={colors.text} />
+        </Pressable>
       </Animated.View>
     </GestureDetector>
   );
@@ -275,13 +366,116 @@ function TheirVideo({ uid }) {
   );
 }
 
+const MINI_W = 116;
+const MINI_H = 164;
+const MINI_MARGIN = 12;
+// Clear of the tab bar and mini player at the bottom of the app.
+const MINI_BOTTOM_ROOM = 150;
+
+/**
+ * Picture in picture, inside the app: the call shrunk to a small floating
+ * window over whatever you're doing (the feed, a chat), their picture live
+ * in it. Drag it anywhere and it springs to the nearest side; tap it to go
+ * back to the full call. End is right on it. The call itself carries on
+ * untouched: your camera and microphone keep going.
+ */
+function MiniCall({ call, video, controls, status, onRestore, onEnd }) {
+  const insets = useSafeAreaInsets();
+  const { width, height } = useWindowDimensions();
+  const theirs = call.phase === 'active' && video?.remoteUid != null && video.remoteVideo;
+  const right = width - MINI_W - MINI_MARGIN;
+  const top = insets.top + 56;
+  const bottom = Math.max(top, height - MINI_H - insets.bottom - MINI_BOTTOM_ROOM);
+  const x = useSharedValue(right);
+  const y = useSharedValue(top);
+  const from = useSharedValue({ x: 0, y: 0 });
+  const pan = usePanGesture({
+    activeOffsetX: [-8, 8],
+    activeOffsetY: [-8, 8],
+    onBegin: () => {
+      'worklet';
+      from.value = { x: x.value, y: y.value };
+    },
+    onUpdate: (e) => {
+      'worklet';
+      x.value = from.value.x + e.translationX;
+      y.value = from.value.y + e.translationY;
+    },
+    onDeactivate: (e) => {
+      'worklet';
+      // To whichever side it was flung towards; up and down it stays where it's dropped, inside the room.
+      const px = x.value + e.velocityX * 0.12;
+      x.value = withSpring(px + MINI_W / 2 < width / 2 ? MINI_MARGIN : right, { ...SNAP, velocity: e.velocityX });
+      y.value = withSpring(Math.min(bottom, Math.max(top, y.value + e.velocityY * 0.08)), { ...SNAP, velocity: e.velocityY });
+    },
+  });
+  const style = useAnimatedStyle(() => ({ transform: [{ translateX: x.value }, { translateY: y.value }] }));
+  return (
+    // Its own gesture root, passing every touch it doesn't use through to the app underneath.
+    <GestureHandlerRootView pointerEvents="box-none" style={[StyleSheet.absoluteFill, { zIndex: 1000, elevation: 1000 }]} testID="call-mini-layer">
+      <GestureDetector gesture={pan}>
+        <Animated.View entering={ZoomIn.springify().damping(16)} style={[styles.mini, style]} testID="call-mini">
+          <Pressable onPress={onRestore} accessibilityRole="button" accessibilityLabel={`Back to your call with ${call.peer.name}`} style={styles.miniInner}>
+            {theirs ? (
+              <RemoteVideo uid={video.remoteUid} texture style={StyleSheet.absoluteFill} />
+            ) : (
+              <View style={styles.miniFace}>
+                <Avatar uri={call.peer.avatar_url} name={call.peer.name} size={58} />
+                <Text style={styles.miniName} numberOfLines={1}>
+                  {call.peer.name}
+                </Text>
+              </View>
+            )}
+            <LinearGradient pointerEvents="none" colors={['rgba(5,5,6,0)', 'rgba(5,5,6,0.85)']} locations={[0.5, 1]} style={StyleSheet.absoluteFill} />
+            <View style={styles.miniFoot} pointerEvents="none">
+              {controls.muted ? <Ionicons name="mic-off" size={12} color={RED} /> : <View style={styles.liveDot} />}
+              <Text style={styles.miniClock} numberOfLines={1}>
+                {status}
+              </Text>
+            </View>
+          </Pressable>
+          {call.phase !== 'ended' ? (
+            <Pressable onPress={onEnd} hitSlop={8} accessibilityRole="button" accessibilityLabel="End call" style={styles.miniEnd} testID="call-mini-end">
+              <Ionicons name="call" size={15} color="#fff" style={{ transform: [{ rotate: '135deg' }] }} />
+            </Pressable>
+          ) : null}
+        </Animated.View>
+      </GestureDetector>
+    </GestureHandlerRootView>
+  );
+}
+
+/**
+ * The call in Android's picture-in-picture window (over the home screen or
+ * another app): their picture, edge to edge, and nothing else, since the
+ * window is too small to tap controls in. Before their video, their photo
+ * and the time. Not a Modal: the window shows the app's own view.
+ */
+function PipCall({ call, video, status }) {
+  const theirs = call.phase === 'active' && video?.remoteUid != null && video.remoteVideo;
+  return (
+    <View style={[StyleSheet.absoluteFill, styles.pipCall]} testID="call-pip">
+      {theirs ? (
+        <RemoteVideo uid={video.remoteUid} style={StyleSheet.absoluteFill} />
+      ) : (
+        <View style={styles.miniFace}>
+          <Avatar uri={call.peer.avatar_url} name={call.peer.name} size={64} />
+          <Text style={styles.miniName} numberOfLines={1}>
+            {call.peer.name}
+          </Text>
+          <Text style={styles.miniClock}>{status}</Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
 function Incoming({ peer, status, width, onAccept, onDecline }) {
   const avatar = Math.min(168, width * 0.42);
   return (
     <View style={styles.incoming}>
       <Animated.View entering={FadeInDown.springify().damping(20)} style={[styles.card, { width: Math.min(width - space.lg * 2, 400) }]}>
-        <BlurView intensity={60} tint="dark" blurMethod="dimezisBlurView" style={StyleSheet.absoluteFill} />
-        <View style={[StyleSheet.absoluteFill, styles.cardTint]} />
+        <Glass tint="rgba(12,12,15,0.62)" intensity={60} />
         <View style={styles.brandRow}>
           <Text style={styles.brand}>BOA VIDEO</Text>
           <GoldBadge label="HD" />
@@ -321,7 +515,26 @@ function Incoming({ peer, status, width, onAccept, onDecline }) {
  * speaker and end. Shown whenever a call is in progress.
  */
 export default function CallScreen({ me }) {
-  const { call, controls, video, beauty, setBeauty, accept, decline, hangUp, toggle, flipCamera } = useCall();
+  const {
+    call,
+    controls,
+    video,
+    beauty,
+    setBeauty,
+    previewBrightness,
+    facing,
+    selfHidden,
+    setSelfHidden,
+    minimized,
+    minimize,
+    restore,
+    pip: inPip,
+    accept,
+    decline,
+    hangUp,
+    toggle,
+    flipCamera,
+  } = useCall();
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -355,6 +568,29 @@ export default function CallScreen({ me }) {
   const { peer, phase, direction } = call;
   const incoming = direction === 'in' && phase === 'ringing';
   const status = phase === 'ended' ? (END_REASONS[call.reason] ?? END_REASONS.ended) : phase === 'active' ? clock(elapsed) : incoming ? 'Incoming video call' : 'Ringing…';
+  // A call you're on (not one ringing in) can shrink to a floating window.
+  const canShrink = !incoming && phase !== 'ended';
+  const shrink = () => {
+    haptics.tap();
+    setFiltersOpen(false);
+    minimize();
+  };
+  if (inPip && !incoming) return <PipCall call={call} video={video} status={status} />;
+  if (minimized && !incoming) {
+    return (
+      <MiniCall
+        call={call}
+        video={video}
+        controls={controls}
+        status={status}
+        onRestore={() => {
+          haptics.tap();
+          restore();
+        }}
+        onEnd={hangUp}
+      />
+    );
+  }
   const avatar = Math.min(150, width * 0.36);
   const wide = width >= WIDE;
   const pipW = Math.round(Math.min(wide ? 176 : 150, width * 0.34));
@@ -380,7 +616,8 @@ export default function CallScreen({ me }) {
           : VIDEO_NOTE[video?.status];
 
   return (
-    <Modal visible transparent animationType="fade" statusBarTranslucent onRequestClose={incoming ? decline : hangUp}>
+    // Edge to edge: the picture runs under the status bar and the navigation bar, with no bands.
+    <Modal visible transparent animationType="fade" statusBarTranslucent navigationBarTranslucent onRequestClose={incoming ? decline : canShrink ? shrink : hangUp}>
       <GestureHandlerRootView style={{ flex: 1 }}>
         <View style={styles.screen} testID="call-screen">
           {/* Their picture, blurred, fills the screen until their video does. */}
@@ -433,8 +670,11 @@ export default function CallScreen({ me }) {
               pointerEvents="box-none"
             >
               {theirs ? (
-                <Animated.View entering={FadeIn.duration(300)} style={[styles.liveHead, { top, maxWidth: width - pip.width - space.lg * 3 }]}>
-                  <BlurView intensity={40} tint="dark" blurMethod="dimezisBlurView" style={StyleSheet.absoluteFill} />
+                <Animated.View
+                  entering={FadeIn.duration(300)}
+                  style={[styles.liveHead, { top, left: space.lg + SHRINK_SIZE + space.sm, maxWidth: width - pip.width - space.lg * 3 - SHRINK_SIZE - space.sm }]}
+                >
+                  <Glass tint="rgba(12,12,15,0.55)" intensity={40} />
                   <View style={styles.liveDot} />
                   <View style={{ flexShrink: 1 }}>
                     <Text style={styles.liveName} numberOfLines={1} testID="call-name">
@@ -490,27 +730,60 @@ export default function CallScreen({ me }) {
                       <BeautyPanel
                         beauty={beauty}
                         setBeauty={setBeauty}
+                        previewBrightness={previewBrightness}
                         onClose={() => setFiltersOpen(false)}
                         width={panelWidth}
                         maxHeight={Math.max(180, height - dockH - insets.top - insets.bottom - 260)}
                       />
                     </View>
                   ) : null}
+                  {/* The looks, one tap each, right above the dock; Brightness opens the panel. */}
                   {!filtersOpen && !controlsHidden ? (
-                    <Animated.View entering={FadeIn.duration(200)} style={[styles.filterRow, { width: dockWidth }]} testID="call-filter-line">
-                      {describeParts(beauty).map((p) => (
-                        <View key={p.id} style={styles.filterChip}>
-                          <Text style={styles.filterChipLabel}>{p.label}</Text>
-                          {p.value ? <Text style={styles.filterChipValue}>{p.value}</Text> : null}
+                    <Animated.View entering={FadeIn.duration(200)} style={[styles.filterRow, { width: dockWidth }, !beauty.enabled && { opacity: 0.5 }]} testID="call-filter-line">
+                      {PRESETS.map((p) => {
+                        const on = beauty.enabled && beauty.preset === p.id;
+                        return (
+                          <Pressable
+                            key={p.id}
+                            onPress={() => {
+                              haptics.selection();
+                              setBeauty({ preset: p.id, enabled: true });
+                            }}
+                            accessibilityRole="radio"
+                            accessibilityState={{ selected: on }}
+                            accessibilityLabel={p.label}
+                            hitSlop={4}
+                            style={styles.stripItem}
+                            testID={`call-strip-${p.id}`}
+                          >
+                            <LinearGradient colors={PRESET_SWATCH[p.id]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.stripSwatch, on && styles.stripSwatchOn]} />
+                            <Text style={[styles.stripLabel, on && { color: colors.gold }]} numberOfLines={1}>
+                              {p.label}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                      <Pressable
+                        onPress={() => setFiltersOpen(true)}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Brightness ${brightnessLabel(beauty.brightness)}`}
+                        hitSlop={4}
+                        style={styles.stripItem}
+                        testID="call-strip-brightness"
+                      >
+                        <View style={[styles.stripSwatch, styles.stripBright]}>
+                          <Ionicons name="sunny" size={14} color={colors.gold} />
                         </View>
-                      ))}
+                        <Text style={styles.stripLabel} numberOfLines={1}>
+                          {brightnessLabel(beauty.brightness)}
+                        </Text>
+                      </Pressable>
                     </Animated.View>
                   ) : null}
                   <Animated.View entering={SlideInDown.springify().damping(SPRING.damping).stiffness(SPRING.stiffness)} style={{ width: dockWidth }}>
                     <Animated.View style={[styles.dock, dockStyle]} pointerEvents={controlsHidden ? 'none' : 'auto'} testID="call-controls">
                       <View style={styles.dockGlass}>
-                        <BlurView intensity={60} tint="dark" blurMethod="dimezisBlurView" style={StyleSheet.absoluteFill} />
-                        <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(14,14,18,0.86)' }]} />
+                        <Glass tint="rgba(14,14,18,0.86)" intensity={60} />
                       </View>
                       <Pressable onPress={hideControls} hitSlop={10} accessibilityRole="button" accessibilityLabel="Hide controls" style={styles.dockHandle} testID="call-hide-controls">
                         <View style={styles.grabber} />
@@ -579,24 +852,33 @@ export default function CallScreen({ me }) {
             </View>
           )}
 
+          {/* Shrink the call to a floating window and carry on using the app. */}
+          {canShrink && !controlsHidden ? (
+            <Pressable onPress={shrink} hitSlop={10} accessibilityRole="button" accessibilityLabel="Shrink the call" style={[styles.shrink, { top, left: space.lg }]} testID="call-minimize">
+              <Glass tint="rgba(12,12,15,0.55)" intensity={40} />
+              <Ionicons name="contract" size={18} color={colors.text} />
+            </Pressable>
+          ) : null}
+
           {theyrePrivate ? (
             <Animated.View entering={FadeInDown.springify().damping(20)} style={[styles.privacyPill, { top: insets.top + space.sm, maxWidth: width - space.lg * 2 }]} testID="call-remote-privacy">
-              <BlurView intensity={50} tint="dark" blurMethod="dimezisBlurView" style={StyleSheet.absoluteFill} />
+              <Glass tint="rgba(12,12,15,0.55)" />
               <Text style={styles.privacyText} numberOfLines={1}>
                 🔒 {peer.name} has disabled screenshots.
               </Text>
             </Animated.View>
           ) : null}
 
-          {/* You, in the corner. */}
-          {!incoming && phase !== 'ended' ? (
-            <SelfView size={pip} top={top} bottomRoom={insets.bottom + space.lg + dockH + space.md} width={width} height={height}>
+          {/* You, in the corner; or, hidden, a small button to bring you back. */}
+          {!incoming && phase !== 'ended' && !selfHidden ? (
+            <SelfView size={pip} top={top} bottomRoom={insets.bottom + space.lg + dockH + space.md} width={width} height={height} onHide={() => setSelfHidden(true)}>
               {controls.cameraOff ? (
                 <Ionicons name="videocam-off" size={26} color={colors.textMuted} />
               ) : (
                 <>
                   <Avatar uri={me?.avatar_url} name={me?.name ?? 'You'} size={pip.width * 0.56} />
-                  <LocalVideo style={StyleSheet.absoluteFill} />
+                  {/* Mirrored like a mirror on the front camera; what they get never is. */}
+                  <LocalVideo style={StyleSheet.absoluteFill} mirror={facing !== 'back'} />
                 </>
               )}
               {controls.privacy ? (
@@ -610,6 +892,15 @@ export default function CallScreen({ me }) {
                 </View>
               ) : null}
             </SelfView>
+          ) : null}
+          {!incoming && phase !== 'ended' && selfHidden ? (
+            <Animated.View entering={FadeIn.duration(200)} style={[styles.selfShow, { top, right: space.lg }]}>
+              <Pressable onPress={() => setSelfHidden(false)} accessibilityRole="button" accessibilityLabel="Show your video" hitSlop={8} style={styles.selfShowButton} testID="call-self-show">
+                <Glass tint="rgba(12,12,15,0.62)" />
+                <Ionicons name="eye" size={15} color={colors.gold} />
+                <Text style={styles.selfShowText}>You</Text>
+              </Pressable>
+            </Animated.View>
           ) : null}
         </View>
       </GestureHandlerRootView>
@@ -682,7 +973,6 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: 'rgba(246,211,138,0.35)',
   },
-  cardTint: { backgroundColor: 'rgba(12,12,15,0.5)' },
   cardAvatar: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -701,6 +991,37 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.text,
     letterSpacing: 0.2,
+  },
+  shrink: {
+    position: 'absolute',
+    zIndex: 6,
+    width: SHRINK_SIZE,
+    height: SHRINK_SIZE,
+    borderRadius: SHRINK_SIZE / 2,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(243,239,232,0.25)',
+  },
+  pipCall: { zIndex: 2000, elevation: 2000, backgroundColor: '#050506' },
+  mini: { position: 'absolute', left: 0, top: 0, width: MINI_W, height: MINI_H, borderRadius: radius.lg, boxShadow: '0px 0px 18px rgba(226,168,75,0.4), 0px 14px 30px rgba(0,0,0,0.6)' },
+  miniInner: { flex: 1, borderRadius: radius.lg, overflow: 'hidden', borderWidth: 1.5, borderColor: colors.gold, backgroundColor: '#0B0B0D' },
+  miniFace: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: space.sm, gap: space.sm },
+  miniName: { fontFamily: fonts.semibold, fontSize: 12.5, color: colors.text },
+  miniFoot: { position: 'absolute', left: space.sm, right: space.sm, bottom: space.sm, flexDirection: 'row', alignItems: 'center', gap: 5 },
+  miniClock: { fontFamily: fonts.mono, fontSize: 10.5, color: GOLD_LIGHT, fontVariant: ['tabular-nums'] },
+  miniEnd: {
+    position: 'absolute',
+    top: -8,
+    right: -8,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: RED,
+    boxShadow: '0px 0px 12px rgba(255,59,78,0.6)',
   },
   liveHead: {
     position: 'absolute',
@@ -753,6 +1074,30 @@ const styles = StyleSheet.create({
     borderColor: colors.gold,
     backgroundColor: 'rgba(18,18,22,0.85)',
   },
+  pipHide: {
+    position: 'absolute',
+    bottom: 6,
+    left: 6,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(5,5,6,0.7)',
+  },
+  selfShow: { position: 'absolute', zIndex: 5 },
+  selfShowButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: space.sm,
+    paddingHorizontal: space.md,
+    borderRadius: radius.pill,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(246,211,138,0.5)',
+  },
+  selfShowText: { fontFamily: fonts.semibold, fontSize: 13, color: colors.text },
   pipShield: {
     position: 'absolute',
     top: 6,
@@ -809,35 +1154,22 @@ const styles = StyleSheet.create({
   filterRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'center',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    gap: space.sm,
+    gap: space.xs,
     marginBottom: space.md,
+    paddingHorizontal: space.sm,
   },
-  filterChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingVertical: 5,
-    paddingHorizontal: 10,
-    borderRadius: radius.pill,
-    backgroundColor: 'rgba(12,12,15,0.72)',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(243,239,232,0.18)',
-  },
-  filterChipLabel: {
-    fontFamily: fonts.mono,
-    fontSize: 10,
-    letterSpacing: 1,
-    color: colors.textMuted,
-    textTransform: 'uppercase',
-  },
-  filterChipValue: {
-    fontFamily: fonts.mono,
-    fontSize: 10,
-    color: colors.gold,
-    fontVariant: ['tabular-nums'],
-  },
+  // The look strip: a small swatch per preset, its name under it.
+  stripItem: { alignItems: 'center', gap: 4, minWidth: 44 },
+  stripSwatch: { width: 30, height: 30, borderRadius: 15, borderWidth: 1.5, borderColor: 'rgba(243,239,232,0.25)', alignItems: 'center', justifyContent: 'center' },
+  stripSwatchOn: { borderColor: colors.gold, borderWidth: 2, boxShadow: '0px 0px 12px rgba(226,168,75,0.6)' },
+  stripBright: { backgroundColor: 'rgba(12,12,15,0.72)' },
+  stripLabel: { fontFamily: fonts.mono, fontSize: 9.5, letterSpacing: 0.6, color: colors.textMuted, textTransform: 'uppercase' },
+  auto: { paddingHorizontal: space.sm, paddingVertical: 3, borderRadius: radius.pill, borderWidth: 1, borderColor: 'rgba(246,211,138,0.5)', marginLeft: space.xs },
+  autoText: { fontFamily: fonts.mono, fontSize: 10, color: colors.gold, letterSpacing: 0.8, textTransform: 'uppercase' },
+  sliderRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  sliderMid: { position: 'absolute', left: '50%', top: 12, width: 2, height: 16, marginLeft: -1, borderRadius: 1, backgroundColor: 'rgba(243,239,232,0.35)' },
   dock: {
     paddingHorizontal: DOCK_PAD,
     paddingBottom: DOCK_PAD,
@@ -848,7 +1180,7 @@ const styles = StyleSheet.create({
     elevation: 20,
   },
   dockGlass: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     borderRadius: 34,
     overflow: 'hidden',
     borderWidth: StyleSheet.hairlineWidth,

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -14,6 +14,8 @@ import DailySpark from '../../components/DailySpark';
 import Headshot from '../../components/Headshot';
 import { ThreadRow } from './HubChatsScreen';
 import useDayOne from '../../hooks/useDayOne';
+import { CardRowSkeleton, ThreadSkeleton } from '../../components/Skeleton';
+import { haptics } from '../../utils/haptics';
 import { placeLine } from '../../api/dayOne';
 import { colors, fonts, radius, space, type } from '../../theme';
 
@@ -53,7 +55,11 @@ function SectionTitle({ kicker, title, action, onAction }) {
 function PersonCard({ person, online, onPress, index }) {
   const role = roleLabel(person.roles?.[0]);
   return (
-    <Animated.View entering={FadeInRight.delay(Math.min(index, 6) * 60).springify().damping(18)}>
+    <Animated.View
+      entering={FadeInRight.delay(Math.min(index, 6) * 60)
+        .springify()
+        .damping(18)}
+    >
       <Pressable
         onPress={onPress}
         accessibilityRole="button"
@@ -83,7 +89,11 @@ function PersonCard({ person, online, onPress, index }) {
 // BOA's own roster, as tall portrait cards.
 function TalentCard({ person, onPress, index }) {
   return (
-    <Animated.View entering={FadeInRight.delay(Math.min(index, 6) * 60).springify().damping(18)}>
+    <Animated.View
+      entering={FadeInRight.delay(Math.min(index, 6) * 60)
+        .springify()
+        .damping(18)}
+    >
       <Pressable
         onPress={onPress}
         accessibilityRole="button"
@@ -109,7 +119,13 @@ function TalentCard({ person, onPress, index }) {
 // A shortcut on dark glass: an icon in a gold ring, a name and a line.
 function Tool({ icon, title, detail, onPress, testID }) {
   return (
-    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={`${title}. ${detail}`} style={({ pressed }) => [styles.tool, pressed && { transform: [{ scale: 0.97 }] }]} testID={testID}>
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`${title}. ${detail}`}
+      style={({ pressed }) => [styles.tool, pressed && { transform: [{ scale: 0.97 }] }]}
+      testID={testID}
+    >
       <LinearGradient colors={['rgba(255,255,255,0.09)', 'rgba(255,255,255,0.02)']} style={StyleSheet.absoluteFill} />
       <View style={styles.toolIcon}>
         <Ionicons name={icon} size={20} color={colors.gold} />
@@ -121,6 +137,61 @@ function Tool({ icon, title, detail, onPress, testID }) {
         {detail}
       </Text>
     </Pressable>
+  );
+}
+
+// What each filter says when it's empty: never a dead end.
+const EMPTY = {
+  primary: {
+    icon: 'chatbubbles',
+    title: 'Your first conversation is one tap away',
+    body: 'Say hello to someone from the Pulse above, or find the exact creative you need.',
+    action: 'Find talent',
+  },
+  general: {
+    icon: 'albums',
+    title: 'Nothing in General',
+    body: 'Hold a conversation in Primary and move it here to keep your main inbox for what matters most.',
+  },
+  requests: {
+    icon: 'shield-checkmark',
+    title: 'No message requests',
+    body: "When someone new writes to you, it waits here. They can't see that you've read it until you accept.",
+  },
+};
+
+/** Primary, General and Requests: a gold pill slides under the one you're on. */
+function InboxFilters({ value, onChange, counts }) {
+  return (
+    <View style={styles.filters} accessibilityRole="tablist" testID="inbox-filters">
+      {hub.INBOX_FILTERS.map((f) => {
+        const on = value === f.id;
+        const n = counts[f.id] ?? 0;
+        return (
+          <Pressable
+            key={f.id}
+            onPress={() => {
+              if (on) return;
+              haptics.selection();
+              onChange(f.id);
+            }}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: on }}
+            accessibilityLabel={`${f.label}${n ? `, ${n} unread` : ''}`}
+            style={[styles.filter, on && styles.filterOn]}
+            testID={`inbox-filter-${f.id}`}
+          >
+            {on ? <LinearGradient colors={['#F6D38A', colors.gold]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} /> : null}
+            <Text style={[styles.filterText, on && styles.filterTextOn]}>{f.label}</Text>
+            {n ? (
+              <View style={[styles.filterCount, on && styles.filterCountOn]}>
+                <Text style={[styles.filterCountText, on && { color: colors.gold }]}>{n > 9 ? '9+' : n}</Text>
+              </View>
+            ) : null}
+          </Pressable>
+        );
+      })}
+    </View>
   );
 }
 
@@ -144,6 +215,7 @@ export default function ChatHome({ navigation, bottomPadding }) {
   const insets = useSafeAreaInsets();
   const { userId, profile, isOnline, blocked, dayOneNews, clearDayOneNews, heartsUnseen = 0 } = useHub();
   const { rows, state, error, reload } = useConversations(userId);
+  const [filter, setFilter] = useState('primary');
   const [pulse, setPulse] = useState({ featured: [], fresh: [], suggested: [], ready: false });
 
   // Keyed on what the roles are, not on the array itself, so a profile
@@ -174,7 +246,36 @@ export default function ChatHome({ navigation, bottomPadding }) {
   const fresh = pulse.fresh.filter((p) => !blocked.has(p.id));
   const suggested = pulse.suggested.filter((p) => !blocked.has(p.id));
   const openPerson = (p) => navigation.navigate('HubProfile', { id: p.id });
-  const unread = visible.filter((c) => c.unread).length;
+  const unread = visible.filter((c) => c.unread && !c.request).length;
+  const inFilter = visible.filter((c) => hub.inboxOf(c) === filter);
+  // Unread per filter; every request counts, read or not, until you decide.
+  const counts = {
+    primary: visible.filter((c) => hub.inboxOf(c) === 'primary' && c.unread).length,
+    general: visible.filter((c) => hub.inboxOf(c) === 'general' && c.unread).length,
+    requests: visible.filter((c) => c.request).length,
+  };
+  const empty = EMPTY[filter];
+
+  // Hold a conversation: move it between Primary and General.
+  const options = (conv) => {
+    if (conv.request) return;
+    haptics.selection();
+    const to = conv.folder === 'general' ? 'primary' : 'general';
+    Alert.alert(conv.other?.display_name || 'Conversation', undefined, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: to === 'general' ? 'Move to General' : 'Move to Primary',
+        onPress: () =>
+          hub
+            .setConversationFolder(conv.id, to)
+            .then(() => {
+              haptics.success();
+              reload(true);
+            })
+            .catch((err) => Alert.alert("Couldn't move it", err.message)),
+      },
+    ]);
+  };
   const dayOnes = useDayOne([userId, ...visible.map((c) => c.otherId)]);
 
   return (
@@ -210,7 +311,13 @@ export default function ChatHome({ navigation, bottomPadding }) {
             </View>
             <View style={{ flexDirection: 'row', gap: space.sm, flexShrink: 0 }}>
               <View>
-                <IconButton icon={heartsUnseen ? 'heart' : 'heart-outline'} tone={heartsUnseen ? '#FF3B5C' : colors.text} label={heartsUnseen ? `Hearts, ${heartsUnseen} new` : 'Hearts'} onPress={() => navigation.navigate('HubHearts')} testID="chat-hearts" />
+                <IconButton
+                  icon={heartsUnseen ? 'heart' : 'heart-outline'}
+                  tone={heartsUnseen ? '#FF3B5C' : colors.text}
+                  label={heartsUnseen ? `Hearts, ${heartsUnseen} new` : 'Hearts'}
+                  onPress={() => navigation.navigate('HubHearts')}
+                  testID="chat-hearts"
+                />
                 {heartsUnseen ? (
                   <View style={styles.heartBadge} pointerEvents="none">
                     <Text style={styles.heartBadgeText}>{heartsUnseen > 9 ? '9+' : heartsUnseen}</Text>
@@ -284,11 +391,12 @@ export default function ChatHome({ navigation, bottomPadding }) {
             </Row>
           </>
         )}
-        {!pulse.ready && <ActivityIndicator color={colors.gold} style={{ marginTop: space.lg }} />}
+        {!pulse.ready && <CardRowSkeleton />}
 
         <SectionTitle kicker="Your inbox" title="Conversations" />
+        <InboxFilters value={filter} onChange={setFilter} counts={counts} />
         {state === 'loading' ? (
-          <ActivityIndicator color={colors.gold} style={{ marginTop: space.lg }} />
+          <ThreadSkeleton />
         ) : state === 'error' ? (
           <View style={styles.emptyCard}>
             <Ionicons name="cloud-offline-outline" size={28} color={colors.gold} />
@@ -296,16 +404,20 @@ export default function ChatHome({ navigation, bottomPadding }) {
             <Text style={[type.bodyMuted, styles.emptyBody]}>{error}</Text>
             <Button label="Try again" icon="refresh" onPress={() => reload(true)} style={{ marginTop: space.lg }} />
           </View>
-        ) : visible.length === 0 ? (
-          <Animated.View entering={FadeIn.duration(400)} style={styles.emptyCard} testID="chat-empty">
+        ) : inFilter.length === 0 ? (
+          <Animated.View key={filter} entering={FadeIn.duration(400)} style={styles.emptyCard} testID={filter === 'primary' && visible.length === 0 ? 'chat-empty' : `inbox-empty-${filter}`}>
             <LinearGradient colors={['rgba(226,168,75,0.14)', 'rgba(255,255,255,0.02)']} style={StyleSheet.absoluteFill} />
-            <Ionicons name="chatbubbles" size={30} color={colors.gold} />
-            <Text style={[type.title, styles.emptyTitle]}>Your first conversation is one tap away</Text>
-            <Text style={[type.bodyMuted, styles.emptyBody]}>Say hello to someone from the Pulse above, or find the exact creative you need.</Text>
-            <Button label="Find talent" icon="people-outline" onPress={() => navigation.navigate('HubDirectory')} style={{ marginTop: space.lg }} />
+            {/* A gold medallion: the icon on a lit coin, not a bare glyph. */}
+            <View style={styles.medallion}>
+              <LinearGradient colors={['rgba(246,211,138,0.35)', 'rgba(226,168,75,0.05)']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+              <Ionicons name={empty.icon} size={28} color={colors.gold} />
+            </View>
+            <Text style={[type.title, styles.emptyTitle]}>{empty.title}</Text>
+            <Text style={[type.bodyMuted, styles.emptyBody]}>{empty.body}</Text>
+            {empty.action ? <Button label={empty.action} icon="people-outline" onPress={() => navigation.navigate('HubDirectory')} style={{ marginTop: space.lg }} /> : null}
           </Animated.View>
         ) : (
-          visible.map((item, index) => (
+          inFilter.map((item, index) => (
             <ThreadRow
               key={item.id}
               conv={item}
@@ -314,6 +426,7 @@ export default function ChatHome({ navigation, bottomPadding }) {
               online={isOnline(item.otherId)}
               dayOne={dayOnes.has(item.otherId)}
               onPress={() => navigation.navigate('HubThread', { id: item.id })}
+              onLongPress={() => options(item)}
             />
           ))
         )}
@@ -362,16 +475,81 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(226,168,75,0.35)',
     backgroundColor: 'rgba(18,18,22,0.6)',
   },
-  heartBadge: { position: 'absolute', top: -4, right: -4, minWidth: 18, height: 18, paddingHorizontal: 4, borderRadius: 9, alignItems: 'center', justifyContent: 'center', backgroundColor: '#FF3B5C', borderWidth: 2, borderColor: colors.bg },
+  heartBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    minWidth: 18,
+    height: 18,
+    paddingHorizontal: 4,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FF3B5C',
+    borderWidth: 2,
+    borderColor: colors.bg,
+  },
   heartBadgeText: { fontFamily: fonts.bold, fontSize: 10, color: '#fff' },
   tools: { flexDirection: 'row', gap: space.md, paddingHorizontal: space.lg },
-  tool: { flex: 1, minWidth: 0, padding: space.md, borderRadius: radius.lg, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255,255,255,0.14)', backgroundColor: 'rgba(18,18,22,0.6)' },
+  tool: {
+    flex: 1,
+    minWidth: 0,
+    padding: space.md,
+    borderRadius: radius.lg,
+    overflow: 'hidden',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.14)',
+    backgroundColor: 'rgba(18,18,22,0.6)',
+  },
   toolIcon: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.goldSoft, borderWidth: 1, borderColor: 'rgba(226,168,75,0.45)' },
   toolTitle: { fontFamily: fonts.semibold, fontSize: 14, color: colors.text, marginTop: space.md },
   toolDetail: { fontFamily: fonts.medium, fontSize: 12, lineHeight: 16, color: colors.textMuted, marginTop: 2 },
-  dayOneNews: { flexDirection: 'row', alignItems: 'center', gap: space.md, marginHorizontal: space.lg, marginTop: space.xl, padding: space.md, borderRadius: radius.lg, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(246,211,138,0.55)', backgroundColor: 'rgba(18,18,22,0.7)', boxShadow: '0px 0px 24px rgba(246,211,138,0.2)' },
+  dayOneNews: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    marginHorizontal: space.lg,
+    marginTop: space.xl,
+    padding: space.md,
+    borderRadius: radius.lg,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(246,211,138,0.55)',
+    backgroundColor: 'rgba(18,18,22,0.7)',
+    boxShadow: '0px 0px 24px rgba(246,211,138,0.2)',
+  },
   dayOneTitle: { fontFamily: fonts.semibold, fontSize: 14.5, color: colors.text },
   dayOneBody: { fontFamily: fonts.medium, fontSize: 12, color: '#F6D38A', marginTop: 2 },
   emptyTitle: { marginTop: space.md, textAlign: 'center' },
+  medallion: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(246,211,138,0.55)',
+    boxShadow: '0px 0px 24px rgba(226,168,75,0.35)',
+  },
+  filters: { flexDirection: 'row', gap: space.sm, paddingHorizontal: space.lg, marginBottom: space.md },
+  filter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: space.md,
+    paddingVertical: space.sm,
+    borderRadius: radius.pill,
+    overflow: 'hidden',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.18)',
+    backgroundColor: 'rgba(18,18,22,0.6)',
+  },
+  filterOn: { borderColor: 'rgba(246,211,138,0.9)', boxShadow: '0px 0px 16px rgba(226,168,75,0.35)' },
+  filterText: { fontFamily: fonts.semibold, fontSize: 13.5, color: colors.textMuted },
+  filterTextOn: { color: colors.bg },
+  filterCount: { minWidth: 18, height: 18, paddingHorizontal: 5, borderRadius: 9, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.gold },
+  filterCountOn: { backgroundColor: colors.bg },
+  filterCountText: { fontFamily: fonts.bold, fontSize: 10, color: colors.bg },
   emptyBody: { textAlign: 'center', marginTop: space.sm },
 });

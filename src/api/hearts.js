@@ -18,7 +18,10 @@ export async function myHearts(userId, kind, ids) {
 export async function heart(userId, kind, targetId, { label = '', meta = {} } = {}) {
   const { error } = await need()
     .from('hearts')
-    .upsert({ liker_id: userId, target_kind: kind, target_id: String(targetId), target_label: String(label).slice(0, 120), target_meta: meta }, { onConflict: 'liker_id,target_kind,target_id', ignoreDuplicates: true });
+    .upsert(
+      { liker_id: userId, target_kind: kind, target_id: String(targetId), target_label: String(label).slice(0, 120), target_meta: meta },
+      { onConflict: 'liker_id,target_kind,target_id', ignoreDuplicates: true },
+    );
   if (error) check({ error });
 }
 
@@ -35,12 +38,23 @@ export async function listFavourites(userId, limit = 24) {
     .neq('target_kind', 'post')
     .order('created_at', { ascending: false })
     .limit(limit);
-  return error ? [] : data ?? [];
+  return error ? [] : (data ?? []);
 }
 
 /** Hearts on your posts, newest first (the database only shows you your own). */
 export async function listHeartsOnMine(userId, limit = 60) {
   return check(await need().from('hearts').select('liker_id, target_id, created_at').eq('owner_id', userId).order('created_at', { ascending: false }).limit(limit)) ?? [];
+}
+
+/**
+ * How many hearts one of your posts has: for your eyes only. The database
+ * shows hearts on a post to its owner and nobody else, so this is 0 for
+ * anyone else's post whatever its real number.
+ */
+export async function heartsOnPost(userId, postId) {
+  const { count, error } = await need().from('hearts').select('target_id', { count: 'exact', head: true }).eq('owner_id', userId).eq('target_kind', 'post').eq('target_id', String(postId));
+  if (error) check({ error });
+  return count ?? 0;
 }
 
 // When you last opened your hearts, kept on this phone only: the giver

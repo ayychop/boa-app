@@ -5,11 +5,39 @@ import { useVideoPlayer, VideoView } from 'expo-video';
 import { useHub } from '../../context/HubContext';
 import { getProfile } from '../../api/hub';
 import { deletePost } from '../../api/posts';
-import { heart, myHearts, unheart } from '../../api/hearts';
+import { heart, heartsOnPost, myHearts, unheart } from '../../api/hearts';
 import { HeartBurst, HeartButton } from '../../components/HeartBurst';
 import { haptics } from '../../utils/haptics';
 import { Avatar, BoaStarBadge, IconButton, PageHeader } from '../../components/kit';
-import { colors, fonts, space } from '../../theme';
+import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import { colors, fonts, radius, space } from '../../theme';
+
+/**
+ * Your post's numbers, for you alone: how many hearts it has, and the way
+ * to see who. Nobody else ever sees a count, here or on your profile.
+ */
+function PrivateStats({ count, onSeeWho, width }) {
+  return (
+    <View style={[styles.stats, { width: width - space.lg * 2 }]} testID="post-private-stats">
+      <LinearGradient colors={['rgba(255,59,92,0.16)', 'rgba(255,255,255,0.02)']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+      <Ionicons name="heart" size={22} color="#FF3B5C" />
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={styles.statsCount} testID="post-heart-count">
+          {count == null ? 'Hearts' : `${count} ${count === 1 ? 'heart' : 'hearts'}`}
+        </Text>
+        <View style={styles.statsPrivate}>
+          <Ionicons name="lock-closed" size={10} color={colors.textFaint} />
+          <Text style={styles.statsPrivateText}>Only you can see this</Text>
+        </View>
+      </View>
+      <Pressable onPress={onSeeWho} hitSlop={8} accessibilityRole="button" accessibilityLabel="See who hearted your posts" style={styles.statsAction}>
+        <Text style={styles.statsActionText}>See who</Text>
+        <Ionicons name="arrow-forward" size={13} color={colors.gold} />
+      </Pressable>
+    </View>
+  );
+}
 
 function PostVideo({ uri }) {
   const player = useVideoPlayer({ uri }, (p) => {
@@ -31,12 +59,27 @@ export default function HubPostScreen({ navigation, route }) {
   const [tagged, setTagged] = useState([]);
   const mine = post?.author_id === userId;
   const [loved, setLoved] = useState(false);
+  const [hearts, setHearts] = useState(null);
   const burst = useRef(null);
   const lastTap = useRef(0);
 
   useEffect(() => {
     if (!post || mine) return;
-    myHearts(userId, 'post', [post.id]).then((set) => setLoved(set.has(String(post.id)))).catch(() => {});
+    myHearts(userId, 'post', [post.id])
+      .then((set) => setLoved(set.has(String(post.id))))
+      .catch(() => {});
+  }, [post, mine, userId]);
+
+  // Your own post: its heart count, for you only.
+  useEffect(() => {
+    if (!post || !mine) return undefined;
+    let alive = true;
+    heartsOnPost(userId, post.id)
+      .then((n) => alive && setHearts(n))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
   }, [post, mine, userId]);
 
   // Hearts are private: the owner is told, nobody sees a count.
@@ -67,7 +110,9 @@ export default function HubPostScreen({ navigation, route }) {
   useEffect(() => {
     if (!post) return undefined;
     let alive = true;
-    getProfile(post.author_id).then((p) => alive && setAuthor(p)).catch(() => {});
+    getProfile(post.author_id)
+      .then((p) => alive && setAuthor(p))
+      .catch(() => {});
     Promise.all((post.tagged ?? []).map((id) => getProfile(id).catch(() => null))).then((rows) => alive && setTagged(rows.filter(Boolean)));
     return () => {
       alive = false;
@@ -116,7 +161,9 @@ export default function HubPostScreen({ navigation, route }) {
               {loved ? 'Only they know you hearted this' : post.kind === 'video' ? 'Tap the heart to show some love' : 'Double tap to heart'}
             </Text>
           </View>
-        ) : null}
+        ) : (
+          <PrivateStats count={hearts} width={width} onSeeWho={() => navigation.navigate('HubHearts')} />
+        )}
         <View style={[styles.body, { width }]}>
           {author ? (
             <Pressable onPress={() => navigation.push('HubProfile', { id: author.id })} accessibilityRole="button" style={styles.author}>
@@ -145,6 +192,23 @@ export default function HubPostScreen({ navigation, route }) {
 }
 
 const styles = StyleSheet.create({
+  stats: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    marginTop: space.lg,
+    padding: space.md,
+    borderRadius: radius.lg,
+    overflow: 'hidden',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,59,92,0.35)',
+    backgroundColor: 'rgba(18,18,22,0.6)',
+  },
+  statsCount: { fontFamily: fonts.semibold, fontSize: 16, color: colors.text },
+  statsPrivate: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
+  statsPrivateText: { fontFamily: fonts.medium, fontSize: 11.5, color: colors.textFaint },
+  statsAction: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  statsActionText: { fontFamily: fonts.semibold, fontSize: 13, color: colors.gold },
   screen: { flex: 1, backgroundColor: colors.bg },
   body: { paddingHorizontal: space.lg, paddingTop: space.lg },
   bar: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingHorizontal: space.lg, paddingTop: space.md },

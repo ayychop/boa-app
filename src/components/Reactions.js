@@ -138,7 +138,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.16)',
     boxShadow: '0px 14px 34px rgba(0,0,0,0.55)',
   },
-  tint: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(18,18,22,0.35)' },
+  tint: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(18,18,22,0.35)' },
   button: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(243,239,232,0.08)' },
   buttonEmoji: { fontSize: 22, color: colors.text },
 });

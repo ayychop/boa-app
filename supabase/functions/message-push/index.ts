@@ -13,6 +13,12 @@
 // Then in the SQL editor:
 //   select private.set_push_function('https://<project>.supabase.co/functions/v1/message-push', '<same secret>');
 //
+// Message requests (someone new, not yet accepted: see
+// supabase/migrations/20261027210000_inbox_folders_and_requests.sql) are
+// delivered quietly: no sound, no buzz, no heads-up popup, on the app's
+// low-importance requests channel, and on iPhone as a passive notification
+// that doesn't light the screen. They wait in the shade, and in Requests.
+//
 // Pushes go through Expo's push service, which hands Android ones to FCM
 // using the FCM key uploaded to EAS (eas credentials, Android, Push
 // Notifications: FCM V1). The heads-up popup comes from the phone's chat
@@ -50,8 +56,7 @@ function same(a: string, b: string) {
   return diff === 0;
 }
 
-const json = (body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 
 Deno.serve(async (req) => {
   if (req.method !== 'POST') return json({ error: 'POST only' }, 405);
@@ -66,9 +71,13 @@ Deno.serve(async (req) => {
     return json({ error: 'bad body' }, 400);
   }
 
-  const { data: conv } = await db.from('conversations').select('user_a, user_b').eq('id', m.conversation_id).maybeSingle();
+  // With the accepted columns if the inbox migration has run; without, every message is an ordinary one.
+  let { data: conv, error: convError } = await db.from('conversations').select('user_a, user_b, a_accepted_at, b_accepted_at').eq('id', m.conversation_id).maybeSingle();
+  if (convError) ({ data: conv } = await db.from('conversations').select('user_a, user_b').eq('id', m.conversation_id).maybeSingle());
   if (!conv) return json({ skipped: 'no conversation' });
   const recipient = conv.user_a === m.sender_id ? conv.user_b : conv.user_a;
+  const side = conv.user_a === recipient ? 'a_accepted_at' : 'b_accepted_at';
+  const request = side in conv && !conv[side];
 
   const { data: blocked } = await db.rpc('is_blocked', { a: m.sender_id, b: recipient });
   if (blocked) return json({ skipped: 'blocked' });
@@ -81,17 +90,30 @@ Deno.serve(async (req) => {
 
   const title = sender?.display_name?.trim() || (sender?.username ? `@${sender.username}` : 'BOA HUB');
   const body = previewOf(m);
-  const pushes = tokens.map((t) => ({
-    to: t.token,
-    title,
-    body,
-    sound: `chat_${t.sound}.wav`,
-    // The app's high-importance channel for this sound: that's what makes
-    // Android pop it up over whatever's on screen.
-    channelId: `boa-chat-${t.sound}`,
-    priority: 'high',
-    data: { type: 'chat', conversationId: m.conversation_id, messageId: m.id },
-  }));
+  const pushes = tokens.map((t) =>
+    request
+      ? {
+          to: t.token,
+          title: 'Message request',
+          // Who, never what: it's someone you haven't accepted yet.
+          body: `${title} wants to message you`,
+          channelId: 'boa-chat-requests',
+          priority: 'normal',
+          interruptionLevel: 'passive',
+          data: { type: 'chat', conversationId: m.conversation_id, messageId: m.id, request: true },
+        }
+      : {
+          to: t.token,
+          title,
+          body,
+          sound: `chat_${t.sound}.wav`,
+          // The app's high-importance channel for this sound: that's what makes
+          // Android pop it up over whatever's on screen.
+          channelId: `boa-chat-${t.sound}`,
+          priority: 'high',
+          data: { type: 'chat', conversationId: m.conversation_id, messageId: m.id },
+        },
+  );
 
   const res = await fetch(EXPO_PUSH, {
     method: 'POST',
@@ -101,10 +123,8 @@ Deno.serve(async (req) => {
   const result = await res.json().catch(() => null);
 
   // Phones that uninstalled the app: forget their tokens.
-  const gone = (result?.data ?? [])
-    .map((r: { status: string; details?: { error?: string } }, i: number) => (r?.details?.error === 'DeviceNotRegistered' ? pushes[i].to : null))
-    .filter(Boolean);
+  const gone = (result?.data ?? []).map((r: { status: string; details?: { error?: string } }, i: number) => (r?.details?.error === 'DeviceNotRegistered' ? pushes[i].to : null)).filter(Boolean);
   if (gone.length) await db.from('push_tokens').delete().in('token', gone);
 
-  return json({ sent: pushes.length, removed: gone.length });
+  return json({ sent: pushes.length, removed: gone.length, request });
 });

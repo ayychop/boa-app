@@ -3,7 +3,7 @@ import { Alert } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import * as hub from '../src/api/hub';
 import HubChatsScreen from '../src/screens/hub/HubChatsScreen';
-import HubThreadScreen from '../src/screens/hub/HubThreadScreen';
+import HubThreadScreen from '../src/screens/hub/NewChatScreen';
 
 jest.useFakeTimers();
 

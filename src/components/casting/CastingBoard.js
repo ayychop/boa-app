@@ -487,7 +487,7 @@ const styles = StyleSheet.create({
     boxShadow: '0px 18px 40px rgba(0,0,0,0.55), 0px 0px 30px rgba(226,168,75,0.18)',
   },
   originalBadgeWrap: { alignSelf: 'flex-start' },
-  originalBadgeHalo: { ...StyleSheet.absoluteFillObject, borderRadius: radius.pill, boxShadow: '0px 0px 28px 4px rgba(226,168,75,0.7)' },
+  originalBadgeHalo: { ...StyleSheet.absoluteFill, borderRadius: radius.pill, boxShadow: '0px 0px 28px 4px rgba(226,168,75,0.7)' },
   originalBadge: {
     alignSelf: 'flex-start',
     flexDirection: 'row',

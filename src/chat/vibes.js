@@ -4,6 +4,12 @@ import { textOn } from './bubbleTheme';
 
 const KEY = 'boa:chat-vibe:v1';
 const CUSTOM_KEY = 'boa:chat-vibe-custom:v1';
+const MOTION_KEY = 'boa:chat-motion:v1';
+
+/** Motion: the backdrop lives (drifting light, a turning record, particles). Static: the same scene, held still. */
+export const MOTION = 'motion';
+export const STATIC = 'static';
+const MODES = [MOTION, STATIC];
 
 /**
  * The chat thread's looks, in the order the picker offers them. Each sets
@@ -42,6 +48,9 @@ function vibe(v) {
     send: [v.mine[0], v.mine[1], v.mine[2]],
     sendIcon: v.mineText,
     radius: null,
+    // scene: what moves in the backdrop over the mesh and lights: drift
+    // (the lights alone), turntable, stars, embers (rising dust) or rain.
+    scene: 'drift',
     // light: a pale backdrop, so the header, composer and their-side text
     // flip to dark ink and the glass blurs light instead of dark.
     light: false,
@@ -83,6 +92,7 @@ export const VIBES = [
     send: ['#FBE3B0', '#E2A84B', '#C7862E'],
     sendIcon: '#0B0906',
     texture: null,
+    scene: 'embers',
   },
   {
     id: 'neon',
@@ -112,10 +122,11 @@ export const VIBES = [
     send: ['#C3A8FF', '#7B6CFF', '#2FA8FF'],
     sendIcon: '#FFFFFF',
     texture: null,
+    scene: 'drift',
   },
   {
     id: 'midnight',
-    label: 'Midnight',
+    label: 'Midnight Drive',
     detail: 'Deep navy under a starry sky',
     mesh: ['#1A2B5E', '#0B1434', '#050A1E'],
     lights: [
@@ -143,6 +154,7 @@ export const VIBES = [
     send: ['#FFFFFF', '#C9D6FF', '#8EA2DA'],
     sendIcon: '#0A1230',
     texture: null,
+    scene: 'stars',
   },
   vibe({
     id: 'turntable',
@@ -160,6 +172,7 @@ export const VIBES = [
     theirsFill: 'rgba(20,18,16,0.9)',
     stars: { max: 0, deep: false },
     texture: 'vinyl',
+    scene: 'turntable',
   }),
   vibe({
     id: 'street-luxury',
@@ -180,6 +193,7 @@ export const VIBES = [
     theirsEdge: 'rgba(240,196,106,0.3)',
     stars: { max: 0, deep: false },
     texture: 'gold',
+    scene: 'embers',
   }),
   vibe({
     id: 'afrofuturism',
@@ -269,6 +283,7 @@ export const VIBES = [
     theirsText: '#FFF3E4',
     stars: { max: 0, deep: false },
     texture: 'rays',
+    scene: 'embers',
   }),
   vibe({
     id: 'cyberpunk',
@@ -289,6 +304,7 @@ export const VIBES = [
     theirsText: '#FFE8EC',
     stars: { max: 0, deep: false },
     texture: 'scan',
+    scene: 'rain',
   }),
   vibe({
     id: 'minimalist',
@@ -344,6 +360,7 @@ export const VIBES = [
     theirsEdge: 'rgba(255,255,255,0.22)',
     stars: { max: 0, deep: false },
     texture: 'concrete',
+    scene: 'rain',
   }),
 ];
 /** The thirteenth choice: any colour, laid over Noir as a translucent wash. */
@@ -351,6 +368,22 @@ export const CUSTOM_ID = 'custom';
 export const DEFAULT_CUSTOM_COLOR = '#2F7BFF';
 
 export const DEFAULT_VIBE = 'noir';
+/**
+ * Where someone who has never picked a vibe starts: a Premium one, so a new
+ * member's free trial opens on the full experience. If Premium isn't on,
+ * allowedVibe shows Noir in its place.
+ */
+export const WELCOME_VIBE = 'turntable';
+
+/**
+ * The vibes anyone can use; every other one, and Custom, is BOA Premium.
+ * Premium vibes show with a lock in the picker, and a saved one falls back
+ * to Noir (on this phone's screen only, the choice is kept) if Premium ends.
+ */
+export const FREE_VIBES = ['noir', 'neon', 'minimalist', 'the-block'];
+export const isPremiumVibe = (id) => !FREE_VIBES.includes(id);
+/** The vibe to draw: yours, or Noir if it's a Premium one and Premium is locked. */
+export const allowedVibe = (vibe, unlocked) => (unlocked || !isPremiumVibe(vibe.id) ? vibe : VIBES[0]);
 export const vibeById = (id, customColor = DEFAULT_CUSTOM_COLOR) => (id === CUSTOM_ID ? customVibe(customColor) : (VIBES.find((v) => v.id === id) ?? VIBES[0]));
 
 /**
@@ -396,7 +429,7 @@ export function customVibe(hex) {
 
 // One choice for the whole app, so a pick in the thread or in Settings
 // shows everywhere at once. Read from the device on first use.
-let current = { id: DEFAULT_VIBE, custom: DEFAULT_CUSTOM_COLOR };
+let current = { id: WELCOME_VIBE, custom: DEFAULT_CUSTOM_COLOR, motion: MOTION };
 let loaded = null;
 const listeners = new Set();
 const publish = (next) => {
@@ -406,13 +439,14 @@ const publish = (next) => {
 const known = (id) => id === CUSTOM_ID || VIBES.some((v) => v.id === id);
 
 function load() {
-  loaded ??= Promise.all([AsyncStorage.getItem(KEY), AsyncStorage.getItem(CUSTOM_KEY)])
-    .then(([id, custom]) => {
+  loaded ??= Promise.all([AsyncStorage.getItem(KEY), AsyncStorage.getItem(CUSTOM_KEY), AsyncStorage.getItem(MOTION_KEY)])
+    .then(([id, custom, motion]) => {
       const next = {
         id: id && known(id) ? id : current.id,
         custom: custom && /^#[0-9a-f]{6}$/i.test(custom) ? custom : current.custom,
+        motion: MODES.includes(motion) ? motion : current.motion,
       };
-      if (next.id !== current.id || next.custom !== current.custom) publish(next);
+      if (next.id !== current.id || next.custom !== current.custom || next.motion !== current.motion) publish(next);
     })
     .catch(() => {});
   return loaded;
@@ -428,11 +462,18 @@ export function setChatVibe(id) {
 export function setCustomColor(hex) {
   if (!/^#[0-9a-f]{6}$/i.test(hex)) return Promise.resolve();
   const color = hex.toUpperCase();
-  publish({ id: CUSTOM_ID, custom: color });
+  publish({ ...current, id: CUSTOM_ID, custom: color });
   return Promise.all([AsyncStorage.setItem(KEY, CUSTOM_ID), AsyncStorage.setItem(CUSTOM_KEY, color)]).catch(() => {});
 }
 
-/** The chosen vibe (its full look), your custom colour, and setters that save them. */
+/** Motion or Static, for every chat on this phone. */
+export function setChatMotion(mode) {
+  const next = MODES.includes(mode) ? mode : MOTION;
+  publish({ ...current, motion: next });
+  return AsyncStorage.setItem(MOTION_KEY, next).catch(() => {});
+}
+
+/** The chosen vibe (its full look), your custom colour, Motion or Static, and setters that save them. */
 export default function useChatVibe() {
   const [state, setState] = useState(current);
   useEffect(() => {
@@ -441,11 +482,11 @@ export default function useChatVibe() {
     load();
     return () => listeners.delete(setState);
   }, []);
-  return { vibe: vibeById(state.id, state.custom), customColor: state.custom, setVibe: setChatVibe, setCustomColor };
+  return { vibe: vibeById(state.id, state.custom), customColor: state.custom, motion: state.motion, setVibe: setChatVibe, setCustomColor, setMotion: setChatMotion };
 }
 
 /** For tests: forget the in-memory choice so the next read comes from storage. */
 export function resetChatVibe() {
-  current = { id: DEFAULT_VIBE, custom: DEFAULT_CUSTOM_COLOR };
+  current = { id: WELCOME_VIBE, custom: DEFAULT_CUSTOM_COLOR, motion: MOTION };
   loaded = null;
 }
