@@ -1,18 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Animated, {
-  Easing,
-  Extrapolation,
-  FadeIn,
-  interpolate,
-  useAnimatedScrollHandler,
-  useAnimatedStyle,
-  useReducedMotion,
-  useSharedValue,
-  withRepeat,
-  withTiming,
-} from 'react-native-reanimated';
+import Animated, { Easing, Extrapolation, FadeIn, interpolate, useAnimatedScrollHandler, useAnimatedStyle, useReducedMotion, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -81,11 +70,7 @@ function Wash({ scene, index, x, width }) {
   }));
   return (
     <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, style]}>
-      <LinearGradient
-        colors={[`${scene.glow}59`, `${scene.glow}14`, 'transparent']}
-        locations={[0, 0.45, 0.85]}
-        style={StyleSheet.absoluteFill}
-      />
+      <LinearGradient colors={[`${scene.glow}59`, `${scene.glow}14`, 'transparent']} locations={[0, 0.45, 0.85]} style={StyleSheet.absoluteFill} />
     </Animated.View>
   );
 }
@@ -108,20 +93,13 @@ function Orb({ scene, size, reduceMotion }) {
   return (
     <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
       <Animated.View style={[styles.halo, { width: size, height: size, borderRadius: size / 2, backgroundColor: `${scene.glow}22` }, halo]} />
-      <Animated.View
-        style={[styles.ring, { width: size * 0.84, height: size * 0.84, borderRadius: size, borderColor: `${scene.glow}66` }, ring]}
-      >
+      <Animated.View style={[styles.ring, { width: size * 0.84, height: size * 0.84, borderRadius: size, borderColor: `${scene.glow}66` }, ring]}>
         <View style={[styles.ringDot, { backgroundColor: scene.glow, shadowColor: scene.glow }]} />
       </Animated.View>
       <View style={[styles.ring, { width: size * 0.68, height: size * 0.68, borderRadius: size, borderColor: 'rgba(243,239,232,0.10)' }]} />
       <View style={[styles.core, { width: core, height: core, borderRadius: core / 2, shadowColor: scene.glow }]}>
         <BlurView intensity={40} tint="dark" experimentalBlurMethod="dimezisBlurView" style={StyleSheet.absoluteFill} />
-        <LinearGradient
-          colors={['rgba(243,239,232,0.16)', 'rgba(243,239,232,0.02)']}
-          start={{ x: 0.2, y: 0 }}
-          end={{ x: 0.8, y: 1 }}
-          style={StyleSheet.absoluteFill}
-        />
+        <LinearGradient colors={['rgba(243,239,232,0.16)', 'rgba(243,239,232,0.02)']} start={{ x: 0.2, y: 0 }} end={{ x: 0.8, y: 1 }} style={StyleSheet.absoluteFill} />
         <Ionicons name={scene.icon} size={core * 0.42} color={scene.glow} />
       </View>
     </View>
@@ -187,6 +165,8 @@ export default function FeatureTour({ visible, onDone }) {
   const scroller = useRef(null);
   const [page, setPage] = useState(0);
   const last = page === SCENES.length - 1;
+  // The same gutter both sides, whichever side has a cutout or hinge inset.
+  const side = Math.max(insets.left, insets.right) + space.xl;
 
   const onScroll = useAnimatedScrollHandler((e) => {
     x.value = e.contentOffset.x;
@@ -208,14 +188,17 @@ export default function FeatureTour({ visible, onDone }) {
 
   return (
     <Modal visible transparent={false} animationType="fade" onRequestClose={finish} statusBarTranslucent>
-      <View style={styles.screen} testID="feature-tour">
+      {/* Exactly the window's width: Android sizes a Modal from the display,
+          which on an unfolded Fold can come out wider than the screen and push
+          everything centred in it off to the right. */}
+      <View style={[styles.screen, { width }]} testID="feature-tour">
         {SCENES.map((s, i) => (
           <Wash key={s.key} scene={s} index={i} x={x} width={width} />
         ))}
         <Fog opacity={0.18} />
         <Viewfinder inset={16} />
 
-        <Animated.View entering={FadeIn.duration(500)} style={[styles.top, { paddingTop: insets.top + space.lg }]}>
+        <Animated.View entering={FadeIn.duration(500)} style={[styles.top, { paddingTop: insets.top + space.lg, paddingHorizontal: side }]}>
           <BoaLogo height={22} />
           {!last && (
             <Pressable onPress={finish} hitSlop={14} accessibilityRole="button" accessibilityLabel="Skip the tour">
@@ -239,19 +222,13 @@ export default function FeatureTour({ visible, onDone }) {
           ))}
         </Animated.ScrollView>
 
-        <View style={[styles.footer, { paddingBottom: insets.bottom + space.xl }]}>
+        <View style={[styles.footer, { paddingBottom: insets.bottom + space.xl, paddingHorizontal: side }]}>
           <View style={styles.dots}>
             {SCENES.map((s, i) => (
               <Dot key={s.key} index={i} x={x} width={width} />
             ))}
           </View>
-          <Button
-            label={last ? "Let's Go" : 'Next'}
-            icon={last ? 'arrow-forward' : undefined}
-            onPress={last ? finish : () => go(page + 1)}
-            testID="feature-tour-next"
-            style={styles.cta}
-          />
+          <Button label={last ? "Let's Go" : 'Next'} icon={last ? 'arrow-forward' : undefined} onPress={last ? finish : () => go(page + 1)} testID="feature-tour-next" style={styles.cta} />
         </View>
       </View>
     </Modal>
@@ -260,7 +237,7 @@ export default function FeatureTour({ visible, onDone }) {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
-  top: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: space.xl },
+  top: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   skip: { fontFamily: fonts.semibold, fontSize: 14, color: colors.textMuted, letterSpacing: 0.2 },
   scene: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: space.xl, gap: space.xxl },
   orbWrap: { alignItems: 'center', justifyContent: 'center' },
@@ -291,8 +268,9 @@ const styles = StyleSheet.create({
   title: { ...type.h1, fontSize: 34, lineHeight: 38 },
   flourish: { fontFamily: fonts.serif, fontSize: 38, letterSpacing: -0.5 },
   body: { ...type.bodyMuted, fontSize: 15.5, lineHeight: 23 },
-  footer: { paddingHorizontal: space.xl, gap: space.xl, alignItems: 'center' },
+  footer: { width: '100%', gap: space.xl, alignItems: 'center' },
   dots: { flexDirection: 'row', gap: 6, alignItems: 'center' },
   dot: { height: 7, borderRadius: 4, backgroundColor: colors.text },
-  cta: { alignSelf: 'stretch', maxWidth: 460, width: '100%' },
+  // Full width up to 460 between the gutters, always centred.
+  cta: { alignSelf: 'center', width: '100%', maxWidth: 460 },
 });

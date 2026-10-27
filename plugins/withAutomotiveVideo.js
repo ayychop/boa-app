@@ -16,6 +16,8 @@
 //    car move: CAR_POWERTRAIN (parking brake and gear, granted at install),
 //    CAR_SPEED and fine location (speed and GPS, asked at the first video).
 //    GPS hardware marked not required, so cars without it still qualify.
+//  - The parked-only player's playback service (CarVideoService), so a
+//    video's sound can play on, picture off, while driving.
 const { withAndroidManifest } = require('expo/config-plugins');
 
 const NOT_REQUIRED = [
@@ -29,6 +31,17 @@ const NOT_REQUIRED = [
 
 // Parked-only video: how the player knows the car is moving.
 const CAR_PERMISSIONS = ['android.car.permission.CAR_POWERTRAIN', 'android.car.permission.CAR_SPEED', 'android.permission.ACCESS_FINE_LOCATION'];
+
+// Where the car's video plays; its sound outlives the picture while driving.
+const VIDEO_SERVICE = 'expo.modules.boacarvideo.CarVideoService';
+
+function addVideoService(app) {
+  app.service = (app.service ?? []).filter((s) => s.$['android:name'] !== VIDEO_SERVICE);
+  app.service.push({
+    $: { 'android:name': VIDEO_SERVICE, 'android:exported': 'true', 'android:foregroundServiceType': 'mediaPlayback' },
+    'intent-filter': [{ action: [{ $: { 'android:name': 'androidx.media3.session.MediaSessionService' } }] }],
+  });
+}
 
 function addPermission(manifest, name) {
   manifest['uses-permission'] = manifest['uses-permission'] ?? [];
@@ -54,6 +67,7 @@ function applyAutomotive(manifest) {
   const app = manifest.application?.[0];
   if (app) {
     app.$['android:appCategory'] = 'video';
+    addVideoService(app);
     stripDistractionOptimized(app);
     (app.activity ?? []).forEach(stripDistractionOptimized);
   }
@@ -70,3 +84,4 @@ module.exports = function withAutomotiveVideo(config) {
 module.exports.applyAutomotive = applyAutomotive;
 module.exports.NOT_REQUIRED = NOT_REQUIRED;
 module.exports.CAR_PERMISSIONS = CAR_PERMISSIONS;
+module.exports.VIDEO_SERVICE = VIDEO_SERVICE;

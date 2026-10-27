@@ -110,9 +110,7 @@ describe('the car now playing screen', () => {
     car.handle({ action: 'play', mediaId: AFRO[0].id });
     await engine.pause();
     const sent = mockNative.setPlayback.mock.calls.map((c) => c[0]);
-    expect(sent.at(-1)).toEqual(
-      expect.objectContaining({ status: 'paused', mediaId: AFRO[0].id, title: AFRO[0].name, artwork: AFRO[0].logo, canStep: true }),
-    );
+    expect(sent.at(-1)).toEqual(expect.objectContaining({ status: 'paused', mediaId: AFRO[0].id, title: AFRO[0].name, artwork: AFRO[0].logo, canStep: true }));
     const count = mockNative.setPlayback.mock.calls.length;
     await engine.pause();
     expect(mockNative.setPlayback.mock.calls.length).toBe(count);
@@ -177,5 +175,41 @@ describe('the Android build', () => {
     expect(manifest).toContain('com.google.android.gms.car.application');
     const desc = fs.readFileSync(path.join(root, 'res', 'xml', 'automotive_app_desc.xml'), 'utf8');
     expect(desc).toMatch(/<uses name="media"\s*\/>/);
+  });
+});
+
+describe('the car screen', () => {
+  const kt = path.join(__dirname, '..', 'modules', 'boa-auto', 'android', 'src', 'main');
+  const service = fs.readFileSync(path.join(kt, 'java', 'expo', 'modules', 'boaauto', 'BoaAutoService.kt'), 'utf8');
+  test('has a Spotlight tab and a Genres tab, all art tiles, every station with art', () => {
+    expect(service).toContain('tab(SPOTLIGHT, "Spotlight"), tab(GENRES, "Genres")');
+    expect(service).toMatch(/putInt\(CONTENT_STYLE_BROWSABLE_HINT, CONTENT_STYLE_GRID\)/);
+    expect(service).toMatch(/putInt\(CONTENT_STYLE_PLAYABLE_HINT, CONTENT_STYLE_GRID\)/);
+    expect(service).toContain('.setIconUri(BoaAutoArtProvider.stationUri(this, station.id))');
+  });
+
+  test('lets the heart and the fire sit beside play, lit gold', () => {
+    expect(service).toContain('putBoolean(SLOT_RESERVATION_SKIP_TO_PREV, false)');
+    for (const icon of ['boa_auto_heart_filled', 'boa_auto_fire_filled']) {
+      expect(fs.readFileSync(path.join(kt, 'res', 'drawable', `${icon}.xml`), 'utf8')).toContain('#FFE2A84B');
+    }
+  });
+});
+
+describe('the car screen', () => {
+  const kt = path.join(__dirname, '..', 'modules', 'boa-auto', 'android', 'src', 'main');
+  const service = fs.readFileSync(path.join(kt, 'java', 'expo', 'modules', 'boaauto', 'BoaAutoService.kt'), 'utf8');
+  test('has a Spotlight tab and a Genres tab, all art tiles, every station with art', () => {
+    expect(service).toContain('tab(SPOTLIGHT, "Spotlight"), tab(GENRES, "Genres")');
+    expect(service).toMatch(/putInt\(CONTENT_STYLE_BROWSABLE_HINT, CONTENT_STYLE_GRID\)/);
+    expect(service).toMatch(/putInt\(CONTENT_STYLE_PLAYABLE_HINT, CONTENT_STYLE_GRID\)/);
+    expect(service).toContain('.setIconUri(BoaAutoArtProvider.stationUri(this, station.id))');
+  });
+
+  test('lets the heart and the fire sit beside play, lit gold', () => {
+    expect(service).toContain('putBoolean(SLOT_RESERVATION_SKIP_TO_PREV, false)');
+    for (const icon of ['boa_auto_heart_filled', 'boa_auto_fire_filled']) {
+      expect(fs.readFileSync(path.join(kt, 'res', 'drawable', `${icon}.xml`), 'utf8')).toContain('#FFE2A84B');
+    }
   });
 });

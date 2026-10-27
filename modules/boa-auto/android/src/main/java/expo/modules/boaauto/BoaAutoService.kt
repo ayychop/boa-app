@@ -13,8 +13,11 @@ import android.support.v4.media.session.PlaybackStateCompat
 import androidx.media.MediaBrowserServiceCompat
 
 /**
- * BOA Radio on the car screen (Android Auto). Lists the stations by genre,
- * with their logos, and turns the car's controls into commands for the
+ * BOA Radio on the car screen (Android Auto). Two tabs: Spotlight, every
+ * genre's leading stations as big art tiles under the genre's name, and
+ * Genres, a grid of genre mosaics that each open onto their stations. All
+ * art is drawn full and opaque (BoaAutoArt), so no tile or backdrop is left
+ * black. It turns the car's controls into commands for the
  * app's own audio engine (see BoaAutoBridge and src/audio/car.js), so the
  * phone plays exactly as if the station had been tapped in the app. This
  * session only mirrors that playback; the sound itself is expo-audio's.
@@ -35,6 +38,13 @@ class BoaAutoService : MediaBrowserServiceCompat() {
           PendingIntent.getActivity(this@BoaAutoService, 0, launch, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         )
       }
+      // No empty slots beside play when there's no next or previous (a
+      // station played on its own): the heart and the fire move up into
+      // them, right next to play.
+      setExtras(Bundle().apply {
+        putBoolean(SLOT_RESERVATION_SKIP_TO_PREV, false)
+        putBoolean(SLOT_RESERVATION_SKIP_TO_NEXT, false)
+      })
       isActive = true
     }
     sessionToken = session.sessionToken
@@ -52,9 +62,10 @@ class BoaAutoService : MediaBrowserServiceCompat() {
 
   override fun onGetRoot(clientPackageName: String, clientUid: Int, rootHints: Bundle?): BrowserRoot {
     rootTabLimit = rootHints?.getInt(KEY_ROOT_CHILDREN_LIMIT, 4)?.takeIf { it > 0 } ?: 4
+    // Grids everywhere: genres and stations as art tiles, not rows of text.
     val extras = Bundle().apply {
       putBoolean(CONTENT_STYLE_SUPPORTED, true)
-      putInt(CONTENT_STYLE_BROWSABLE_HINT, CONTENT_STYLE_LIST)
+      putInt(CONTENT_STYLE_BROWSABLE_HINT, CONTENT_STYLE_GRID)
       putInt(CONTENT_STYLE_PLAYABLE_HINT, CONTENT_STYLE_GRID)
       putBoolean(SEARCH_SUPPORTED, true)
     }
@@ -76,13 +87,15 @@ class BoaAutoService : MediaBrowserServiceCompat() {
   }
 
   override fun onSearch(query: String, extras: Bundle?, result: Result<MutableList<MediaItem>>) {
-    result.sendResult(search(query).map(::stationItem).toMutableList())
+    result.sendResult(search(query).map { stationItem(it) }.toMutableList())
   }
 
   /** The stations arrived from JS: refresh the car's lists. */
   fun onCatalogue() {
     answerWaiting()
     notifyChildrenChanged(ROOT)
+    notifyChildrenChanged(SPOTLIGHT)
+    notifyChildrenChanged(GENRES)
     BoaAutoStore.folders(this).forEach { notifyChildrenChanged(it.id) }
     notifyChildrenChanged(MORE)
   }
@@ -94,35 +107,48 @@ class BoaAutoService : MediaBrowserServiceCompat() {
     answering.forEach { (parentId, result) -> result.sendResult(children(parentId, folders)) }
   }
 
-  private fun children(parentId: String, folders: List<AutoFolder>): MutableList<MediaItem> {
-    // The car shows the root's folders as tabs, up to a limit; past it the
-    // last tab holds the rest.
-    val (tabs, more) =
-      if (folders.size <= rootTabLimit) folders to emptyList()
-      else folders.take(rootTabLimit - 1) to folders.drop(rootTabLimit - 1)
-    return when (parentId) {
-      ROOT -> (tabs.map(::folderItem) + listOfNotNull(more.takeIf { it.isNotEmpty() }?.let { moreItem() })).toMutableList()
-      MORE -> more.map(::folderItem).toMutableList()
-      else -> folders.firstOrNull { it.id == parentId }?.stations?.map(::stationItem)?.toMutableList() ?: mutableListOf()
+  private fun children(parentId: String, folders: List<AutoFolder>): MutableList<MediaItem> =
+    when (parentId) {
+      // The car shows the root's children as tabs (at least one, up to its limit).
+      ROOT -> listOf(tab(SPOTLIGHT, "Spotlight"), tab(GENRES, "Genres")).take(rootTabLimit).toMutableList()
+      SPOTLIGHT -> spotlight(folders)
+      // MORE: the old "More genres" tab, for a car that still has it open.
+      GENRES, MORE -> folders.map(::folderItem).toMutableList()
+      else -> folders.firstOrNull { it.id == parentId }?.stations?.map { stationItem(it) }?.toMutableList() ?: mutableListOf()
     }
+
+  // Each genre's leading stations under its name, like a cinema's rows.
+  // A station in two genres shows once, in the first.
+  private fun spotlight(folders: List<AutoFolder>): MutableList<MediaItem> {
+    val seen = mutableSetOf<String>()
+    return folders.flatMap { folder ->
+      folder.stations.filter { seen.add(it.id) }.take(SPOTLIGHT_PER_GENRE).map { stationItem(it, group = folder.title) }
+    }.toMutableList()
   }
+
+  private fun tab(id: String, title: String) =
+    MediaItem(MediaDescriptionCompat.Builder().setMediaId(id).setTitle(title).build(), MediaItem.FLAG_BROWSABLE)
 
   private fun folderItem(folder: AutoFolder) =
     MediaItem(
-      MediaDescriptionCompat.Builder().setMediaId(folder.id).setTitle(folder.title).build(),
+      MediaDescriptionCompat.Builder()
+        .setMediaId(folder.id)
+        .setTitle(folder.title)
+        .setSubtitle(if (folder.stations.size == 1) "1 station" else "${folder.stations.size} stations")
+        .setIconUri(BoaAutoArtProvider.genreUri(this, folder.id))
+        .build(),
       MediaItem.FLAG_BROWSABLE
     )
 
-  private fun moreItem() =
-    MediaItem(MediaDescriptionCompat.Builder().setMediaId(MORE).setTitle("More genres").build(), MediaItem.FLAG_BROWSABLE)
-
-  private fun stationItem(station: AutoStation) =
+  // Every station has art: its logo on the BOA stage, or its initials.
+  private fun stationItem(station: AutoStation, group: String? = null) =
     MediaItem(
       MediaDescriptionCompat.Builder()
         .setMediaId(station.id)
         .setTitle(station.name)
         .setSubtitle(station.subtitle ?: "BOA Radio")
-        .setIconUri(station.logo?.let { BoaAutoArtProvider.stationUri(this, station.id) })
+        .setIconUri(BoaAutoArtProvider.stationUri(this, station.id))
+        .apply { if (group != null) setExtras(Bundle().apply { putString(CONTENT_STYLE_GROUP_TITLE, group) }) }
         .build(),
       MediaItem.FLAG_PLAYABLE
     )
@@ -158,7 +184,9 @@ class BoaAutoService : MediaBrowserServiceCompat() {
         .setActions(actions)
         .setState(state, PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN, 1f)
         .apply {
-          // The heart: filled when the station is a favourite, so a tap shows at once.
+          // The heart and the fire, first among the custom actions so they
+          // sit closest to play. Lit gold when on, so a tap shows at once.
+          // The heart: filled when the station is a favourite.
           val favourite = p.favourite
           if (favourite != null && p.mediaId != null) {
             addCustomAction(
@@ -192,13 +220,15 @@ class BoaAutoService : MediaBrowserServiceCompat() {
         .putString(MediaMetadataCompat.METADATA_KEY_DISPLAY_TITLE, p.title)
         .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, p.artist)
         .putString(MediaMetadataCompat.METADATA_KEY_DISPLAY_SUBTITLE, p.artist)
+        .putString(MediaMetadataCompat.METADATA_KEY_DISPLAY_DESCRIPTION, "Live on BOA Radio")
         .putString(MediaMetadataCompat.METADATA_KEY_ALBUM, "BOA Networks")
         .apply {
-          p.artwork?.let {
-            val uri = BoaAutoArtProvider.nowPlayingUri(this@BoaAutoService, it).toString()
-            putString(MediaMetadataCompat.METADATA_KEY_ALBUM_ART_URI, uri)
-            putString(MediaMetadataCompat.METADATA_KEY_DISPLAY_ICON_URI, uri)
-          }
+          // Always art, so the car's blurred backdrop is never plain black:
+          // the record or logo, or the station's initials without either.
+          val uri = BoaAutoArtProvider.nowPlayingUri(this@BoaAutoService, p.artwork ?: "${p.mediaId}|${p.title}").toString()
+          putString(MediaMetadataCompat.METADATA_KEY_ALBUM_ART_URI, uri)
+          putString(MediaMetadataCompat.METADATA_KEY_ART_URI, uri)
+          putString(MediaMetadataCompat.METADATA_KEY_DISPLAY_ICON_URI, uri)
         }
         .build()
     )
@@ -238,7 +268,10 @@ class BoaAutoService : MediaBrowserServiceCompat() {
 
   companion object {
     private const val ROOT = "boa:root"
+    private const val SPOTLIGHT = "boa:spotlight"
+    private const val GENRES = "boa:genres"
     private const val MORE = "boa:more"
+    private const val SPOTLIGHT_PER_GENRE = 6
     private const val NOW_PLAYING_URI = "boa://now-playing"
     private const val ACTION_FAVOURITE = "boa:favourite"
     private const val ACTION_FIRE = "boa:fire"
@@ -250,7 +283,9 @@ class BoaAutoService : MediaBrowserServiceCompat() {
     private const val CONTENT_STYLE_BROWSABLE_HINT = "android.media.browse.CONTENT_STYLE_BROWSABLE_HINT"
     private const val CONTENT_STYLE_PLAYABLE_HINT = "android.media.browse.CONTENT_STYLE_PLAYABLE_HINT"
     private const val SEARCH_SUPPORTED = "android.media.browse.SEARCH_SUPPORTED"
-    private const val CONTENT_STYLE_LIST = 1
+    private const val CONTENT_STYLE_GROUP_TITLE = "android.media.browse.CONTENT_STYLE_GROUP_TITLE_HINT"
+    private const val SLOT_RESERVATION_SKIP_TO_PREV = "android.media.playback.ALWAYS_RESERVE_SPACE_FOR.ACTION_SKIP_TO_PREVIOUS"
+    private const val SLOT_RESERVATION_SKIP_TO_NEXT = "android.media.playback.ALWAYS_RESERVE_SPACE_FOR.ACTION_SKIP_TO_NEXT"
     private const val CONTENT_STYLE_GRID = 2
 
     private var rootTabLimit = 4
