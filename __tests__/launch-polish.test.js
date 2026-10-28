@@ -28,15 +28,43 @@ describe('the casting board', () => {
 describe('BOA Hi-Fi at full power', () => {
   const kt = read('modules/boa-eq/android/src/main/java/expo/modules/boaeq/BoaEqModule.kt');
 
-  test("every slider runs to the phone's own codec limit, and the limiter sits last", () => {
+  test("Signature (0) is the old maximum: the codec's ceiling, full BassBoost and a louder ceiling", () => {
     expect(kt).toMatch(/MAX_MILLIBELS = 2400/);
-    expect(kt).toMatch(/min\(range\[1\]\.toInt\(\), MAX_MILLIBELS\)/);
-    expect(kt).toMatch(/lows \* 1000/);
-    expect(kt).toMatch(/BOOST_GAIN_MILLIBELS = 1200/);
-    expect(kt).toMatch(/SLIDER_GAIN_MILLIBELS/);
-    // LoudnessEnhancer is created after the equalizer and BassBoost, so its limiter holds their peaks.
-    expect(kt.indexOf('LoudnessEnhancer(sessionId)')).toBeGreaterThan(kt.indexOf('BassBoost(0, sessionId)'));
-    expect(read('src/components/radio/EqualizerSheet.js')).toMatch(/v \* 15/);
+    expect(kt).toMatch(/val up = min\(range\[1\]\.toInt\(\), MAX_MILLIBELS\)/);
+    // At 0 both sliders are 1 of the way to the ceiling: the Equalizer at its top.
+    expect(kt).toMatch(/val lowsUpTo = 1 \+ min\(lows, 0\.0\)/);
+    expect(kt).toMatch(/\(lowsUpTo \* bassWeight\(hz\) \+ highsUpTo \* trebleWeight\(hz\)\) \* up/);
+    expect(kt).toMatch(/bb\.setStrength\(\(lowsUpTo \* 1000\)/);
+    expect(kt).toMatch(/SIGNATURE_GAIN_MILLIBELS = 600/);
+    // -1 on both is flat: every effect off.
+    expect(kt).toMatch(/val flat = lows <= -1\.0 && treble <= -1\.0/);
+  });
+
+  test('past Signature goes past the hardware: DynamicsProcessing adds more, with a limiter, and the volume climbs', () => {
+    expect(kt).toMatch(/DynamicsProcessing\(0, sessionId, config\)/);
+    expect(kt).toMatch(/EXTRA_BASS_DB = 12\.0/);
+    expect(kt).toMatch(/EXTRA_TREBLE_DB = 6\.0/);
+    expect(kt).toMatch(/DynamicsProcessing\.Limiter\(true, true, 0, LIMITER_ATTACK_MS, LIMITER_RELEASE_MS, LIMITER_RATIO, LIMITER_THRESHOLD_DB, 0f\)/);
+    expect(kt).toMatch(/LIMITER_THRESHOLD_DB = -1f/);
+    // Only on Android 9+, where it exists; older phones still get the louder ceiling.
+    expect(kt).toMatch(/if \(Build\.VERSION\.SDK_INT >= Build\.VERSION_CODES\.P\) dynamics = make/);
+    expect(kt).toMatch(/MAX_SLIDER_GAIN_MILLIBELS = 1400/);
+    expect(kt).toMatch(/BOOST_GAIN_MILLIBELS = 1800/);
+    // LoudnessEnhancer is created last, so its limiter holds every peak before it.
+    const order = ['Equalizer(0, sessionId)', 'dynamicsFor(sessionId)', 'BassBoost(0, sessionId)', 'LoudnessEnhancer(sessionId)'].map((x) => kt.indexOf(x));
+    expect(order.every((i) => i > 0)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+  });
+
+  test('the sheet reads the sliders as Flat, Signature and the dB past it', () => {
+    const { readout } = require('../src/components/radio/EqualizerSheet');
+    expect(readout(-1, 'bass')).toBe('Flat');
+    expect(readout(0, 'bass')).toBe('Signature');
+    expect(readout(0, 'treble')).toBe('Signature');
+    expect(readout(1, 'bass')).toBe('+12 dB');
+    expect(readout(1, 'treble')).toBe('+6 dB');
+    expect(readout(0.5, 'bass')).toBe('+6 dB');
+    expect(readout(-0.4, 'bass')).toBe('-6 dB');
   });
 });
 

@@ -27,6 +27,8 @@ data class CallInfo(
   val timeoutMs: Long,
   // The buzz on the ringtone's bass hits; empty for the standard call buzz.
   val vibration: LongArray = LongArray(0),
+  // Your own song's file, which rings instead of the channel's sound; empty if none.
+  val soundUri: String = "",
 ) {
   fun into(intent: Intent): Intent = intent.putExtras(
     Bundle().apply {
@@ -38,6 +40,7 @@ data class CallInfo(
       putString(K_CHANNEL, channelId)
       putLong(K_TIMEOUT, timeoutMs)
       putLongArray(K_VIBRATION, vibration)
+      putString(K_SOUND, soundUri)
     },
   )
 
@@ -50,6 +53,7 @@ data class CallInfo(
     private const val K_CHANNEL = "boa.call.channel"
     private const val K_TIMEOUT = "boa.call.timeout"
     private const val K_VIBRATION = "boa.call.vibration"
+    private const val K_SOUND = "boa.call.sound"
 
     fun from(intent: Intent?): CallInfo? {
       val e = intent?.extras ?: return null
@@ -64,6 +68,7 @@ data class CallInfo(
         channelId = e.getString(K_CHANNEL).orEmpty(),
         timeoutMs = e.getLong(K_TIMEOUT, 45000L),
         vibration = e.getLongArray(K_VIBRATION) ?: LongArray(0),
+        soundUri = e.getString(K_SOUND).orEmpty(),
       )
     }
   }

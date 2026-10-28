@@ -27,7 +27,7 @@ import { BLURS, SCENES, STUDIO, choiceOf, describe as describeBackground } from 
 import BoaSlider from '../BoaSlider';
 import { LocalVideo, RemoteVideo } from '../../calls/media';
 import { haptics } from '../../utils/haptics';
-import { SPRING, usePress } from '../../utils/motion';
+import { TACTICAL, settle, usePress } from '../../utils/motion';
 import { Avatar, Toggle } from '../kit';
 import { GoldBadge } from '../ui';
 import { colors, fonts, radius, space } from '../../theme';
@@ -40,7 +40,8 @@ const VIDEO_NOTE = {
   reconnecting: 'Reconnecting',
   failed: "Video couldn't connect",
 };
-const SNAP = SPRING;
+// Every move on the call screen lands and stops: no bounce (utils/motion TACTICAL).
+const SNAP = TACTICAL;
 const DOCK_PAD = space.lg;
 const DOCK_GAP = 14;
 const WIDE = 600; // unfolded: every control in one row
@@ -51,15 +52,6 @@ const TONE_EVERY_MS = 33;
 const TONE_SIDE_BY_SIDE = 420;
 const SHRINK_SIZE = 40;
 const KEEP_AWAKE_TAG = 'boa-call';
-// Each preset's swatch: a hint of its grade.
-const PRESET_SWATCH = {
-  natural: ['#C9A27E', '#8A6A50'],
-  studio: ['#F4F1EC', '#A9B4C2'],
-  golden: ['#F6D38A', '#C9822E'],
-  cinematic: ['#1E5A64', '#E08A3C'],
-  glow: ['#FFC9D6', '#E89AB0'],
-  bw: ['#F2F2F2', '#3A3A3A'],
-};
 
 /**
  * Frosted glass: blurred on iOS; on Android, a tint alone (Android's blur
@@ -137,7 +129,7 @@ function PulseRing({ size, children }) {
  * circle, with the label inside (End).
  */
 function CallButton({ icon, label, caption, onPress, on = false, onColor, tone, size = 52, width, iconSize, glow, ring, testID }) {
-  const press = usePress({ to: 0.9 });
+  const press = usePress({ to: 0.92, spring: TACTICAL });
   const fill = tone ? { backgroundColor: tone } : on ? (onColor ? { backgroundColor: onColor } : styles.buttonOn) : styles.buttonGlass;
   const color = tone ? '#fff' : on ? colors.bg : colors.text;
   return (
@@ -254,7 +246,7 @@ function ToneSlider({ kind, value, enabled, onPreview, onCommit, style, title, h
 function BeautyPanel({ beauty, setBeauty, previewBrightness, previewContrast, onClose, width, maxHeight }) {
   const side = width >= TONE_SIDE_BY_SIDE;
   return (
-    <Animated.View entering={FadeInDown.springify().damping(18)} exiting={FadeOutDown.duration(160)} style={[styles.panel, { width }]} testID="call-filters">
+    <Animated.View entering={settle(FadeInDown)} exiting={FadeOutDown.duration(160)} style={[styles.panel, { width }]} testID="call-filters">
       <Glass tint="rgba(10,10,12,0.82)" />
       <View style={styles.panelHead}>
         <Ionicons name="sparkles" size={16} color={colors.gold} />
@@ -312,7 +304,7 @@ const UNSUPPORTED_NOTE = "This phone can't cut you out of the room smoothly enou
 
 /** One choice in the sheet: a framed tile, gold when it's on. */
 function BackdropTile({ on, label, detail, onPress, width, height, children, testID }) {
-  const press = usePress({ to: 0.95 });
+  const press = usePress({ to: 0.95, spring: TACTICAL });
   return (
     <Pressable
       onPress={onPress}
@@ -328,7 +320,7 @@ function BackdropTile({ on, label, detail, onPress, width, height, children, tes
         {children}
         <LinearGradient pointerEvents="none" colors={['rgba(5,5,6,0)', 'rgba(5,5,6,0.78)']} locations={[0.45, 1]} style={StyleSheet.absoluteFill} />
         {on ? (
-          <Animated.View entering={ZoomIn.springify().damping(14)} style={styles.tileCheck}>
+          <Animated.View entering={settle(ZoomIn)} style={styles.tileCheck}>
             <Ionicons name="checkmark" size={13} color={colors.bg} />
           </Animated.View>
         ) : null}
@@ -362,7 +354,7 @@ function BackgroundPanel({ background, setBackground, status, beauty, setBeauty,
   };
   const third = Math.floor((inner - space.sm * 2) / 3);
   return (
-    <Animated.View entering={FadeInDown.springify().damping(18)} exiting={FadeOutDown.duration(160)} style={[styles.panel, { width }]} testID="call-background">
+    <Animated.View entering={settle(FadeInDown)} exiting={FadeOutDown.duration(160)} style={[styles.panel, { width }]} testID="call-background">
       <Glass tint="rgba(10,10,12,0.84)" />
       <LinearGradient pointerEvents="none" colors={['rgba(246,211,138,0.10)', 'rgba(246,211,138,0)']} locations={[0, 0.35]} style={StyleSheet.absoluteFill} />
       <View style={styles.panelHead}>
@@ -677,7 +669,7 @@ function MiniCall({ call, video, controls, status, onRestore, onEnd }) {
     // Its own gesture root, passing every touch it doesn't use through to the app underneath.
     <GestureHandlerRootView pointerEvents="box-none" style={[StyleSheet.absoluteFill, { zIndex: 1000, elevation: 1000 }]} testID="call-mini-layer">
       <GestureDetector gesture={pan}>
-        <Animated.View entering={ZoomIn.springify().damping(16)} style={[styles.mini, style]} testID="call-mini">
+        <Animated.View entering={settle(ZoomIn)} style={[styles.mini, style]} testID="call-mini">
           <Pressable onPress={onRestore} accessibilityRole="button" accessibilityLabel={`Back to your call with ${call.peer.name}`} style={styles.miniInner}>
             {theirs ? (
               <RemoteVideo uid={video.remoteUid} texture style={StyleSheet.absoluteFill} />
@@ -737,7 +729,7 @@ function Incoming({ peer, status, width, onAccept, onDecline }) {
   const avatar = Math.min(168, width * 0.42);
   return (
     <View style={styles.incoming}>
-      <Animated.View entering={FadeInDown.springify().damping(20)} style={[styles.card, { width: Math.min(width - space.lg * 2, 400) }]}>
+      <Animated.View entering={settle(FadeInDown)} style={[styles.card, { width: Math.min(width - space.lg * 2, 400) }]}>
         <Glass tint="rgba(12,12,15,0.62)" intensity={60} />
         <View style={styles.brandRow}>
           <Text style={styles.brand}>BOA VIDEO</Text>
@@ -757,7 +749,7 @@ function Incoming({ peer, status, width, onAccept, onDecline }) {
           {status}
         </Text>
       </Animated.View>
-      <Animated.View entering={FadeInDown.delay(120).springify().damping(20)} style={styles.answerRow}>
+      <Animated.View entering={settle(FadeInDown.delay(120))} style={styles.answerRow}>
         <View style={styles.answer}>
           <CallButton icon="close" label="Decline" tone={RED} size={84} iconSize={36} glow="0px 0px 28px rgba(255,59,78,0.5)" onPress={onDecline} testID="call-decline" />
           <Text style={styles.answerLabel}>Decline</Text>
@@ -818,11 +810,11 @@ export default function CallScreen({ me }) {
   const hideControls = () => {
     setPanel(null);
     setControlsHidden(true);
-    tuck.value = withSpring(1, SPRING);
+    tuck.value = withSpring(1, TACTICAL);
   };
   const showControls = () => {
     setControlsHidden(false);
-    tuck.value = withSpring(0, SPRING);
+    tuck.value = withSpring(0, TACTICAL);
   };
   const dockStyle = useAnimatedStyle(() => ({
     opacity: 1 - tuck.value,
@@ -1038,50 +1030,7 @@ export default function CallScreen({ me }) {
                       />
                     </View>
                   ) : null}
-                  {/* The looks, one tap each, right above the dock; Brightness opens the panel. */}
-                  {!panel && !controlsHidden ? (
-                    <Animated.View entering={FadeIn.duration(200)} style={[styles.filterRow, { width: dockWidth }, !beauty.enabled && { opacity: 0.5 }]} testID="call-filter-line">
-                      {PRESETS.map((p) => {
-                        const on = beauty.enabled && beauty.preset === p.id;
-                        return (
-                          <Pressable
-                            key={p.id}
-                            onPress={() => {
-                              haptics.selection();
-                              setBeauty({ preset: p.id, enabled: true });
-                            }}
-                            accessibilityRole="radio"
-                            accessibilityState={{ selected: on }}
-                            accessibilityLabel={p.label}
-                            hitSlop={4}
-                            style={styles.stripItem}
-                            testID={`call-strip-${p.id}`}
-                          >
-                            <LinearGradient colors={PRESET_SWATCH[p.id]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.stripSwatch, on && styles.stripSwatchOn]} />
-                            <Text style={[styles.stripLabel, on && { color: colors.gold }]} numberOfLines={1}>
-                              {p.label}
-                            </Text>
-                          </Pressable>
-                        );
-                      })}
-                      <Pressable
-                        onPress={() => setFiltersOpen(true)}
-                        accessibilityRole="button"
-                        accessibilityLabel={`Brightness ${brightnessLabel(beauty.brightness)}`}
-                        hitSlop={4}
-                        style={styles.stripItem}
-                        testID="call-strip-brightness"
-                      >
-                        <View style={[styles.stripSwatch, styles.stripBright]}>
-                          <Ionicons name="sunny" size={14} color={colors.gold} />
-                        </View>
-                        <Text style={styles.stripLabel} numberOfLines={1}>
-                          {brightnessLabel(beauty.brightness)}
-                        </Text>
-                      </Pressable>
-                    </Animated.View>
-                  ) : null}
-                  <Animated.View entering={SlideInDown.springify().damping(SPRING.damping).stiffness(SPRING.stiffness)} style={{ width: dockWidth }}>
+                  <Animated.View entering={settle(SlideInDown)} style={{ width: dockWidth }}>
                     <Animated.View style={[styles.dock, dockStyle]} pointerEvents={controlsHidden ? 'none' : 'auto'} testID="call-controls">
                       <View style={styles.dockGlass}>
                         <Glass tint="rgba(14,14,18,0.86)" intensity={60} />
@@ -1170,7 +1119,7 @@ export default function CallScreen({ me }) {
           ) : null}
 
           {theyrePrivate ? (
-            <Animated.View entering={FadeInDown.springify().damping(20)} style={[styles.privacyPill, { top: insets.top + space.sm, maxWidth: width - space.lg * 2 }]} testID="call-remote-privacy">
+            <Animated.View entering={settle(FadeInDown)} style={[styles.privacyPill, { top: insets.top + space.sm, maxWidth: width - space.lg * 2 }]} testID="call-remote-privacy">
               <Glass tint="rgba(12,12,15,0.55)" />
               <Text style={styles.privacyText} numberOfLines={1}>
                 🔒 {peer.name} has disabled screenshots.
@@ -1467,22 +1416,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingBottom: space.md,
   },
-  // The filter readout: chips in a row, just above the dock.
-  filterRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: space.xs,
-    marginBottom: space.md,
-    paddingHorizontal: space.sm,
-  },
-  // The look strip: a small swatch per preset, its name under it.
-  stripItem: { alignItems: 'center', gap: 4, minWidth: 44 },
-  stripSwatch: { width: 30, height: 30, borderRadius: 15, borderWidth: 1.5, borderColor: 'rgba(243,239,232,0.25)', alignItems: 'center', justifyContent: 'center' },
-  stripSwatchOn: { borderColor: colors.gold, borderWidth: 2, boxShadow: '0px 0px 12px rgba(226,168,75,0.6)' },
-  stripBright: { backgroundColor: 'rgba(12,12,15,0.72)' },
-  stripLabel: { fontFamily: fonts.mono, fontSize: 9.5, letterSpacing: 0.6, color: colors.textMuted, textTransform: 'uppercase' },
   auto: { paddingHorizontal: space.sm, paddingVertical: 3, borderRadius: radius.pill, borderWidth: 1, borderColor: 'rgba(246,211,138,0.5)', marginLeft: space.xs },
   autoText: { fontFamily: fonts.mono, fontSize: 10, color: colors.gold, letterSpacing: 0.8, textTransform: 'uppercase' },
   sliderRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },

@@ -43,7 +43,7 @@ const { PremiumProvider } = require('../src/context/PremiumContext');
 const { CallProvider, useCall } = require('../src/context/CallContext');
 const { ENCODER, CAPTURE, DENOISER, LOW_LIGHT, HD, PREVIEW, STABILIZATION_OFF, AUDIO, AUDIO_PROCESSING, VIDEO_SCENARIO } = require('../src/calls/quality');
 const { createAudioPlayer } = require('expo-audio');
-const { ringtoneById } = require('../src/calls/ringtone');
+const { ringtoneById, ringtoneHaptics } = require('../src/calls/ringtone');
 
 const ME = { id: 'user-me', username: 'ama', display_name: 'Ama Mensah', avatar_url: null };
 const KOFI = { id: 'user-kofi', username: 'kofi', display_name: 'Kofi Boateng', avatar_url: null };
@@ -261,11 +261,11 @@ describe('Agora video calls', () => {
     expect(JSON.parse(AsyncStorage.setItem.mock.calls.filter(([k]) => k === 'boa.call.beauty').at(-1)[1])).toEqual(expect.objectContaining({ contrast: 0.25 }));
     await user.press(screen.getByTestId('call-contrast-auto'));
     expect(screen.getByTestId('call-contrast-value')).toHaveTextContent('Normal');
-    await user.press(screen.getByRole('button', { name: 'Close filters' }));
-
-    // One tap on the strip changes the look.
-    await user.press(screen.getByTestId('call-strip-golden'));
+    // A look, from the Filters panel (the only place the looks live: no swatches over the call).
+    await user.press(screen.getByTestId('call-preset-golden'));
     expect(engine.setFilterEffectOptions).toHaveBeenLastCalledWith(true, expect.objectContaining({ strength: 0.75 }), 2);
+    await user.press(screen.getByRole('button', { name: 'Close filters' }));
+    expect(screen.queryByTestId('call-filter-line')).toBeNull();
 
     // The back camera isn't mirrored; the front one is again after flipping back.
     await user.press(screen.getByTestId('call-flip'));
@@ -800,14 +800,179 @@ describe('the first call works first time', () => {
   });
 });
 
+describe('one ringtone at a time, and the screen wakes for calls (Android)', () => {
+  const { AppState, PermissionsAndroid, Platform } = require('react-native');
+  const BoaCall = require('../modules/boa-call');
+  const { callLink, ringNotification } = require('../src/calls/incoming');
+  const { setRingMode } = require('../src/calls/ringtone');
+  const from = { id: 'user-kofi', name: 'Kofi Boateng', avatar_url: null };
+  const os = Platform.OS;
+  const state = AppState.currentState;
+  beforeEach(() => {
+    Platform.OS = 'android';
+    jest.spyOn(PermissionsAndroid, 'requestMultiple').mockResolvedValue({ 'android.permission.CAMERA': 'granted', 'android.permission.RECORD_AUDIO': 'granted' });
+    createAudioPlayer.mockClear();
+    BoaCall.startRinger.mockClear();
+    BoaCall.stopRinger.mockClear();
+    BoaCall.cancelIncoming.mockClear();
+    BoaCall.showIncoming.mockClear();
+    BoaCall.wakeForCall.mockClear();
+  });
+  afterEach(async () => {
+    Platform.OS = os;
+    AppState.currentState = state;
+    jest.restoreAllMocks();
+    await setRingMode('phone');
+  });
+
+  test('nothing chosen: the phone rings with its own ringtone, through the native ringer, and BOA plays nothing', async () => {
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    await mount();
+    await act(async () => mockSignal('ring', { callId: 'a1c3e1f0-0000-4000-8000-000000000001', from }));
+    expect(BoaCall.startRinger).toHaveBeenCalledTimes(1);
+    expect(BoaCall.startRinger).toHaveBeenCalledWith(expect.objectContaining({ channelId: '', soundUri: '' }));
+    expect(createAudioPlayer).not.toHaveBeenCalled();
+    await user.press(screen.getByTestId('call-accept'));
+    expect(BoaCall.stopRinger).toHaveBeenCalled();
+    await user.press(screen.getByTestId('call-end'));
+    await act(async () => jest.advanceTimersByTime(2000));
+  });
+
+  test("a BOA ringtone chosen: it rings instead, on its bass-hit buzz, and the phone's stays quiet", async () => {
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    await setRingMode('boa');
+    await mount();
+    await act(async () => mockSignal('ring', { callId: 'a1c3e1f0-0000-4000-8000-000000000002', from }));
+    expect(BoaCall.startRinger).toHaveBeenCalledTimes(1);
+    expect(BoaCall.startRinger).toHaveBeenCalledWith(expect.objectContaining({ channelId: 'boa-call-hiphop', soundUri: '', vibration: ringtoneHaptics('hiphop') }));
+    await user.press(screen.getByTestId('call-decline'));
+    expect(BoaCall.stopRinger).toHaveBeenCalled();
+    await act(async () => jest.advanceTimersByTime(2000));
+  });
+
+  test("opened from the call's notification (a cold start): its ring stops before the app's own starts", async () => {
+    const callId = 'a1c3e1f0-0000-4000-8000-000000000003';
+    const sentAt = Date.now();
+    AppState.currentState = 'background';
+    await ringNotification({ callId, from, sentAt, ringtone: 'hiphop' });
+    expect(BoaCall.showIncoming).toHaveBeenCalledTimes(1);
+    AppState.currentState = 'active';
+    await mount();
+    await act(async () => mockLink({ url: callLink({ callId, from, sentAt }) }));
+    expect(BoaCall.cancelIncoming).toHaveBeenCalled();
+    expect(BoaCall.startRinger).toHaveBeenCalledTimes(1);
+    expect(BoaCall.cancelIncoming.mock.invocationCallOrder[0]).toBeLessThan(BoaCall.startRinger.mock.invocationCallOrder[0]);
+    await act(async () => jest.advanceTimersByTime(46000));
+  });
+
+  test('Answer on the lock screen: the app opens answering, and nothing rings in between', async () => {
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    await mount();
+    signal.send.mockClear();
+    const callId = 'a1c3e1f0-0000-4000-8000-000000000004';
+    await act(async () => mockLink({ url: callLink({ callId, from, sentAt: Date.now() }, 'accept') }));
+    expect(signal.send).toHaveBeenCalledWith('user-kofi', 'accept', { callId, by: 'user-me' });
+    expect(BoaCall.startRinger).not.toHaveBeenCalled();
+    expect(createAudioPlayer).not.toHaveBeenCalled();
+    await user.press(screen.getByTestId('call-end'));
+    await act(async () => jest.advanceTimersByTime(2000));
+  });
+
+  test("a ring the call screen took over can't come back late as a second ring", async () => {
+    const callId = 'a1c3e1f0-0000-4000-8000-000000000005';
+    AppState.currentState = 'background';
+    const ringing = ringNotification({ callId, from, sentAt: Date.now(), ringtone: 'hiphop' });
+    // Brought on screen before the ring went up: it never goes up.
+    require('../src/calls/incoming').stopRingNotification(callId);
+    expect(await ringing).toBe(false);
+    expect(BoaCall.showIncoming).not.toHaveBeenCalled();
+  });
+
+  test('they answer while your phone is locked: the screen lights up on the call', async () => {
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    await mount();
+    signal.send.mockClear();
+    await user.press(screen.getByText('Call Kofi'));
+    await act(async () => {});
+    const { callId } = signal.send.mock.calls.find(([, e]) => e === 'ring')[2];
+    await act(async () => BoaCall.__screen(false));
+    await act(async () => mockSignal('accept', { callId, by: 'user-kofi' }));
+    expect(BoaCall.wakeForCall).toHaveBeenCalledTimes(1);
+    await act(async () => BoaCall.__screen(true));
+    await user.press(screen.getByTestId('call-end'));
+    await act(async () => jest.advanceTimersByTime(2000));
+    expect(BoaCall.leaveLockScreen).toHaveBeenCalled();
+  });
+
+  test('screen on when they answer: nothing to wake', async () => {
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    await mount();
+    signal.send.mockClear();
+    await user.press(screen.getByText('Call Kofi'));
+    await act(async () => {});
+    const { callId } = signal.send.mock.calls.find(([, e]) => e === 'ring')[2];
+    await act(async () => mockSignal('accept', { callId, by: 'user-kofi' }));
+    expect(BoaCall.wakeForCall).not.toHaveBeenCalled();
+    await user.press(screen.getByTestId('call-end'));
+    await act(async () => jest.advanceTimersByTime(2000));
+  });
+
+  test('the native side: a ringing call lights the screen, keeps it on, and can open over the lock screen', () => {
+    const dir = path.join(__dirname, '../modules/boa-call/android/src/main');
+    const kt = (f) => fs.readFileSync(path.join(dir, 'java/expo/modules/boacall', f), 'utf8');
+    const manifest = fs.readFileSync(path.join(dir, 'AndroidManifest.xml'), 'utf8');
+    expect(manifest).toMatch(/android\.permission\.TURN_SCREEN_ON/);
+    expect(manifest).toMatch(/android\.permission\.WAKE_LOCK/);
+    expect(kt('ScreenWaker.kt')).toMatch(/ACQUIRE_CAUSES_WAKEUP/);
+    expect(kt('IncomingCallService.kt')).toMatch(/ScreenWaker\.wake\(this, WAKE_MS\)/);
+    expect(kt('IncomingCallService.kt')).toMatch(/canUseFullScreenIntent\(\) \|\| !Settings\.canDrawOverlays/);
+    expect(kt('IncomingCallActivity.kt')).toMatch(/FLAG_KEEP_SCREEN_ON/);
+    expect(kt('CallLockScreen.kt')).toMatch(/FLAG_KEEP_SCREEN_ON/);
+    expect(kt('CallLockScreen.kt')).toMatch(/fun show\(\)/);
+    // One ringer for every ring: your song's file wins over the channel's sound, then the phone's own.
+    expect(kt('Ringer.kt')).toMatch(/if \(soundUri\.isNotEmpty\(\)\) return Uri\.parse\(soundUri\)/);
+    expect(kt('Ringer.kt')).toMatch(/RingtoneManager\.getDefaultUri\(RingtoneManager\.TYPE_RINGTONE\)/);
+  });
+});
+
+describe('opening a chat never starts the camera', () => {
+  function Primed() {
+    const { primeCall } = useCall();
+    return <Text onPress={primeCall}>Prime</Text>;
+  }
+
+  test('getting the call ready fetches its token only: no video engine, no camera, until you tap call', async () => {
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    fetchToken.mockClear();
+    createAgoraRtcEngine.mockClear();
+    engine.initialize.mockClear();
+    engine.startPreview.mockClear();
+    await render(
+      <PremiumProvider>
+        <CallProvider>
+          <Primed />
+        </CallProvider>
+      </PremiumProvider>,
+    );
+    await user.press(screen.getByText('Prime'));
+    await act(async () => {});
+    expect(fetchToken).toHaveBeenCalledTimes(1);
+    expect(createAgoraRtcEngine).not.toHaveBeenCalled();
+    expect(engine.initialize).not.toHaveBeenCalled();
+    expect(engine.startPreview).not.toHaveBeenCalled();
+  });
+});
+
 describe('ringing like a phone call (the app in the background)', () => {
   const BoaCall = require('../modules/boa-call');
   const { AppState } = require('react-native');
   const { callLink, parseCallLink, callFromPush, ringNotification } = require('../src/calls/incoming');
+  const { setRingMode } = require('../src/calls/ringtone');
   const from = { id: 'user-kofi', name: 'Kofi Boateng', avatar_url: null };
   const away = AppState.currentState;
-  afterEach(() => {
+  afterEach(async () => {
     AppState.currentState = away;
+    await setRingMode('phone');
   });
 
   test('call links and call pushes read back, however the push arrived', () => {
@@ -830,11 +995,13 @@ describe('ringing like a phone call (the app in the background)', () => {
     BoaCall.showIncoming.mockClear();
     const callId = 'f1c3e1f0-0000-4000-8000-000000000002';
     await act(async () => mockSignal('ring', { callId, from }));
+    // No ringtone chosen: the phone's own rings (no channel sound, no song), never BOA's over it.
     expect(BoaCall.showIncoming).toHaveBeenCalledWith(
       expect.objectContaining({
         callId,
         name: 'Kofi Boateng',
-        channelId: 'boa-call-hiphop',
+        channelId: '',
+        soundUri: '',
         link: expect.stringMatching(/^network\.boa:\/\/call\//),
         acceptLink: expect.stringContaining('action=accept'),
       }),
@@ -872,8 +1039,10 @@ describe('ringing like a phone call (the app in the background)', () => {
     await mount();
     signal.send.mockClear();
     const callId = 'f1c3e1f0-0000-4000-8000-000000000005';
+    // A BOA ringtone chosen in Settings: it rings, on its own bass-hit buzz.
+    await setRingMode('boa');
     await ringNotification({ callId, from, sentAt: Date.now(), ringtone: 'rnb' });
-    expect(BoaCall.showIncoming).toHaveBeenLastCalledWith(expect.objectContaining({ callId, channelId: 'boa-call-rnb' }));
+    expect(BoaCall.showIncoming).toHaveBeenLastCalledWith(expect.objectContaining({ callId, channelId: 'boa-call-rnb', soundUri: '', vibration: ringtoneHaptics('rnb') }));
     await act(async () => BoaCall.__decline(callId));
     expect(signal.send).toHaveBeenCalledWith('user-kofi', 'decline', { callId });
   });
@@ -967,12 +1136,25 @@ describe('calls that never leave anyone stuck', () => {
 });
 
 describe('the call screen layout', () => {
-  test('the filter chips sit in the column right above the dock, not pinned to the bottom edge', () => {
+  test('the dock sits in the column, not pinned to the bottom edge, with no colour swatches over the call', () => {
     const src = fs.readFileSync(path.join(__dirname, '../src/components/calls/CallScreen.js'), 'utf8');
     expect(src).not.toMatch(/height \* 0\.08/);
     expect(src).toMatch(/center: \{\s*flex: 1,\s*alignItems: 'center',\s*justifyContent: 'center'/);
     expect(src).not.toMatch(/bottom: \{\s*position: 'absolute'/);
-    expect(src.indexOf('testID="call-filter-line"')).toBeLessThan(src.indexOf('testID="call-controls"'));
+    // The looks live in the Filters panel only.
+    expect(src).not.toMatch(/call-filter-line|call-strip-|PRESET_SWATCH/);
+  });
+
+  test('nothing on the call screen bounces: every spring lands and stops', () => {
+    const src = fs.readFileSync(path.join(__dirname, '../src/components/calls/CallScreen.js'), 'utf8');
+    const { TACTICAL } = require('../src/utils/motion');
+    expect(TACTICAL.overshootClamping).toBe(true);
+    // Close to critically damped (damping / (2 * sqrt(stiffness * mass)) near 1).
+    expect(TACTICAL.damping / (2 * Math.sqrt(TACTICAL.stiffness * TACTICAL.mass))).toBeGreaterThan(0.8);
+    expect(src).not.toMatch(/\.springify\(\)\.damping\(/);
+    expect(src).not.toMatch(/\bSPRING\b/);
+    expect(src).toMatch(/entering=\{settle\(SlideInDown\)\}/);
+    expect(src).toMatch(/usePress\(\{ to: 0\.92, spring: TACTICAL \}\)/);
   });
 });
 

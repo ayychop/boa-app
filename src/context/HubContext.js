@@ -12,7 +12,7 @@ import { useUser } from './UserContext';
 import * as chat from '../chat/notifications';
 import { chatSoundById, DEFAULT_CHAT_SOUND } from '../chat/sounds';
 import { cleanTheme } from '../chat/bubbleTheme';
-import { DEFAULT_RINGTONE, ringtoneById } from '../calls/ringtone';
+import { DEFAULT_RINGTONE, adoptChosenRingtone, ringtoneById } from '../calls/ringtone';
 import { openPage } from '../navigation/ref';
 import { usePlayer } from './PlayerContext';
 import { useMedia } from './MediaContext';
@@ -486,7 +486,11 @@ export function HubProvider({ children }) {
     let alive = true;
     const key = RINGTONE_KEY + userId;
     AsyncStorage.getItem(key)
-      .then((id) => alive && id && setRingtoneState(ringtoneById(id).id))
+      .then((id) => {
+        if (!alive || !id) return;
+        setRingtoneState(ringtoneById(id).id);
+        adoptChosenRingtone(ringtoneById(id).id);
+      })
       .catch(() => {});
     hub
       .getRingtone(userId)
@@ -494,6 +498,8 @@ export function HubProvider({ children }) {
         if (!alive || id === undefined) return;
         setRingtoneState(ringtoneById(id).id);
         AsyncStorage.setItem(key, ringtoneById(id).id).catch(() => {});
+        // Chosen before the phone's own ringtone was the default: it keeps ringing.
+        adoptChosenRingtone(ringtoneById(id).id);
       })
       .catch(() => {});
     return () => {

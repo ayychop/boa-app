@@ -45,19 +45,22 @@ class BoaAutoArtProvider : ContentProvider() {
     return ParcelFileDescriptor.open(art, ParcelFileDescriptor.MODE_READ_ONLY)
   }
 
-  private fun stationArt(ctx: Context, logo: String?, name: String): File =
-    composed(ctx, "station|$logo|$name") {
+  private fun stationArt(ctx: Context, logo: String?, name: String): File {
+    val theme = BoaAutoStore.theme(ctx)
+    return composed(ctx, "station|${theme.id}|$logo|$name") {
       val bitmap = logo?.let { load(ctx, it) }
-      val tile = BoaAutoArt.plate(bitmap, name)
+      val tile = BoaAutoArt.plate(bitmap, name, theme)
       bitmap?.recycle()
       tile to (logo == null || bitmap != null)
     }
+  }
 
   private fun genreArt(ctx: Context, folder: AutoFolder): File {
     val first = folder.stations.take(4)
-    return composed(ctx, "genre|${folder.title}|" + first.joinToString("|") { "${it.logo}:${it.name}" }) {
+    val theme = BoaAutoStore.theme(ctx)
+    return composed(ctx, "genre|${theme.id}|${folder.title}|" + first.joinToString("|") { "${it.logo}:${it.name}" }) {
       val bitmaps = first.map { s -> s.logo?.let { load(ctx, it) } }
-      val tile = BoaAutoArt.mosaic(bitmaps.zip(first.map { it.name }))
+      val tile = BoaAutoArt.mosaic(bitmaps.zip(first.map { it.name }), theme)
       bitmaps.forEach { it?.recycle() }
       tile to first.indices.all { first[it].logo == null || bitmaps[it] != null }
     }
@@ -67,9 +70,10 @@ class BoaAutoArtProvider : ContentProvider() {
   // on its stage; with no art at all, the station's initials.
   private fun nowArt(ctx: Context, artwork: String?, name: String): File {
     if (artwork == null || Uri.parse(artwork).scheme != "file") return stationArt(ctx, artwork, name)
-    return composed(ctx, "now|$artwork") {
+    val theme = BoaAutoStore.theme(ctx)
+    return composed(ctx, "now|${theme.id}|$artwork") {
       val bitmap = load(ctx, artwork)
-      val tile = bitmap?.let { BoaAutoArt.cover(it) } ?: BoaAutoArt.plate(null, name)
+      val tile = bitmap?.let { BoaAutoArt.cover(it, theme) } ?: BoaAutoArt.plate(null, name, theme)
       bitmap?.recycle()
       tile to (bitmap != null)
     }
@@ -163,23 +167,27 @@ class BoaAutoArtProvider : ContentProvider() {
     private const val MAX_BYTES = 3 * 1024 * 1024
     // Bumped whenever BoaAutoArt draws differently, so the car (and our
     // cache) let go of the old tiles.
-    private const val ART_VERSION = "2"
+    private const val ART_VERSION = "3"
 
     private fun authority(ctx: Context) = "${ctx.packageName}.boaauto.art"
 
+    // The art's version and the car theme: a new theme is a new address, so
+    // the car fetches every tile again instead of showing the old ones.
+    private fun version(ctx: Context) = "$ART_VERSION.${BoaAutoStore.theme(ctx).id}"
+
     fun stationUri(ctx: Context, id: String): Uri =
       Uri.Builder().scheme("content").authority(authority(ctx)).appendPath("station").appendPath(id)
-        .appendQueryParameter("v", ART_VERSION).build()
+        .appendQueryParameter("v", version(ctx)).build()
 
     fun genreUri(ctx: Context, folderId: String): Uri =
       Uri.Builder().scheme("content").authority(authority(ctx)).appendPath("genre").appendPath(folderId)
-        .appendQueryParameter("v", ART_VERSION).build()
+        .appendQueryParameter("v", version(ctx)).build()
 
     // The hash changes the address whenever the art does, so the car
     // doesn't keep showing the last station's.
     fun nowPlayingUri(ctx: Context, artwork: String): Uri =
       Uri.Builder().scheme("content").authority(authority(ctx)).appendPath("now")
-        .appendQueryParameter("v", sha1("$ART_VERSION|$artwork").take(12)).build()
+        .appendQueryParameter("v", sha1("${version(ctx)}|$artwork").take(12)).build()
 
     private fun sha1(text: String) =
       MessageDigest.getInstance("SHA-1").digest(text.toByteArray()).joinToString("") { "%02x".format(it) }

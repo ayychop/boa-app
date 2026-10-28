@@ -30,8 +30,18 @@ class IncomingCall : Record {
   @Field val timeoutMs: Double = 45000.0
   // The buzz: [wait, buzz, wait, ...] ms on the ringtone's bass hits (src/calls/ringtoneHaptics.js).
   @Field val vibration: List<Double> = emptyList()
+  // Your own song (a file:// BOA keeps), which rings instead of the channel's sound.
+  @Field val soundUri: String = ""
 
-  fun info() = CallInfo(callId, name, avatar, link, acceptLink, channelId, timeoutMs.toLong(), vibration.map { it.toLong() }.toLongArray())
+  fun info() = CallInfo(callId, name, avatar, link, acceptLink, channelId, timeoutMs.toLong(), vibration.map { it.toLong() }.toLongArray(), soundUri)
+}
+
+/** A ring with the app on screen: the same Ringer as a call rung by notification, without the notification. */
+class Ring : Record {
+  @Field val channelId: String = ""
+  @Field val soundUri: String = ""
+  @Field val timeoutMs: Double = 60000.0
+  @Field val vibration: List<Double> = emptyList()
 }
 
 /**
@@ -115,12 +125,37 @@ class BoaCallModule : Module() {
       val notification = CallNotification.build(context, info) ?: return@AsyncFunction false
       try {
         manager.notify(CallNotification.ID, notification)
-        Ringer.start(context, info.channelId, info.timeoutMs, info.vibration)
+        Ringer.start(context, info.channelId, info.soundUri, info.timeoutMs, info.vibration)
+        ScreenWaker.wake(context, 10_000L)
         true
       } catch (e: SecurityException) {
         false
       }
     }
+
+    /**
+     * Rings with the app on screen, as the phone does: on the ring volume,
+     * following Silent and Vibrate. The sound: soundUri, else channelId's,
+     * else the phone's own ringtone.
+     */
+    AsyncFunction("startRinger") { ring: Ring ->
+      Ringer.start(context, ring.channelId, ring.soundUri, ring.timeoutMs.toLong(), ring.vibration.map { it.toLong() }.toLongArray())
+    }.runOnQueue(Queues.MAIN)
+
+    /** Stops that ring (and any other: there's only ever one). */
+    AsyncFunction("stopRinger") {
+      Ringer.stop()
+    }.runOnQueue(Queues.MAIN)
+
+    /**
+     * A call needs you and the screen is off (they answered your call while
+     * the phone was locked): the screen comes on and the call shows over the
+     * lock screen, until the call is over (leaveLockScreen).
+     */
+    AsyncFunction("wakeForCall") {
+      ScreenWaker.wake(context, 10_000L)
+      CallLockScreen.show()
+    }.runOnQueue(Queues.MAIN)
 
     /** Stops ringing: the call was answered, declined, ended or missed. */
     AsyncFunction("cancelIncoming") {

@@ -17,6 +17,7 @@ import useDayOne from '../../hooks/useDayOne';
 import { CardRowSkeleton, ThreadSkeleton } from '../../components/Skeleton';
 import { haptics } from '../../utils/haptics';
 import { placeLine } from '../../api/dayOne';
+import { askForCallWakeUp } from '../../calls/wakeUp';
 import { colors, fonts, radius, space, type } from '../../theme';
 
 const roleLabel = (id) => hub.ROLES.find((r) => r.id === id)?.label ?? null;
@@ -206,10 +207,10 @@ function Row({ children }) {
 
 /**
  * The Chat tab once you're on the Hub: a cinematic header with you in it,
- * today's Daily Spark, the Community Pulse (members BOA's admins feature,
- * BOA's roster, the newest people on the Hub, and creatives who do what
- * you do) and your
- * conversations. Never an empty page: with no messages yet, the Pulse is
+ * then your conversations straight away (what you open the tab for), then
+ * today's Daily Spark and the Community Pulse (members BOA's admins
+ * feature, BOA's roster, the newest people on the Hub, and creatives who do
+ * what you do). Never an empty page: with no messages yet, the Pulse is
  * where to start.
  */
 export default function ChatHome({ navigation, bottomPadding }) {
@@ -219,6 +220,13 @@ export default function ChatHome({ navigation, bottomPadding }) {
   const [filter, setFilter] = useState('primary');
   const [pulse, setPulse] = useState({ featured: [], fresh: [], suggested: [], ready: false });
 
+  // Where calls live: if this phone would show the next call as a mere
+  // notification on a black lock screen, ask once (at most monthly) to let
+  // calls light it up. A call missed that way never ends in "ended", so
+  // waiting for one would never ask.
+  useEffect(() => {
+    askForCallWakeUp();
+  }, []);
   // Keyed on what the roles are, not on the array itself, so a profile
   // that's re-read (same roles, new object) doesn't fetch the Pulse again.
   const rolesKey = (profile?.roles ?? []).join(',');
@@ -330,10 +338,44 @@ export default function ChatHome({ navigation, bottomPadding }) {
           </View>
         </View>
 
-        <Animated.View entering={FadeInDown.delay(80).springify().damping(18)} style={styles.spark}>
-          <DailySpark category={profile?.quote_category} hint={profile?.quote_category ? null : 'Choose your kind in Hub settings.'} />
-        </Animated.View>
-
+        {/* Your conversations first: what you open the tab for. */}
+        <SectionTitle kicker="Your inbox" title="Conversations" />
+        <InboxFilters value={filter} onChange={setFilter} counts={counts} />
+        {state === 'loading' ? (
+          <ThreadSkeleton />
+        ) : state === 'error' ? (
+          <View style={styles.emptyCard}>
+            <Ionicons name="cloud-offline-outline" size={28} color={colors.gold} />
+            <Text style={[type.title, styles.emptyTitle]}>Couldn't reach the Hub</Text>
+            <Text style={[type.bodyMuted, styles.emptyBody]}>{error}</Text>
+            <Button label="Try again" icon="refresh" onPress={() => reload(true)} style={{ marginTop: space.lg }} />
+          </View>
+        ) : inFilter.length === 0 ? (
+          <Animated.View key={filter} entering={FadeIn.duration(400)} style={styles.emptyCard} testID={filter === 'primary' && visible.length === 0 ? 'chat-empty' : `inbox-empty-${filter}`}>
+            <LinearGradient colors={['rgba(226,168,75,0.14)', 'rgba(255,255,255,0.02)']} style={StyleSheet.absoluteFill} />
+            {/* A gold medallion: the icon on a lit coin, not a bare glyph. */}
+            <View style={styles.medallion}>
+              <LinearGradient colors={['rgba(246,211,138,0.35)', 'rgba(226,168,75,0.05)']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+              <Ionicons name={empty.icon} size={28} color={colors.gold} />
+            </View>
+            <Text style={[type.title, styles.emptyTitle]}>{empty.title}</Text>
+            <Text style={[type.bodyMuted, styles.emptyBody]}>{empty.body}</Text>
+            {empty.action ? <Button label={empty.action} icon="people-outline" onPress={() => navigation.navigate('HubDirectory')} style={{ marginTop: space.lg }} /> : null}
+          </Animated.View>
+        ) : (
+          inFilter.map((item, index) => (
+            <ThreadRow
+              key={item.id}
+              conv={item}
+              index={index}
+              myId={userId}
+              online={isOnline(item.otherId)}
+              dayOne={dayOnes.has(item.otherId)}
+              onPress={() => navigation.navigate('HubThread', { id: item.id })}
+              onLongPress={() => options(item)}
+            />
+          ))
+        )}
         {dayOneNews ? (
           <Animated.View entering={FadeInDown.springify().damping(16)} style={styles.dayOneNews} testID="day-one-news">
             <LinearGradient colors={['rgba(246,211,138,0.22)', 'rgba(255,255,255,0.02)']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
@@ -347,6 +389,11 @@ export default function ChatHome({ navigation, bottomPadding }) {
             <IconButton icon="close" label="Dismiss" onPress={clearDayOneNews} />
           </Animated.View>
         ) : null}
+
+        {/* Today's line, under your conversations. */}
+        <Animated.View entering={FadeInDown.delay(80).springify().damping(18)} style={styles.spark}>
+          <DailySpark category={profile?.quote_category} hint={profile?.quote_category ? null : 'Choose your kind in Hub settings.'} />
+        </Animated.View>
 
         <SectionTitle kicker="Your studio" title="Show your work, get paid" />
         <View style={styles.tools}>
@@ -393,44 +440,6 @@ export default function ChatHome({ navigation, bottomPadding }) {
           </>
         )}
         {!pulse.ready && <CardRowSkeleton />}
-
-        <SectionTitle kicker="Your inbox" title="Conversations" />
-        <InboxFilters value={filter} onChange={setFilter} counts={counts} />
-        {state === 'loading' ? (
-          <ThreadSkeleton />
-        ) : state === 'error' ? (
-          <View style={styles.emptyCard}>
-            <Ionicons name="cloud-offline-outline" size={28} color={colors.gold} />
-            <Text style={[type.title, styles.emptyTitle]}>Couldn't reach the Hub</Text>
-            <Text style={[type.bodyMuted, styles.emptyBody]}>{error}</Text>
-            <Button label="Try again" icon="refresh" onPress={() => reload(true)} style={{ marginTop: space.lg }} />
-          </View>
-        ) : inFilter.length === 0 ? (
-          <Animated.View key={filter} entering={FadeIn.duration(400)} style={styles.emptyCard} testID={filter === 'primary' && visible.length === 0 ? 'chat-empty' : `inbox-empty-${filter}`}>
-            <LinearGradient colors={['rgba(226,168,75,0.14)', 'rgba(255,255,255,0.02)']} style={StyleSheet.absoluteFill} />
-            {/* A gold medallion: the icon on a lit coin, not a bare glyph. */}
-            <View style={styles.medallion}>
-              <LinearGradient colors={['rgba(246,211,138,0.35)', 'rgba(226,168,75,0.05)']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
-              <Ionicons name={empty.icon} size={28} color={colors.gold} />
-            </View>
-            <Text style={[type.title, styles.emptyTitle]}>{empty.title}</Text>
-            <Text style={[type.bodyMuted, styles.emptyBody]}>{empty.body}</Text>
-            {empty.action ? <Button label={empty.action} icon="people-outline" onPress={() => navigation.navigate('HubDirectory')} style={{ marginTop: space.lg }} /> : null}
-          </Animated.View>
-        ) : (
-          inFilter.map((item, index) => (
-            <ThreadRow
-              key={item.id}
-              conv={item}
-              index={index}
-              myId={userId}
-              online={isOnline(item.otherId)}
-              dayOne={dayOnes.has(item.otherId)}
-              onPress={() => navigation.navigate('HubThread', { id: item.id })}
-              onLongPress={() => options(item)}
-            />
-          ))
-        )}
       </ScrollView>
     </View>
   );
@@ -443,7 +452,7 @@ const styles = StyleSheet.create({
   heroRow: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   heroTitle: { fontFamily: fonts.semibold, fontSize: 34, lineHeight: 38, letterSpacing: -1.4, color: colors.text, marginTop: 4, flexShrink: 1 },
   heroSub: { fontFamily: fonts.medium, fontSize: 13, color: colors.textMuted, marginTop: 2 },
-  spark: { paddingHorizontal: space.lg, marginTop: -space.md },
+  spark: { paddingHorizontal: space.lg, marginTop: space.xl },
   sectionHead: { flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: space.lg, marginTop: space.xxl, marginBottom: space.md },
   sectionTitle: { fontFamily: fonts.semibold, fontSize: 21, letterSpacing: -0.6, color: colors.text, marginTop: 4 },
   sectionAction: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingBottom: 3 },

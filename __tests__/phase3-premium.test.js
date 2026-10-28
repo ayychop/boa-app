@@ -134,8 +134,51 @@ describe('Hi-Fi audio', () => {
     expect(eq.presetOf(eq.getSettings())).toBeNull();
     const kt = require('fs').readFileSync(require('path').join(__dirname, '../modules/boa-eq/android/src/main/java/expo/modules/boaeq/BoaEqModule.kt'), 'utf8');
     expect(kt).toMatch(/LoudnessEnhancer\(sessionId\)/);
-    expect(kt).toMatch(/setTargetGain\(BOOST_GAIN_MILLIBELS\)/);
-    eq.setSettings(eq.FLAT);
+    expect(kt).toMatch(/if \(boost\) BOOST_GAIN_MILLIBELS/);
+    eq.setSettings(eq.SIGNATURE);
+  });
+
+  test('the old maximum is the new zero: everyone starts on BOA Signature, Flat is truly flat, and Premium-off sends Flat', () => {
+    expect(eq.SIGNATURE).toEqual({ bass: 0, treble: 0, spatial: false, boost: false });
+    expect(eq.FLAT).toEqual({ bass: -1, treble: -1, spatial: false, boost: false });
+    expect(eq.PRESETS[0]).toEqual(expect.objectContaining({ id: 'signature', settings: eq.SIGNATURE }));
+    expect(eq.PRESETS.find((p) => p.id === 'flat').settings).toBe(eq.FLAT);
+    eq.setSession(42);
+    eq.setAllowed(false);
+    eq.setSettings(eq.SIGNATURE);
+    expect(eqNative.apply).toHaveBeenLastCalledWith(42, eq.FLAT);
+    eq.setAllowed(true);
+    expect(eqNative.apply).toHaveBeenLastCalledWith(42, eq.SIGNATURE);
+    expect(eq.presetOf(eq.getSettings())).toBe('signature');
+  });
+
+  test('a fresh install starts on Signature; settings saved on the old scale start on Signature too, keeping Spatial and Bass Boost', async () => {
+    const AsyncStorage = require('@react-native-async-storage/async-storage');
+    await AsyncStorage.clear();
+    let fresh;
+    jest.isolateModules(() => {
+      fresh = require('../src/audio/eq');
+    });
+    await act(async () => {});
+    expect(fresh.getSettings()).toEqual(fresh.SIGNATURE);
+
+    await AsyncStorage.setItem('boa.eq.v1', JSON.stringify({ bass: 0.2, treble: -0.4, spatial: true, boost: true }));
+    let migrated;
+    jest.isolateModules(() => {
+      migrated = require('../src/audio/eq');
+    });
+    await act(async () => {});
+    expect(migrated.getSettings()).toEqual({ bass: 0, treble: 0, spatial: true, boost: true });
+
+    // Saved on the new scale: read as it is.
+    await AsyncStorage.setItem('boa.eq.v2', JSON.stringify({ bass: 0.5, treble: 0.2, spatial: false, boost: false }));
+    let saved;
+    jest.isolateModules(() => {
+      saved = require('../src/audio/eq');
+    });
+    await act(async () => {});
+    expect(saved.getSettings()).toEqual({ bass: 0.5, treble: 0.2, spatial: false, boost: false });
+    await AsyncStorage.clear();
   });
 
   test('locked behind "Unlock with BOA Premium" without access', async () => {
@@ -159,6 +202,26 @@ describe('Hi-Fi audio', () => {
     expect(screen.queryByTestId('eq-locked')).toBeNull();
     await user.press(screen.getByTestId('eq-preset-vocal'));
     expect(eq.getSettings()).toEqual(eq.PRESETS.find((p) => p.id === 'vocal').settings);
+  });
+
+  test('maxing the bass: the card lights gold, says PAST STOCK and reads +12 dB; Signature reads as such', async () => {
+    await render(
+      <PremiumProvider>
+        <EqualizerSheet open onClose={() => {}} />
+      </PremiumProvider>,
+    );
+    await act(async () => eq.setSettings(eq.SIGNATURE));
+    expect(screen.getByTestId('eq-bass-value')).toHaveTextContent('Signature');
+    expect(screen.queryByTestId('eq-bass-past')).toBeNull();
+    // The slider snaps to its steps, so presets match exactly after a drag.
+    await act(async () => screen.getByTestId('eq-bass').props.onValueChange(0.99999));
+    expect(eq.getSettings().bass).toBe(1);
+    expect(screen.getByTestId('eq-bass-value')).toHaveTextContent('+12 dB');
+    expect(screen.getByTestId('eq-bass-past')).toHaveTextContent('PAST STOCK');
+    expect(screen.getByTestId('eq-bass-card')).toHaveStyle({ borderColor: 'rgba(226,168,75,0.55)' });
+    await act(async () => screen.getByTestId('eq-bass').props.onValueChange(-1));
+    expect(screen.getByTestId('eq-bass-value')).toHaveTextContent('Flat');
+    await act(async () => eq.setSettings(eq.SIGNATURE));
   });
 });
 

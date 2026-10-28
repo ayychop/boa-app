@@ -14,6 +14,13 @@ export function setCatalogue(catalogue) {
   } catch {}
 }
 
+/** The car theme every tile and the now playing art are drawn in: noir, aurora, chrome, sunset or carbon. */
+export function setTheme(id) {
+  try {
+    native?.setTheme?.(String(id));
+  } catch {}
+}
+
 /** What's on, for the car's now playing screen and controls. favourite and hyped null hide the heart and the fire. */
 export function setPlayback({ status, mediaId = null, title = null, artist = null, artwork = null, canStep = false, favourite = null, hyped = null }) {
   try {

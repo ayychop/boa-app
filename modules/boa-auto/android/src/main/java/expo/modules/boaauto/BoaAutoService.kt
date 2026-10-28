@@ -1,6 +1,8 @@
 package expo.modules.boaauto
 
 import android.app.PendingIntent
+import android.content.Intent
+import android.media.AudioManager
 import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
@@ -10,6 +12,7 @@ import android.support.v4.media.MediaDescriptionCompat
 import android.support.v4.media.MediaMetadataCompat
 import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
+import android.view.KeyEvent
 import androidx.media.MediaBrowserServiceCompat
 
 /**
@@ -45,6 +48,9 @@ class BoaAutoService : MediaBrowserServiceCompat() {
         putBoolean(SLOT_RESERVATION_SKIP_TO_PREV, false)
         putBoolean(SLOT_RESERVATION_SKIP_TO_NEXT, false)
       })
+      // Local playback on the music stream, so the car's volume and the
+      // steering wheel's media buttons are routed to this session.
+      setPlaybackToLocal(AudioManager.STREAM_MUSIC)
       isActive = true
     }
     sessionToken = session.sessionToken
@@ -88,6 +94,12 @@ class BoaAutoService : MediaBrowserServiceCompat() {
 
   override fun onSearch(query: String, extras: Bundle?, result: Result<MutableList<MediaItem>>) {
     result.sendResult(search(query).map { stationItem(it) }.toMutableList())
+  }
+
+  /** The car theme changed: every tile and the now playing art are drawn again. */
+  fun onTheme() {
+    onCatalogue()
+    refresh()
   }
 
   /** The stations arrived from JS: refresh the car's lists. */
@@ -178,7 +190,9 @@ class BoaAutoService : MediaBrowserServiceCompat() {
       PlaybackStateCompat.ACTION_STOP or
       PlaybackStateCompat.ACTION_PLAY_FROM_MEDIA_ID or
       PlaybackStateCompat.ACTION_PLAY_FROM_SEARCH
-    if (p.canStep) actions = actions or PlaybackStateCompat.ACTION_SKIP_TO_NEXT or PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS
+    // A station on: next and previous always work (through its genre, src/audio/car.js),
+    // so the steering wheel's skip buttons are never dead.
+    if (p.canStep || p.mediaId != null) actions = actions or PlaybackStateCompat.ACTION_SKIP_TO_NEXT or PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS
     session.setPlaybackState(
       PlaybackStateCompat.Builder()
         .setActions(actions)
@@ -235,6 +249,28 @@ class BoaAutoService : MediaBrowserServiceCompat() {
   }
 
   private val callback = object : MediaSessionCompat.Callback() {
+    // The steering wheel and the car's own buttons, handled here rather
+    // than by MediaSessionCompat's default, which drops skips the playback
+    // state doesn't list and waits out a double-tap on play/pause.
+    override fun onMediaButtonEvent(mediaButtonEvent: Intent?): Boolean {
+      @Suppress("DEPRECATION")
+      val key = mediaButtonEvent?.getParcelableExtra<KeyEvent>(Intent.EXTRA_KEY_EVENT) ?: return super.onMediaButtonEvent(mediaButtonEvent)
+      if (key.action != KeyEvent.ACTION_DOWN) return true
+      if (key.repeatCount > 0) return true
+      when (key.keyCode) {
+        KeyEvent.KEYCODE_MEDIA_PLAY -> onPlay()
+        KeyEvent.KEYCODE_MEDIA_PAUSE, KeyEvent.KEYCODE_MEDIA_STOP -> onPause()
+        KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, KeyEvent.KEYCODE_HEADSETHOOK -> {
+          val playing = BoaAutoStore.playback.status.let { it == "playing" || it == "loading" }
+          if (playing) onPause() else onPlay()
+        }
+        KeyEvent.KEYCODE_MEDIA_NEXT, KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> onSkipToNext()
+        KeyEvent.KEYCODE_MEDIA_PREVIOUS, KeyEvent.KEYCODE_MEDIA_REWIND -> onSkipToPrevious()
+        else -> return super.onMediaButtonEvent(mediaButtonEvent)
+      }
+      return true
+    }
+
     override fun onPlayFromMediaId(mediaId: String?, extras: Bundle?) {
       if (mediaId != null) BoaAutoBridge.dispatch(this@BoaAutoService, "play", mediaId)
     }

@@ -17,7 +17,9 @@ import androidx.core.app.NotificationManagerCompat
 
 /**
  * The ring of an incoming call, like the phone's own: the ringtone you
- * chose for calls, looping, on the ring volume, with the call buzz. It
+ * chose for calls (your own song, a BOA ringtone, or, if you never chose
+ * one, the phone's own ringtone), looping, on the ring volume, with the
+ * call buzz. Only ever one ring at a time: starting one stops the last. It
  * follows the phone's ringer switch: Silent rings neither, Vibrate only
  * buzzes. It takes audio focus while it rings, so music pauses, and gives
  * it back after. It stops itself when the ring is over.
@@ -36,8 +38,12 @@ object Ringer {
   private var focus: Any? = null
   private var audio: AudioManager? = null
 
-  /** The ringtone's sound: the chosen ringtone channel's, else the phone's own ringtone. */
-  private fun soundOf(context: Context, channelId: String): Uri? {
+  /**
+   * The ringtone's sound: your own song (soundUri, a file BOA keeps), else
+   * the chosen BOA ringtone's channel, else the phone's own ringtone.
+   */
+  private fun soundOf(context: Context, channelId: String, soundUri: String): Uri? {
+    if (soundUri.isNotEmpty()) return Uri.parse(soundUri)
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && channelId.isNotEmpty()) {
       NotificationManagerCompat.from(context).getNotificationChannel(channelId)?.sound?.let { return it }
     }
@@ -48,14 +54,14 @@ object Ringer {
    * Rings. vibration: the ringtone's buzz, one loop long ([wait, buzz, ...]
    * ms, on its bass hits), started with the sound so the two stay in step.
    */
-  fun start(context: Context, channelId: String, timeoutMs: Long, vibration: LongArray = LongArray(0)) {
+  fun start(context: Context, channelId: String, soundUri: String, timeoutMs: Long, vibration: LongArray = LongArray(0)) {
     stop()
     val app = context.applicationContext
     val am = app.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
     audio = am
     val mode = am?.ringerMode ?: AudioManager.RINGER_MODE_NORMAL
     if (mode != AudioManager.RINGER_MODE_SILENT) buzz(app, if (vibration.size >= 2) vibration else PATTERN)
-    if (mode == AudioManager.RINGER_MODE_NORMAL) play(app, soundOf(app, channelId))
+    if (mode == AudioManager.RINGER_MODE_NORMAL) play(app, soundOf(app, channelId, soundUri))
     handler.postDelayed({ stop() }, timeoutMs)
   }
 

@@ -6,6 +6,7 @@ import { Directory, File, Paths } from 'expo-file-system';
 import { ensureAudioSession } from '../audio/session';
 import { claim } from '../audio/focus';
 import { RINGTONE_HAPTICS } from './ringtoneHaptics';
+import * as BoaCall from '../../modules/boa-call';
 
 // The incoming-call ringtone: one looping expo-audio player, alongside the
 // vibration. It claims the app's audio focus (src/audio/focus.js) so the
@@ -19,9 +20,13 @@ import { RINGTONE_HAPTICS } from './ringtoneHaptics';
 //
 // Or a song of your own, chosen from the phone's storage (Settings >
 // Ringtone): copied into the app, so it keeps ringing if the original is
-// moved or deleted. It's this phone's alone and plays whenever BOA rings
-// the call itself; a call that arrives with BOA closed rings on the phone's
-// call notification, which plays your built-in ringtone.
+// moved or deleted. It's this phone's alone.
+//
+// Only one ringtone ever plays. Until you choose one in Settings > Ringtone
+// it's the phone's own ringtone, so BOA's never plays over it; choose a BOA
+// ringtone or a song and that rings instead, and the phone's stays quiet.
+// On Android every ring, app open or closed, goes through the one native
+// ringer (modules/boa-call Ringer), which follows Silent and Vibrate.
 export const RINGTONES = [
   { id: 'hiphop', label: 'Hip Hop', detail: 'Boom bap at 90 BPM', icon: 'headset-outline', asset: require('../../assets/sounds/ringtones/hiphop.wav') },
   { id: 'rnb', label: 'R&B', detail: 'Slow jam, lush chords', icon: 'heart-outline', asset: require('../../assets/sounds/ringtones/rnb.wav') },
@@ -48,6 +53,63 @@ const customReady = AsyncStorage.getItem(CUSTOM_KEY)
     if (saved?.uri && !custom) custom = { uri: String(saved.uri), name: String(saved.name ?? 'Your song') };
   })
   .catch(() => {});
+
+// Whether you chose a BOA ringtone ('boa') or left it to the phone
+// ('phone', and the default: nothing saved). Remembered on this phone.
+const MODE_KEY = 'boa.ringtone.mode';
+/** The id the phone's own ringtone goes by in Settings > Ringtone. */
+export const PHONE_RINGTONE = 'phone';
+let mode = null;
+const modeListeners = new Set();
+const modeReady = AsyncStorage.getItem(MODE_KEY)
+  .then((saved) => {
+    if (mode === null && (saved === 'boa' || saved === 'phone')) mode = saved;
+  })
+  .catch(() => {});
+
+/** What rings: 'custom' (your song), 'boa' (a BOA ringtone you chose) or 'phone' (the phone's own). */
+export function ringChoice() {
+  if (customRingtone()) return 'custom';
+  return mode === 'boa' ? 'boa' : 'phone';
+}
+
+/** Resolves to ringChoice() once both the song and the choice are known. */
+export const loadRingChoice = () => Promise.all([customReady, modeReady]).then(ringChoice);
+
+/** Calls fn(choice) when it changes; returns an unsubscribe function. */
+export function onRingChoice(fn) {
+  modeListeners.add(fn);
+  return () => modeListeners.delete(fn);
+}
+const emitChoice = () => modeListeners.forEach((fn) => fn(ringChoice()));
+
+/** Chooses BOA's ringtones ('boa') or the phone's own ('phone'). */
+export async function setRingMode(next) {
+  mode = next === 'boa' ? 'boa' : 'phone';
+  emitChoice();
+  await AsyncStorage.setItem(MODE_KEY, mode).catch(() => {});
+}
+
+/**
+ * Before this was a choice, picking a BOA ringtone was the only way to
+ * choose. Anyone who picked one other than the default keeps it ringing.
+ */
+export async function adoptChosenRingtone(id) {
+  await modeReady;
+  if (mode === null && id && id !== DEFAULT_RINGTONE) await setRingMode('boa');
+}
+
+/**
+ * The sound for the native ringer: { soundUri } for your song, { channelId }
+ * for a BOA ringtone (its notification channel carries the sound), or
+ * neither for the phone's own; and the buzz to go with it.
+ */
+export function ringSound(id) {
+  const choice = ringChoice();
+  if (choice === 'custom') return { soundUri: customRingtone().uri, channelId: '', vibration: FALLBACK_BUZZ };
+  if (choice === 'boa') return { soundUri: '', channelId: `boa-call-${ringtoneById(id).id}`, vibration: ringtoneHaptics(id) };
+  return { soundUri: '', channelId: '', vibration: FALLBACK_BUZZ };
+}
 
 const fileThere = (uri) => {
   try {
@@ -82,6 +144,7 @@ export async function setCustomRingtone(song) {
   }
   await (custom ? AsyncStorage.setItem(CUSTOM_KEY, JSON.stringify(custom)) : AsyncStorage.removeItem(CUSTOM_KEY)).catch(() => {});
   customListeners.forEach((fn) => fn(custom));
+  emitChoice();
   return custom;
 }
 
@@ -124,11 +187,33 @@ function buzz(id, repeat, pattern) {
 }
 
 let player = null;
+let nativeRing = false;
+// The native ring's own stop, a moment past any ring (the call screen ends it first).
+const NATIVE_RING_MS = 60000;
 
 /** Starts ringing with that ringtone (a second call while ringing does nothing). */
 export function startRingtone(id = DEFAULT_RINGTONE) {
-  if (player) return;
+  if (player || nativeRing) return;
   claim('call');
+  // Android: the one native ringer, so the phone's own ringtone, a BOA one
+  // or your song, never two at once, on the ring volume.
+  if (Platform.OS === 'android' && BoaCall.isAvailable) {
+    nativeRing = true;
+    BoaCall.startRinger({ ...ringSound(id), timeoutMs: NATIVE_RING_MS }).then((ok) => {
+      if (ok || !nativeRing) return;
+      nativeRing = false;
+      // The ringer refused (an older build): ring with the app's own player.
+      ringWithPlayer(id);
+    });
+    return;
+  }
+  ringWithPlayer(id);
+}
+
+// iOS, the web, and Android builds without the native ringer: expo-audio.
+// The phone's own ringtone can't be played from here, so it's BOA's.
+function ringWithPlayer(id) {
+  if (player) return;
   const { source, pattern } = soundFor(id);
   try {
     const p = createAudioPlayer(source);
@@ -148,6 +233,10 @@ export function startRingtone(id = DEFAULT_RINGTONE) {
 
 /** Stops ringing and lets go of the player. Safe to call any time. */
 export function stopRingtone() {
+  if (nativeRing) {
+    nativeRing = false;
+    BoaCall.stopRinger();
+  }
   const p = player;
   player = null;
   Vibration.cancel();

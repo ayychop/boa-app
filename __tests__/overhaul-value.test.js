@@ -78,9 +78,15 @@ describe('ringtones: the buzz lands on the bass', () => {
     }
   });
 
-  test('the native ring gets the same pattern as the app', () => {
+  test('the native ring gets the same pattern as the app, for a BOA ringtone', async () => {
     const src = fs.readFileSync(path.join(__dirname, '../src/calls/incoming.js'), 'utf8');
-    expect(src).toMatch(/vibration: ringtoneHaptics\(ringtone\)/);
+    expect(src).toMatch(/vibration: sound\.vibration/);
+    const { ringSound, setRingMode } = require('../src/calls/ringtone');
+    await setRingMode('boa');
+    expect(ringSound('bashment')).toEqual({ soundUri: '', channelId: 'boa-call-bashment', vibration: ringtoneHaptics('bashment') });
+    // The phone's own ringtone: no channel sound, no song, the standard buzz.
+    await setRingMode('phone');
+    expect(ringSound('bashment')).toEqual({ soundUri: '', channelId: '', vibration: [0, 800, 600, 800, 1600] });
   });
 });
 

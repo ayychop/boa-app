@@ -5,27 +5,39 @@ import * as native from '../../modules/boa-eq';
 // phone and applied to the radio player's sound (modules/boa-eq) while they
 // have BOA Premium. Without Premium, or with nothing playing yet, the
 // sound stays flat and the settings wait.
+//
+// Bass and treble run from -1 to 1 around the BOA Signature sound at 0,
+// which is what the very top of both sliders used to be (the phone's
+// Equalizer at its ceiling, full BassBoost, a louder ceiling). -1 is truly
+// flat; above 0 goes past the phone's own Equalizer range.
 
-const KEY = 'boa.eq.v1';
-export const FLAT = Object.freeze({ bass: 0, treble: 0, spatial: false, boost: false });
+// v2: the sliders' zero moved up to Signature, so settings saved on the old
+// scale aren't read as the new one. Spatial and Bass Boost carry over.
+const KEY = 'boa.eq.v2';
+const OLD_KEY = 'boa.eq.v1';
+/** Every effect off: the station exactly as it's broadcast. */
+export const FLAT = Object.freeze({ bass: -1, treble: -1, spatial: false, boost: false });
+/** Where everyone starts: the old maximum, as the new zero. */
+export const SIGNATURE = Object.freeze({ bass: 0, treble: 0, spatial: false, boost: false });
 
 /**
  * One-tap starting points; the sliders fine-tune from there. Bass Boost
- * maxes the lows and lifts the volume ceiling (BassBoost and
- * LoudnessEnhancer, modules/boa-eq).
+ * pushes the lows past Signature and lifts the volume ceiling (BassBoost,
+ * DynamicsProcessing and LoudnessEnhancer, modules/boa-eq).
  */
 export const PRESETS = [
+  { id: 'signature', label: 'BOA Signature', settings: SIGNATURE },
+  { id: 'bass', label: 'Bass Heavy', settings: { bass: 0.6, treble: 0.1, spatial: false, boost: false } },
+  { id: 'boost', label: 'Bass Boost', settings: { bass: 1, treble: 0.3, spatial: false, boost: true } },
+  { id: 'vocal', label: 'Vocal', settings: { bass: -0.5, treble: 0.25, spatial: false, boost: false } },
+  { id: 'live', label: 'Live Room', settings: { bass: -0.2, treble: 0.15, spatial: true, boost: false } },
   { id: 'flat', label: 'Flat', settings: FLAT },
-  { id: 'bass', label: 'Bass Heavy', settings: { bass: 0.75, treble: 0.1, spatial: false, boost: false } },
-  { id: 'boost', label: 'Bass Boost', settings: { bass: 1, treble: 0.15, spatial: false, boost: true } },
-  { id: 'vocal', label: 'Vocal', settings: { bass: -0.2, treble: 0.35, spatial: false, boost: false } },
-  { id: 'live', label: 'Live Room', settings: { bass: 0.3, treble: 0.25, spatial: true, boost: false } },
 ];
 
 export const isSupported = native.isAvailable;
 
 const clamp = (v) => Math.max(-1, Math.min(1, Number(v) || 0));
-let settings = FLAT;
+let settings = SIGNATURE;
 let allowed = false;
 let session = 0;
 let active = false;
@@ -39,11 +51,17 @@ function apply() {
   emit();
 }
 
-AsyncStorage.getItem(KEY)
-  .then((raw) => {
-    if (!raw) return;
-    const s = JSON.parse(raw);
-    settings = { bass: clamp(s.bass), treble: clamp(s.treble), spatial: !!s.spatial, boost: !!s.boost };
+Promise.all([AsyncStorage.getItem(KEY), AsyncStorage.getItem(OLD_KEY)])
+  .then(([raw, old]) => {
+    // Changed while it was loading: what was just chosen stands.
+    if (settings !== SIGNATURE) return;
+    if (raw) {
+      const s = JSON.parse(raw);
+      settings = { bass: clamp(s.bass), treble: clamp(s.treble), spatial: !!s.spatial, boost: !!s.boost };
+    } else if (old) {
+      const s = JSON.parse(old);
+      settings = { ...SIGNATURE, spatial: !!s.spatial, boost: !!s.boost };
+    } else return;
     apply();
   })
   .catch(() => {});

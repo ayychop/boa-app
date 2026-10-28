@@ -309,6 +309,10 @@ jest.mock('./modules/boa-call', () => {
     isAvailable: true,
     showIncoming: jest.fn(async () => true),
     cancelIncoming: jest.fn(async () => {}),
+    // The native ringer, with the app on screen.
+    startRinger: jest.fn(async () => true),
+    stopRinger: jest.fn(async () => {}),
+    wakeForCall: jest.fn(async () => {}),
     addDeclineListener: jest.fn((fn) => {
       declines.add(fn);
       return () => declines.delete(fn);

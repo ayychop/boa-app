@@ -12,11 +12,18 @@ import { usePremium } from '../../context/PremiumContext';
 import { haptics } from '../../utils/haptics';
 import { colors, fonts, radius, space, type } from '../../theme';
 
-// Slider position (-1..1) as the gain it means on most phones: the codec's
-// full +/-15 dB (modules/boa-eq runs each phone to its own limit).
-const db = (v) => {
-  const n = Math.round(v * 15);
-  return n === 0 ? '0 dB' : `${n > 0 ? '+' : ''}${n} dB`;
+// Slider position (-1..1) as what it means: -1 is flat, 0 the BOA
+// Signature sound (the phone's own Equalizer at its ceiling, on most phones
+// +15 dB), and above it the extra that modules/boa-eq adds past that
+// ceiling: up to 12 dB more bass and 6 dB more treble.
+const PAST = { bass: 12, treble: 6 };
+const BELOW = 15;
+const STEPS = 30;
+const snap = (v) => Math.round(v * STEPS) / STEPS;
+export const readout = (v, kind) => {
+  if (v <= -1) return 'Flat';
+  const n = Math.round(v * (v > 0 ? PAST[kind] : BELOW));
+  return n === 0 ? 'Signature' : `${n > 0 ? '+' : ''}${n} dB`;
 };
 
 function useEq() {
@@ -25,31 +32,42 @@ function useEq() {
   return s;
 }
 
-function Band({ label, hint, value, onChange, locked, testID }) {
+function Band({ label, kind, value, onChange, locked, testID }) {
+  // Past Signature, past what the phone's own Equalizer can do: the card lights gold.
+  const past = value > 0;
+  const shown = readout(value, kind);
   return (
-    <View style={styles.band}>
+    <View style={[styles.band, past && styles.bandPast]} testID={`${testID}-card`}>
+      {past ? <LinearGradient colors={['rgba(226,168,75,0.16)', 'rgba(226,168,75,0)']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={StyleSheet.absoluteFill} /> : null}
       <View style={styles.bandHead}>
         <Text style={styles.bandLabel}>{label}</Text>
-        <Text style={styles.bandValue}>{db(value)}</Text>
+        {past ? (
+          <View style={styles.pastTag} testID={`${testID}-past`}>
+            <Text style={styles.pastText}>PAST STOCK</Text>
+          </View>
+        ) : null}
+        <Text style={[styles.bandValue, value <= -1 && { color: colors.textMuted }]} testID={`${testID}-value`}>
+          {shown}
+        </Text>
       </View>
       <BoaSlider
         style={styles.slider}
         minimumValue={-1}
         maximumValue={1}
-        step={1 / 15}
+        step={1 / STEPS}
         value={value}
         disabled={locked}
-        onValueChange={onChange}
+        onValueChange={(v) => onChange(snap(v))}
         onSlidingComplete={() => haptics.selection()}
         minimumTrackTintColor={colors.gold}
         maximumTrackTintColor="rgba(243,239,232,0.18)"
-        accessibilityLabel={`${label}, ${db(value)}`}
+        accessibilityLabel={`${label}, ${shown}`}
         testID={testID}
       />
       <View style={styles.scale}>
-        <Text style={styles.scaleText}>CUT</Text>
-        <Text style={styles.scaleText}>{hint}</Text>
-        <Text style={styles.scaleText}>BOOST</Text>
+        <Text style={styles.scaleText}>FLAT</Text>
+        <Text style={[styles.scaleText, { color: colors.gold }]}>BOA SIGNATURE</Text>
+        <Text style={styles.scaleText}>MAX</Text>
       </View>
     </View>
   );
@@ -109,8 +127,8 @@ export default function EqualizerSheet({ open, onClose }) {
             })}
           </View>
 
-          <Band label="Bass" hint="LOWS" value={settings.bass} onChange={(v) => eq.setSettings({ bass: v })} locked={locked} testID="eq-bass" />
-          <Band label="Treble" hint="HIGHS" value={settings.treble} onChange={(v) => eq.setSettings({ treble: v })} locked={locked} testID="eq-treble" />
+          <Band label="Bass" kind="bass" value={settings.bass} onChange={(v) => eq.setSettings({ bass: v })} locked={locked} testID="eq-bass" />
+          <Band label="Treble" kind="treble" value={settings.treble} onChange={(v) => eq.setSettings({ treble: v })} locked={locked} testID="eq-treble" />
 
           <View style={styles.spatial}>
             <View style={styles.spatialIcon}>
@@ -129,7 +147,7 @@ export default function EqualizerSheet({ open, onClose }) {
             </View>
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text style={styles.bandLabel}>Bass Boost</Text>
-              <Text style={styles.note}>Deeper lows and a louder ceiling. Mind your ears.</Text>
+              <Text style={styles.note}>The lows pushed past stock and an 18 dB louder ceiling. Mind your ears.</Text>
             </View>
             <Toggle value={!!settings.boost} onChange={(v) => !locked && eq.setSettings({ boost: v })} label="Bass Boost" testID="eq-boost" />
           </View>
@@ -191,10 +209,14 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(18,18,22,0.6)',
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
+    overflow: 'hidden',
   },
-  bandHead: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
+  bandPast: { borderColor: 'rgba(226,168,75,0.55)', boxShadow: '0px 0px 18px rgba(226,168,75,0.22)' },
+  bandHead: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  pastTag: { paddingHorizontal: 7, height: 18, borderRadius: radius.pill, justifyContent: 'center', backgroundColor: colors.gold },
+  pastText: { fontFamily: fonts.mono, fontSize: 8.5, letterSpacing: 1.2, color: colors.bg },
   bandLabel: { fontFamily: fonts.semibold, fontSize: 15, color: colors.text },
-  bandValue: { fontFamily: fonts.mono, fontSize: 12, color: colors.gold, fontVariant: ['tabular-nums'] },
+  bandValue: { marginLeft: 'auto', fontFamily: fonts.mono, fontSize: 12, color: colors.gold, fontVariant: ['tabular-nums'] },
   slider: { height: 48, marginHorizontal: -4 },
   scale: { flexDirection: 'row', justifyContent: 'space-between' },
   scaleText: { fontFamily: fonts.mono, fontSize: 8.5, letterSpacing: 1.4, color: colors.textFaint },

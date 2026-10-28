@@ -45,6 +45,27 @@ describe('the Chat Hub home', () => {
     return navigation;
   }
 
+  test('your conversations come first: the inbox sits right under the header, above the Daily Spark and the Pulse', async () => {
+    mockRows = [];
+    await renderHome();
+    // Everything on the screen, top to bottom: testIDs and text, in render order.
+    const order = [];
+    const walk = (node) => {
+      if (node == null) return;
+      if (typeof node === 'string') return order.push(node);
+      if (Array.isArray(node)) return node.forEach(walk);
+      if (node.props?.testID) order.push(`#${node.props.testID}`);
+      (node.children ?? []).forEach(walk);
+    };
+    walk(screen.toJSON());
+    const at = (x) => order.findIndex((o) => o === x || (typeof o === 'string' && o.toLowerCase() === x.toLowerCase()));
+    expect(at('#inbox-filters')).toBeGreaterThan(-1);
+    expect(at('#daily-spark-category')).toBeGreaterThan(-1);
+    expect(at('#inbox-filters')).toBeLessThan(at('#daily-spark-category'));
+    expect(at('#chat-empty')).toBeLessThan(at('#daily-spark-category'));
+    expect(at('Conversations')).toBeLessThan(at('Featured talent'));
+  });
+
   test('with no messages it is never empty: the Daily Spark, the Pulse and a way to start', async () => {
     mockRows = [];
     const navigation = await renderHome();

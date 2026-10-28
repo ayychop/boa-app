@@ -50,6 +50,7 @@ class IncomingCallActivity : Activity() {
     if (intent.action == ACTION_ANSWER) return answer(call)
     current = WeakReference(this)
     overLockScreen()
+    ScreenWaker.wake(this, WAKE_MS)
     setContentView(build(call))
   }
 
@@ -58,6 +59,7 @@ class IncomingCallActivity : Activity() {
     setIntent(intent)
     val call = CallInfo.from(intent) ?: return
     if (intent.action == ACTION_ANSWER) return answer(call)
+    ScreenWaker.wake(this, WAKE_MS)
     pulse?.cancel()
     setContentView(build(call))
   }
@@ -227,6 +229,7 @@ class IncomingCallActivity : Activity() {
 
   companion object {
     const val ACTION_ANSWER = "expo.modules.boacall.ANSWER"
+    private const val WAKE_MS = 10_000L
     private val GOLD = Color.parseColor("#E2A84B")
     private val GOLD_LIGHT = Color.parseColor("#F6D38A")
     private val RED = Color.parseColor("#FF3B4E")

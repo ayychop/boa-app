@@ -1,14 +1,18 @@
 package expo.modules.boaeq
 
 import android.media.audiofx.BassBoost
+import android.media.audiofx.DynamicsProcessing
 import android.media.audiofx.Equalizer
 import android.media.audiofx.LoudnessEnhancer
 import android.media.audiofx.Virtualizer
+import android.os.Build
 import android.util.Log
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
+import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
+import kotlin.math.sqrt
 
 /**
  * BOA Hi-Fi: bass, treble, spatial sound and Bass Boost on the radio player. Android's
@@ -16,18 +20,25 @@ import kotlin.math.roundToInt
  * exposes it as `audioSessionId`, see patches/expo-audio), so only BOA's
  * sound changes, not other apps'.
  *
- * Bass and treble run from -1 (cut) to 1 (boost); spatial widens the stereo
- * image. Every slider runs to the full range the phone's codec reports: at
- * full bass the bass bands sit at the Equalizer's ceiling and BassBoost at
- * full strength. Any boost also lifts the volume with LoudnessEnhancer,
- * created last so it sits at the end of the chain and its limiter catches
- * the peaks the boosted bands push over 0 dBFS. Bass Boost (boost) holds
- * the lows near the top and raises the ceiling by BOOST_GAIN_MILLIBELS,
- * party volume. A phone that lacks an effect simply goes without it.
+ * Bass and treble run from -1 to 1, around the BOA Signature sound at 0:
+ *  - 0 is what used to be the very top of both sliders: the Equalizer's
+ *    bass and treble bands at the phone codec's ceiling, BassBoost at full
+ *    strength and LoudnessEnhancer lifting the volume.
+ *  - -1 is truly flat: every effect off.
+ *  - Above 0 goes past the Equalizer's hardware ceiling: DynamicsProcessing
+ *    (Android 9+) adds up to EXTRA_BASS_DB and EXTRA_TREBLE_DB on top in
+ *    float, with its own limiter, and LoudnessEnhancer lifts the volume
+ *    further. A phone without DynamicsProcessing still gets the louder
+ *    ceiling.
+ * Bass Boost holds the lows at least BOOST_BASS up and raises the ceiling
+ * to BOOST_GAIN_MILLIBELS, party volume. LoudnessEnhancer is created last,
+ * so its limiter sits at the end of the chain and catches every peak. A
+ * phone that lacks an effect simply goes without it.
  */
 class BoaEqModule : Module() {
   private var session = 0
   private var equalizer: Equalizer? = null
+  private var dynamics: DynamicsProcessing? = null
   private var bassBoost: BassBoost? = null
   private var virtualizer: Virtualizer? = null
   private var loudness: LoudnessEnhancer? = null
@@ -55,13 +66,19 @@ class BoaEqModule : Module() {
       releaseAll()
       session = sessionId
       equalizer = make("equalizer") { Equalizer(0, sessionId) }
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) dynamics = make("dynamics processing") { dynamicsFor(sessionId) }
       bassBoost = make("bass boost") { BassBoost(0, sessionId) }
       virtualizer = make("virtualizer") { Virtualizer(0, sessionId) }
       loudness = make("loudness enhancer") { LoudnessEnhancer(sessionId) }
     }
-    val flat = bass == 0.0 && treble == 0.0 && !boost
     // Bass Boost's lows: the slider's bass, never less than BOOST_BASS.
-    val lows = if (boost) maxOf(bass, BOOST_BASS) else bass
+    val lows = if (boost) max(bass, BOOST_BASS) else bass
+    val flat = lows <= -1.0 && treble <= -1.0
+    // How far each slider sits from flat to Signature (0 to 1), and past Signature (0 to 1).
+    val lowsUpTo = 1 + min(lows, 0.0)
+    val highsUpTo = 1 + min(treble, 0.0)
+    val lowsPast = max(lows, 0.0)
+    val highsPast = max(treble, 0.0)
     var shaping = false
 
     equalizer?.let { eq ->
@@ -69,16 +86,13 @@ class BoaEqModule : Module() {
         if (flat) {
           eq.setEnabled(false)
         } else {
-          // The phone's whole range, e.g. [-1500, 1500] millibels.
+          // The phone's whole range, e.g. [-1500, 1500] millibels: Signature is its ceiling.
           val range = eq.bandLevelRange
           val up = min(range[1].toInt(), MAX_MILLIBELS)
-          val cut = min(-range[0].toInt(), MAX_MILLIBELS)
           for (b in 0 until eq.numberOfBands.toInt()) {
             val band = b.toShort()
             val hz = eq.getCenterFreq(band) / 1000.0
-            val low = lows * bassWeight(hz)
-            val high = treble * trebleWeight(hz)
-            val level = (if (low >= 0) low * up else low * cut) + (if (high >= 0) high * up else high * cut)
+            val level = (lowsUpTo * bassWeight(hz) + highsUpTo * trebleWeight(hz)) * up
             eq.setBandLevel(band, level.roundToInt().coerceIn(range[0].toInt(), range[1].toInt()).toShort())
           }
           eq.setEnabled(true)
@@ -89,11 +103,37 @@ class BoaEqModule : Module() {
       }
     }
 
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+      dynamics?.let { dp ->
+        try {
+          if (lowsPast <= 0 && highsPast <= 0) {
+            dp.setEnabled(false)
+          } else {
+            val extraLows = lowsPast * EXTRA_BASS_DB
+            val extraHighs = highsPast * EXTRA_TREBLE_DB
+            PRE_EQ_CUTOFFS.forEachIndexed { i, cutoff ->
+              val hz = bandCentre(i)
+              val gain = (extraLows * bassWeight(hz) + extraHighs * trebleWeight(hz)).toFloat()
+              dp.setPreEqBandAllChannelsTo(i, DynamicsProcessing.EqBand(true, cutoff, gain))
+            }
+            // Room for the extra before the limiter, so it grows the bass
+            // and air rather than pumping everything else; LoudnessEnhancer
+            // makes the level back up at the end of the chain.
+            dp.setInputGainAllChannelsTo(-(max(extraLows, extraHighs) * HEADROOM_SHARE).toFloat())
+            dp.setEnabled(true)
+            shaping = true
+          }
+        } catch (e: Exception) {
+          Log.w(TAG, "dynamics processing: ${e.message}")
+        }
+      }
+    }
+
     bassBoost?.let { bb ->
       try {
-        if (lows > 0 && bb.strengthSupported) {
-          // The slider runs the full 0 to 1000; Bass Boost is always 1000.
-          bb.setStrength((if (boost) 1000 else (lows * 1000).roundToInt()).toShort())
+        if (lowsUpTo > 0 && bb.strengthSupported) {
+          // Full strength (1000) from Signature up; fading to off at flat.
+          bb.setStrength((lowsUpTo * 1000).roundToInt().coerceIn(0, 1000).toShort())
           bb.setEnabled(true)
           shaping = true
         } else {
@@ -107,14 +147,13 @@ class BoaEqModule : Module() {
     loudness?.let { l ->
       try {
         // Louder as either slider goes up, so a boost never sounds quieter
-        // once the limiter tames it.
-        val lift = maxOf(lows, treble, 0.0)
-        if (boost) {
-          l.setTargetGain(BOOST_GAIN_MILLIBELS)
-          l.setEnabled(true)
-          shaping = true
-        } else if (lift > 0) {
-          l.setTargetGain((lift * SLIDER_GAIN_MILLIBELS).roundToInt())
+        // once the limiter tames it: up to SIGNATURE_GAIN at Signature, then
+        // on to MAX_SLIDER_GAIN at the top.
+        val up = max(lowsUpTo, highsUpTo)
+        val past = max(lowsPast, highsPast)
+        val gain = if (boost) BOOST_GAIN_MILLIBELS else (up * SIGNATURE_GAIN_MILLIBELS + past * (MAX_SLIDER_GAIN_MILLIBELS - SIGNATURE_GAIN_MILLIBELS)).roundToInt()
+        if (gain > 0) {
+          l.setTargetGain(gain)
           l.setEnabled(true)
           shaping = true
         } else {
@@ -141,6 +180,33 @@ class BoaEqModule : Module() {
     return shaping
   }
 
+  // The extra stage: a float pre-EQ (past the Equalizer's hardware range)
+  // and a brick-wall limiter just under full scale, so nothing it adds clips.
+  @android.annotation.TargetApi(Build.VERSION_CODES.P)
+  private fun dynamicsFor(sessionId: Int): DynamicsProcessing {
+    val config = DynamicsProcessing.Config.Builder(
+      DynamicsProcessing.VARIANT_FAVOR_FREQUENCY_RESOLUTION,
+      CHANNELS,
+      true,
+      PRE_EQ_CUTOFFS.size,
+      false,
+      0,
+      false,
+      0,
+      true,
+    ).build()
+    return DynamicsProcessing(0, sessionId, config).apply {
+      setLimiterAllChannelsTo(DynamicsProcessing.Limiter(true, true, 0, LIMITER_ATTACK_MS, LIMITER_RELEASE_MS, LIMITER_RATIO, LIMITER_THRESHOLD_DB, 0f))
+      setEnabled(false)
+    }
+  }
+
+  // A pre-EQ band runs from the previous cutoff to its own: its middle, on a log scale.
+  private fun bandCentre(i: Int): Double {
+    val lo = if (i == 0) 20.0 else PRE_EQ_CUTOFFS[i - 1].toDouble()
+    return sqrt(lo * PRE_EQ_CUTOFFS[i])
+  }
+
   // Full weight up to 250 Hz (sub and punch), fading out by 600 Hz.
   private fun bassWeight(hz: Double) = when {
     hz <= 250 -> 1.0
@@ -164,13 +230,14 @@ class BoaEqModule : Module() {
     }
 
   private fun releaseAll() {
-    listOf(equalizer, bassBoost, virtualizer, loudness).forEach {
+    listOf(equalizer, dynamics, bassBoost, virtualizer, loudness).forEach {
       try {
         it?.release()
       } catch (_: Exception) {
       }
     }
     equalizer = null
+    dynamics = null
     bassBoost = null
     virtualizer = null
     loudness = null
@@ -180,14 +247,29 @@ class BoaEqModule : Module() {
   companion object {
     private const val TAG = "BoaEq"
     // Up to +/-24 dB asked for; the phone's own range (usually +/-15 dB) caps
-    // it, so every phone runs to its codec's real limit.
+    // it, so Signature runs every phone to its codec's real limit.
     private const val MAX_MILLIBELS = 2400
-    // Bass Boost: the lows at least 90% of the way up, and the volume ceiling
-    // raised 12 dB. LoudnessEnhancer's limiter holds the peaks, so it gets
-    // loud rather than crackly; past this the limiter pumps audibly.
-    private const val BOOST_BASS = 0.9
-    private const val BOOST_GAIN_MILLIBELS = 1200
-    // The sliders alone lift the volume up to 6 dB at full boost.
-    private const val SLIDER_GAIN_MILLIBELS = 600
+    // Past Signature, at the top of the sliders: this much more bass and
+    // treble, on top of the Equalizer's ceiling (DynamicsProcessing).
+    const val EXTRA_BASS_DB = 12.0
+    const val EXTRA_TREBLE_DB = 6.0
+    // Half of the extra is made room for before the limiter.
+    private const val HEADROOM_SHARE = 0.5
+    private const val CHANNELS = 2
+    // The pre-EQ's bands, by their top frequency in Hz.
+    private val PRE_EQ_CUTOFFS = floatArrayOf(60f, 120f, 250f, 500f, 1500f, 4000f, 8000f, 20000f)
+    // The limiter: fast enough to catch a kick drum, slow enough not to distort it.
+    private const val LIMITER_ATTACK_MS = 1f
+    private const val LIMITER_RELEASE_MS = 60f
+    private const val LIMITER_RATIO = 10f
+    private const val LIMITER_THRESHOLD_DB = -1f
+    // Bass Boost: the lows at least halfway past Signature, and the volume
+    // ceiling raised 18 dB. LoudnessEnhancer's limiter holds the peaks.
+    private const val BOOST_BASS = 0.5
+    const val BOOST_GAIN_MILLIBELS = 1800
+    // The sliders lift the volume 6 dB at Signature (the old maximum), and
+    // up to 14 dB at the top.
+    const val SIGNATURE_GAIN_MILLIBELS = 600
+    const val MAX_SLIDER_GAIN_MILLIBELS = 1400
   }
 }

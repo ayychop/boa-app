@@ -370,8 +370,9 @@ function Thread({ navigation, route }) {
     };
   }, []);
 
-  // The call button's call is got ready while you read (token and engine),
-  // and again once a call is over, so tapping it connects first time.
+  // The call button's call is got ready while you read (its token only:
+  // the camera and the video engine wait for the tap), and again once a
+  // call is over, so tapping it connects first time.
   const callOpen = !!calls?.call;
   const primeCall = calls?.primeCall;
   useEffect(() => {

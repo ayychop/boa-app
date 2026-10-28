@@ -6,7 +6,20 @@ import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useHub } from '../../context/HubContext';
-import { CUSTOM_RINGTONE, RINGTONES, loadCustomRingtone, onCustomRingtone, pickCustomRingtone, previewRingtone, setCustomRingtone, stopPreview } from '../../calls/ringtone';
+import {
+  CUSTOM_RINGTONE,
+  PHONE_RINGTONE,
+  RINGTONES,
+  loadRingChoice,
+  onRingChoice,
+  loadCustomRingtone,
+  onCustomRingtone,
+  pickCustomRingtone,
+  previewRingtone,
+  setCustomRingtone,
+  setRingMode,
+  stopPreview,
+} from '../../calls/ringtone';
 import { PageHeader } from '../../components/kit';
 import { Slate } from '../../components/ui';
 import { haptics } from '../../utils/haptics';
@@ -36,6 +49,9 @@ function Bar({ v }) {
   return <Animated.View style={[styles.bar, style]} />;
 }
 
+// The phone's own ringtone: no preview, it's the one you already know.
+const PHONE_TONE = { id: PHONE_RINGTONE, label: "Your phone's ringtone", detail: 'The default. BOA stays quiet and your phone rings as usual', icon: 'phone-portrait-outline' };
+
 function Option({ tone, active, playing, onPick, onPlay, last }) {
   const press = usePress({ haptic: false });
   return (
@@ -59,16 +75,18 @@ function Option({ tone, active, playing, onPick, onPlay, last }) {
             {tone.detail}
           </Text>
         </View>
-        <Pressable
-          onPress={onPlay}
-          hitSlop={8}
-          accessibilityRole="button"
-          accessibilityLabel={playing ? `Stop ${tone.label}` : `Play ${tone.label}`}
-          style={({ pressed }) => [styles.play, playing && styles.playOn, pressed && { opacity: 0.7 }]}
-          testID={`ringtone-play-${tone.id}`}
-        >
-          {playing ? <Bars /> : <Ionicons name="play" size={16} color={colors.gold} style={{ marginLeft: 2 }} />}
-        </Pressable>
+        {onPlay ? (
+          <Pressable
+            onPress={onPlay}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={playing ? `Stop ${tone.label}` : `Play ${tone.label}`}
+            style={({ pressed }) => [styles.play, playing && styles.playOn, pressed && { opacity: 0.7 }]}
+            testID={`ringtone-play-${tone.id}`}
+          >
+            {playing ? <Bars /> : <Ionicons name="play" size={16} color={colors.gold} style={{ marginLeft: 2 }} />}
+          </Pressable>
+        ) : null}
         <View style={styles.check}>
           {active ? (
             <Animated.View entering={FadeIn.duration(200)}>
@@ -152,8 +170,10 @@ function YourSong({ song, playing, busy, onChoose, onPlay, onRemove }) {
 }
 
 /**
- * Ringtone: which of BOA's four original ringtones an incoming call plays.
- * Play previews one; tapping a row makes it yours, on every phone you use.
+ * Ringtone: what an incoming call plays. Your phone's own ringtone until
+ * you choose otherwise (so BOA's never rings over it), one of BOA's four
+ * originals, or a song from the phone. Play previews one; tapping a row
+ * makes it the one that rings.
  */
 export default function RingtoneScreen({ navigation }) {
   const insets = useSafeAreaInsets();
@@ -161,6 +181,16 @@ export default function RingtoneScreen({ navigation }) {
   const [playing, setPlaying] = useState(null);
   const [song, setSong] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [choice, setChoice] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    loadRingChoice().then((c) => alive && setChoice(c));
+    const off = onRingChoice(setChoice);
+    return () => {
+      alive = false;
+      off();
+    };
+  }, []);
   useEffect(() => {
     let alive = true;
     loadCustomRingtone().then((s) => alive && setSong(s));
@@ -182,11 +212,20 @@ export default function RingtoneScreen({ navigation }) {
   };
 
   const pick = (id) => {
-    if (id === ringtone && !song) return;
+    if (id === ringtone && choice === 'boa') return;
     haptics.selection();
     // A built-in chosen: your own song steps aside.
     if (song) setCustomRingtone(null);
+    setRingMode('boa');
     if (id !== ringtone) setRingtone?.(id).catch((err) => Alert.alert("Couldn't save", err.message));
+  };
+
+  const pickPhone = () => {
+    if (choice === 'phone') return;
+    haptics.selection();
+    stopPreview();
+    if (song) setCustomRingtone(null);
+    setRingMode('phone');
   };
 
   const choose = async () => {
@@ -214,20 +253,37 @@ export default function RingtoneScreen({ navigation }) {
       <LinearGradient colors={['rgba(226,168,75,0.16)', 'rgba(226,168,75,0)']} locations={[0, 0.45]} style={StyleSheet.absoluteFill} pointerEvents="none" />
       <PageHeader kicker="Calls" title="Ringtone" onBack={() => navigation.goBack()} />
       <ScrollView contentContainerStyle={{ padding: space.lg, paddingBottom: insets.bottom + space.xxl }}>
-        <Text style={styles.intro}>What plays when someone video calls you: one of BOA's own, made from the beat up so your phone buzzes on every bass hit, or any song on your phone.</Text>
+        <Text style={styles.intro}>
+          What plays when someone video calls you. Until you choose, it's your phone's own ringtone. Or pick one of BOA's own, made from the beat up so your phone buzzes on every bass hit, or any song
+          on your phone. Only the one you choose ever rings.
+        </Text>
+        <Slate style={styles.section}>Default</Slate>
+        <Animated.View entering={FadeInDown.springify().damping(20)} style={styles.card}>
+          <BlurView intensity={30} tint="dark" blurMethod="dimezisBlurView" style={StyleSheet.absoluteFill} />
+          <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(18,18,22,0.6)' }]} />
+          <Option tone={PHONE_TONE} active={choice === 'phone'} playing={false} onPick={pickPhone} last />
+        </Animated.View>
         <Slate style={styles.section}>From your phone</Slate>
         <Animated.View entering={FadeInDown.springify().damping(20)} style={styles.card}>
           <BlurView intensity={30} tint="dark" blurMethod="dimezisBlurView" style={StyleSheet.absoluteFill} />
           <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(18,18,22,0.6)' }]} />
           <YourSong song={song} playing={playing === CUSTOM_RINGTONE} busy={busy} onChoose={choose} onPlay={() => play(CUSTOM_RINGTONE)} onRemove={remove} />
         </Animated.View>
-        {song ? <Text style={styles.note}>Your song rings whenever BOA is open. If a call comes in with BOA closed, your phone rings with your BOA ringtone below.</Text> : null}
-        <Slate style={styles.section}>{song ? 'BOA ringtones' : 'Your ringtone'}</Slate>
+        {song ? <Text style={styles.note}>Your song rings for every BOA call, open or closed, locked or not. Your phone's own ringtone stays quiet.</Text> : null}
+        <Slate style={styles.section}>BOA ringtones</Slate>
         <Animated.View entering={FadeInDown.springify().damping(20)} style={styles.card}>
           <BlurView intensity={30} tint="dark" blurMethod="dimezisBlurView" style={StyleSheet.absoluteFill} />
           <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(18,18,22,0.6)' }]} />
           {RINGTONES.map((t, i) => (
-            <Option key={t.id} tone={t} active={!song && ringtone === t.id} playing={playing === t.id} onPick={() => pick(t.id)} onPlay={() => play(t.id)} last={i === RINGTONES.length - 1} />
+            <Option
+              key={t.id}
+              tone={t}
+              active={choice === 'boa' && ringtone === t.id}
+              playing={playing === t.id}
+              onPick={() => pick(t.id)}
+              onPlay={() => play(t.id)}
+              last={i === RINGTONES.length - 1}
+            />
           ))}
         </Animated.View>
       </ScrollView>

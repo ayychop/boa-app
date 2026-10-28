@@ -210,7 +210,8 @@ describe('copy and assets', () => {
     expect(fs.existsSync(path.join(__dirname, '../assets/images/casting-on-set.jpg'))).toBe(false);
   });
   test("this release is a new version, so What's New shows once on it", () => {
-    // EAS's robot token can't raise preview build numbers, so a release is announced by bumping app.json's version (1.4.0: first-try calls, native 1080p filters, the vibe overhaul).
-    expect(require('../app.json').expo.version).toBe('1.4.0');
+    // EAS's robot token can't raise preview build numbers, so a release is announced by bumping app.json's version
+    // (1.5.0: Hi-Fi past stock, calls that wake the screen and ring once, inbox first, car themes).
+    expect(require('../app.json').expo.version).toBe('1.5.0');
   });
 });

@@ -2,6 +2,7 @@ import * as engine from './engine';
 import * as auto from '../../modules/boa-auto';
 import { STATIONS_BY_GENRE } from '../data/radioStations';
 import { GENRES } from '../api/radio';
+import { loadCarTheme } from './carTheme';
 
 // BOA Radio in the car (Android Auto). The car browses the curated stations
 // by genre (modules/boa-auto); a tap there comes back here and plays
@@ -54,11 +55,15 @@ function play(item, list) {
   engine.play(item);
 }
 
-// Next/previous before the app has been opened: through the genre.
+// The genre a station steps through when nothing else gives it a queue.
+const genreOf = (item) => (item?.kind === 'radio' ? (findStation(item.id)?.list ?? []) : []);
+
+// Next/previous (the car screen, the steering wheel): the app's queue when
+// it has one, else the station's genre, so the skip buttons never do nothing.
 function step(delta) {
-  if (player) return delta > 0 ? player.next() : player.previous();
+  if (player && player.canStep?.() !== false) return delta > 0 ? player.next() : player.previous();
   const playing = engine.getCurrent();
-  const list = boot?.list ?? [];
+  const list = boot?.list?.length > 1 ? boot.list : genreOf(playing);
   if (playing?.kind !== 'radio' || list.length < 2) return;
   const i = list.findIndex((s) => s.id === playing.id);
   play(list[(Math.max(i, 0) + delta + list.length) % list.length], list);
@@ -120,7 +125,7 @@ function sync(state) {
     title: meta?.title ?? item?.name ?? null,
     artist: meta?.artist ?? null,
     artwork: meta?.artworkUrl ?? item?.logo ?? null,
-    canStep: item?.kind === 'radio' && (player ? player.canStep() : (boot?.list?.length ?? 0) > 1),
+    canStep: item?.kind === 'radio' && ((player ? player.canStep() : (boot?.list?.length ?? 0) > 1) || genreOf(item).length > 1),
     favourite: item?.kind === 'radio' && favourites ? favourites.isSaved(item.id) : null,
     hyped: item?.kind === 'radio' && hype ? hype.hyped(item.id) : null,
   };
@@ -135,6 +140,8 @@ export function start() {
   if (started || !auto.isAvailable) return;
   started = true;
   auto.setCatalogue(catalogue());
+  // The car theme chosen in Profile > Car Settings, before the car draws a tile.
+  loadCarTheme().then(auto.setTheme);
   auto.addCommandListener(handle);
   engine.subscribe(sync);
   // Lock screen and headset next/previous, until the app's own take over.

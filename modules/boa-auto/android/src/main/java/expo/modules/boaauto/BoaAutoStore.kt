@@ -40,6 +40,7 @@ object BoaAutoStore {
   private const val PREFS = "boa_auto"
   private const val KEY_CATALOGUE = "catalogue"
   private const val KEY_LAST_MEDIA_ID = "last_media_id"
+  private const val KEY_THEME = "theme"
 
   @Volatile private var folders: List<AutoFolder>? = null
   @Volatile var playback = AutoPlayback()
@@ -64,6 +65,17 @@ object BoaAutoStore {
   fun setPlayback(context: Context, next: AutoPlayback) {
     playback = next
     next.mediaId?.let { prefs(context).edit().putString(KEY_LAST_MEDIA_ID, it).apply() }
+  }
+
+  /** The car theme chosen in Profile > Car Settings (CarThemes), saved so a cold car start draws it too. */
+  internal fun theme(context: Context): CarTheme = CarThemes.byId(prefs(context).getString(KEY_THEME, null))
+
+  /** Returns whether it changed. */
+  fun setTheme(context: Context, id: String): Boolean {
+    val next = CarThemes.byId(id).id
+    if (prefs(context).getString(KEY_THEME, null) == next) return false
+    prefs(context).edit().putString(KEY_THEME, next).apply()
+    return true
   }
 
   fun lastMediaId(context: Context): String? = playback.mediaId ?: prefs(context).getString(KEY_LAST_MEDIA_ID, null)

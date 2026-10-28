@@ -4,11 +4,12 @@ import * as path from 'path';
 // BOA Radio in the car: the station catalogue the car browses, and the car's
 // taps playing through the app's own audio engine (src/audio/car.js).
 
-const mockNative = { setCatalogue: jest.fn(), setPlayback: jest.fn(), listener: null };
+const mockNative = { setCatalogue: jest.fn(), setPlayback: jest.fn(), setTheme: jest.fn(), listener: null };
 jest.mock('../modules/boa-auto', () => ({
   isAvailable: true,
   setCatalogue: (c) => mockNative.setCatalogue(c),
   setPlayback: (p) => mockNative.setPlayback(p),
+  setTheme: (id) => mockNative.setTheme(id),
   addCommandListener: (fn) => {
     mockNative.listener = fn;
     return () => {};
@@ -211,5 +212,89 @@ describe('the car screen', () => {
     for (const icon of ['boa_auto_heart_filled', 'boa_auto_fire_filled']) {
       expect(fs.readFileSync(path.join(kt, 'res', 'drawable', `${icon}.xml`), 'utf8')).toContain('#FFE2A84B');
     }
+  });
+});
+
+describe('the steering wheel', () => {
+  test("skip works even with no queue: it steps through the station's genre", () => {
+    const player = { play: jest.fn(), next: jest.fn(), previous: jest.fn(), canStep: () => false };
+    car.attachPlayer(player);
+    loaded = { ...AFRO[0], kind: 'radio' };
+    car.handle({ action: 'next' });
+    expect(player.next).not.toHaveBeenCalled();
+    expect(player.play).toHaveBeenCalledWith(AFRO[1], AFRO);
+    car.handle({ action: 'previous' });
+    expect(player.play).toHaveBeenLastCalledWith(AFRO[AFRO.length - 1], AFRO);
+  });
+
+  test('with a queue, skip goes through the app so it follows', () => {
+    const player = { play: jest.fn(), next: jest.fn(), previous: jest.fn(), canStep: () => true };
+    car.attachPlayer(player);
+    car.handle({ action: 'next' });
+    expect(player.next).toHaveBeenCalled();
+  });
+
+  test('a curated station always offers next and previous to the car, even with no queue', async () => {
+    car.start();
+    car.attachPlayer({ play: jest.fn(), next: jest.fn(), previous: jest.fn(), canStep: () => false });
+    loaded = { ...AFRO[0], kind: 'radio' };
+    await engine.pause();
+    expect(mockNative.setPlayback.mock.calls.at(-1)[0]).toEqual(expect.objectContaining({ mediaId: AFRO[0].id, canStep: true }));
+  });
+
+  test('the car session takes the hardware buttons itself, and always lists skip for a station', () => {
+    const kt = fs.readFileSync(path.join(__dirname, '../modules/boa-auto/android/src/main/java/expo/modules/boaauto/BoaAutoService.kt'), 'utf8');
+    expect(kt).toMatch(/override fun onMediaButtonEvent/);
+    for (const key of ['KEYCODE_MEDIA_PLAY_PAUSE', 'KEYCODE_HEADSETHOOK', 'KEYCODE_MEDIA_NEXT', 'KEYCODE_MEDIA_PREVIOUS', 'KEYCODE_MEDIA_PLAY', 'KEYCODE_MEDIA_PAUSE']) expect(kt).toContain(key);
+    // One press is one action: only key-down, never auto-repeat.
+    expect(kt).toMatch(/if \(key\.action != KeyEvent\.ACTION_DOWN\) return true/);
+    expect(kt).toMatch(/if \(p\.canStep \|\| p\.mediaId != null\) actions = actions or PlaybackStateCompat\.ACTION_SKIP_TO_NEXT/);
+    expect(kt).toMatch(/setPlaybackToLocal\(AudioManager\.STREAM_MUSIC\)/);
+  });
+
+  test("R8 keeps Android Auto's media classes, so the car can always bind BOA Radio", () => {
+    const rules = require('../app.json').expo.plugins.find((p) => Array.isArray(p) && p[0] === 'expo-build-properties')[1].android.extraProguardRules;
+    expect(rules).toMatch(/-keep class expo\.modules\.boaauto\.\*\* \{ \*; \}/);
+    expect(rules).toMatch(/-keep class android\.support\.v4\.media\.\*\* \{ \*; \}/);
+    expect(rules).toMatch(/-keep class androidx\.media\.\*\* \{ \*; \}/);
+  });
+});
+
+describe('car themes', () => {
+  const { CAR_THEMES, DEFAULT_CAR_THEME, loadCarTheme, setCarTheme } = require('../src/audio/carTheme');
+  const native = (f) => fs.readFileSync(path.join(__dirname, '../modules/boa-auto/android/src/main/java/expo/modules/boaauto', f), 'utf8');
+
+  test("five themes, each drawn natively under the same id; Noir Gold until one's chosen", async () => {
+    expect(CAR_THEMES.map((t) => t.id)).toEqual(['noir', 'aurora', 'chrome', 'sunset', 'carbon']);
+    expect(DEFAULT_CAR_THEME).toBe('noir');
+    const art = native('BoaAutoArt.kt');
+    for (const t of CAR_THEMES) {
+      expect(art).toContain(`CarTheme("${t.id}", c("${t.colors[1]}"), c("${t.colors[0]}"), c("${t.glow}")`);
+    }
+    expect(await loadCarTheme()).toBe('noir');
+  });
+
+  test('choosing one saves it and the car redraws: every tile and the now playing art change address', async () => {
+    const AsyncStorage = require('@react-native-async-storage/async-storage');
+    await setCarTheme('sunset');
+    expect(mockNative.setTheme).toHaveBeenLastCalledWith('sunset');
+    expect(await AsyncStorage.getItem('boa.car.theme')).toBe('sunset');
+    expect(await setCarTheme('nope')).toBe('noir');
+    const provider = native('BoaAutoArtProvider.kt');
+    expect(provider).toMatch(/private fun version\(ctx: Context\) = "\$ART_VERSION\.\$\{BoaAutoStore\.theme\(ctx\)\.id\}"/);
+    expect(provider).toMatch(/composed\(ctx, "station\|\$\{theme\.id\}\|/);
+    expect(native('BoaAutoModule.kt')).toMatch(/Function\("setTheme"\)/);
+    expect(native('BoaAutoService.kt')).toMatch(/fun onTheme\(\)/);
+  });
+
+  test('the car is told the saved theme as JS starts, before it draws a tile', async () => {
+    await setCarTheme('carbon');
+    mockNative.setTheme.mockClear();
+    car.reset();
+    car.start();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(mockNative.setTheme).toHaveBeenCalledWith('carbon');
+    await setCarTheme('noir');
   });
 });

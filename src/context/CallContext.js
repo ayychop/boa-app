@@ -35,6 +35,8 @@ const PRIMED_MS = 40 * 60 * 1000;
 // way into picture in picture: the camera waits this long for the window
 // before it rests.
 const AWAY_MS = Platform.OS === 'android' ? 700 : 0;
+// Back on screen with a call ringing: how long before the call screen rings it.
+const RESUME_RING_MS = 400;
 // Unknown (just started) counts as on screen; only a known background rings by notification.
 const onScreen = () => AppState.currentState !== 'background';
 
@@ -202,6 +204,8 @@ export function CallProvider({ children }) {
     return () => sub.remove();
   }, []);
   useEffect(() => BoaCall.addScreenListener(setScreenOn), []);
+  const screenOnRef = useRef(true);
+  screenOnRef.current = screenOn;
   const away = onCall && (!screenOn || (appState === 'background' && !pip));
   useEffect(() => {
     if (!away) {
@@ -266,6 +270,9 @@ export function CallProvider({ children }) {
     setCall((cur) => (cur ? { ...cur, phase: 'active', startedAt: Date.now() } : cur));
     if (!c) return;
     if (c.direction === 'in') stopRingNotification(c.id);
+    // They answered while your phone was locked: the screen lights up on the
+    // call, over the lock screen, like a phone call (off again once it's over).
+    if (c.direction === 'out' && !screenOnRef.current) BoaCall.wakeForCall();
     media.join(c.id, {
       beauty: beautyRef.current,
       controls: controlsRef.current,
@@ -360,9 +367,13 @@ export function CallProvider({ children }) {
     [goLive],
   );
 
-  /** Someone is calling: ring, unless it's a call already heard or we're busy. ms: how long it has left. */
+  /**
+   * Someone is calling: ring, unless it's a call already heard or we're
+   * busy. ms: how long it has left. quiet: it's being answered right now
+   * (Answer on the lock screen opened the app), so it doesn't ring at all.
+   */
   const ringIn = useCallback(
-    ({ callId, from }, ms = RING_MS) => {
+    ({ callId, from }, ms = RING_MS, { quiet = false } = {}) => {
       if (!from?.id || !callId || blockedRef.current.has(from.id) || seen.current.has(callId)) return;
       seen.current.add(callId);
       let current = callRef.current;
@@ -390,8 +401,12 @@ export function CallProvider({ children }) {
       setVideo(NO_MEDIA);
       // The token while it rings, so answering connects at once.
       media.warmUp(callId, { engine: false }).catch(() => {});
-      if (onScreen()) ringHere();
-      else ringAway(callRef.current);
+      if (onScreen()) {
+        // The app came up on this call (a tap on its notification, a cold
+        // start): the notification's ring stops, so only one ever plays.
+        stopRingNotification(callId);
+        if (!quiet) ringHere();
+      } else ringAway(callRef.current);
       timers.current.ring = setTimeout(() => finish('missed'), ms);
     },
     [finish, expire, crossed],
@@ -407,8 +422,17 @@ export function CallProvider({ children }) {
       if (c.direction !== 'in') return;
       if (state === 'active') {
         stopRingNotification(c.id);
-        ringHere();
-      } else if (state === 'background') ringAway(c);
+        // A beat first: back on screen because Answer was pressed, the call
+        // is answered before this, and nothing rings in between.
+        clearTimeout(timers.current.resume);
+        timers.current.resume = setTimeout(() => {
+          const now = callRef.current;
+          if (now?.id === c.id && now.phase === 'ringing' && AppState.currentState === 'active') ringHere();
+        }, RESUME_RING_MS);
+      } else if (state === 'background') {
+        clearTimeout(timers.current.resume);
+        ringAway(c);
+      }
     });
     return () => sub.remove();
   }, [expire]);
@@ -480,9 +504,12 @@ export function CallProvider({ children }) {
   );
 
   /**
-   * Gets your next call ready before you tap the call button: its id, its
-   * token from agora-token and the Agora engine. The chat thread calls this
-   * when it opens and again after each call. Safe to call often.
+   * Gets your next call ready before you tap the call button: its id and
+   * its token from agora-token. The chat thread calls this when it opens
+   * and again after each call. Safe to call often. Never the Agora engine
+   * or the camera: those start only when you tap call (startCall), so
+   * opening a chat can never bring the camera up, or take the app down
+   * with it.
    */
   const primeCall = useCallback(() => {
     if (!userId || !media.available) return;
@@ -492,7 +519,7 @@ export function CallProvider({ children }) {
     const next = { id: newId(), at: Date.now() };
     primed.current = next;
     setPrep('preparing');
-    next.ready = media.warmUp(next.id).then(
+    next.ready = media.warmUp(next.id, { engine: false }).then(
       () => {
         if (primed.current === next) setPrep('ready');
         return true;
@@ -588,8 +615,9 @@ export function CallProvider({ children }) {
       const c = parseCallLink(url);
       if (!c) return;
       const left = ringLeft(c.sentAt);
-      if (left >= 2000) ringIn({ callId: c.callId, from: c.from }, left);
-      if (c.action === 'accept' && callRef.current?.id === c.callId) accept();
+      const answering = c.action === 'accept';
+      if (left >= 2000) ringIn({ callId: c.callId, from: c.from }, left, { quiet: answering });
+      if (answering && callRef.current?.id === c.callId) accept();
     };
     Linking.getInitialURL()
       .then((url) => url && fromLink(url))

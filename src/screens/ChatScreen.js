@@ -10,8 +10,8 @@ import { colors, space, type } from '../theme';
 
 /**
  * The Chat tab: the Creative Hub. Signed in with a profile, it's the Hub's
- * home (ChatHome: the Daily Spark, the Community Pulse and your
- * conversations); before that, the way in (email and password, then
+ * home (ChatHome: your conversations first, then the Daily Spark and the
+ * Community Pulse); before that, the way in (email and password, then
  * onboarding) right here in the tab, which turns into the home once done.
  */
 export default function ChatScreen({ navigation }) {

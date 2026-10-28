@@ -76,7 +76,7 @@ function StageLight({ width, height, star }) {
  * The header's backdrop, themed to the chosen Chat Vibe so the Hub matches
  * the thread: the vibe's own diagonal mesh, a couple of its lights as soft
  * glows (or, on the default Noir, the gold-and-violet stage light), and a
- * sleek BOA mark tinted to the vibe bleeding off the corner. It fades into
+ * small, faint BOA mark tinted to the vibe, centred. It fades into
  * the app's black by the lower half, so the name, bio, stats and the grid
  * below stay highly readable over any vibe, light or dark.
  */
@@ -93,7 +93,14 @@ function VibeHeader({ vibe, width, height, star }) {
           <View style={[styles.vibeGlowB, { backgroundColor: vibe.lights[1].color }]} />
         </>
       )}
-      <LogoWatermark height={Math.round(Math.min(width, 520) * 0.38)} opacity={vibe.light ? 0.16 : 0.12} color={vibe.accent} style={{ top: 2, right: -Math.round(width * 0.08) }} />
+      {/* Small, centred and barely there: a mark you notice, not one that shouts.
+          Spanning both edges and centring keeps it dead centre at any width. */}
+      <LogoWatermark
+        height={Math.round(Math.min(width, 520) * 0.16)}
+        opacity={vibe.light ? 0.08 : 0.06}
+        color={vibe.accent}
+        style={{ top: Math.round(height * 0.1), left: 0, right: 0, alignItems: 'center' }}
+      />
       <LinearGradient colors={['rgba(5,5,6,0)', 'rgba(5,5,6,0.5)', colors.bg]} locations={[0, 0.62, 0.96]} style={StyleSheet.absoluteFill} />
     </View>
   );

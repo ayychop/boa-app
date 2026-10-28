@@ -1,5 +1,6 @@
 package expo.modules.boacall
 
+import android.app.NotificationManager
 import android.app.Service
 import android.content.Context
 import android.content.Intent
@@ -8,6 +9,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.provider.Settings
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
@@ -42,7 +44,12 @@ class IncomingCallService : Service() {
       // Not allowed as a foreground service here: ring with the notification alone.
       runCatching { NotificationManagerCompat.from(this).notify(CallNotification.ID, notification) }
     }
-    Ringer.start(this, call.channelId, call.timeoutMs, call.vibration)
+    Ringer.start(this, call.channelId, call.soundUri, call.timeoutMs, call.vibration)
+    // A locked phone lights up for the call, like a phone call: the
+    // full-screen call screen if Android allows it, else the lock screen
+    // with the call on it, never a black screen.
+    ScreenWaker.wake(this, WAKE_MS)
+    showScreenIfBlocked(call)
     handler.removeCallbacksAndMessages(null)
     handler.postDelayed({ stopSelf() }, call.timeoutMs)
     return START_NOT_STICKY
@@ -57,7 +64,19 @@ class IncomingCallService : Service() {
     super.onDestroy()
   }
 
+  // Full-screen calls switched off (Android 14+ lets people): with "appear
+  // on top" allowed, the call screen can still open itself over the lock
+  // screen. Without either, the lit lock screen shows the call.
+  private fun showScreenIfBlocked(call: CallInfo) {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) return
+    val nm = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return
+    if (nm.canUseFullScreenIntent() || !Settings.canDrawOverlays(this)) return
+    runCatching { startActivity(call.into(Intent(this, IncomingCallActivity::class.java)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_USER_ACTION)) }
+  }
+
   companion object {
+    private const val WAKE_MS = 10_000L
+
     /** Starts ringing. False if Android wouldn't start it (the caller rings by notification then). */
     fun ring(context: Context, call: CallInfo): Boolean = try {
       ContextCompat.startForegroundService(context, call.into(Intent(context, IncomingCallService::class.java)))

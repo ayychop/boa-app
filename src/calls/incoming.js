@@ -2,7 +2,7 @@ import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import * as BoaCall from '../../modules/boa-call';
 import { callChannel } from '../chat/notifications';
-import { ringtoneHaptics } from './ringtone';
+import { loadRingChoice, ringSound } from './ringtone';
 
 // An incoming call while the app isn't on screen. On Android the ring
 // arrives as a data-only push (supabase/functions/call-push), which wakes
@@ -81,20 +81,27 @@ export const pendingCall = (callId) => pending.get(callId) ?? null;
 export async function ringNotification({ callId, from, sentAt, ringtone }) {
   const left = ringLeft(sentAt);
   if (left < 2000) return false;
-  pending.set(callId, { callId, from, sentAt });
+  const entry = { callId, from, sentAt };
+  pending.set(callId, entry);
   const call = { callId, from, sentAt };
   if (BoaCall.isAvailable) {
+    // Which ringtone this phone rings with (a closed app has only just read it).
+    await loadRingChoice();
+    // Answered, declined or brought on screen meanwhile: it mustn't ring now.
+    if (pending.get(callId) !== entry) return false;
+    // Your song, the BOA ringtone you chose (on its bass-hit buzz), or the phone's own.
+    const sound = ringSound(ringtone);
     return BoaCall.showIncoming({
       callId,
       name: from.name,
       avatar: from.avatar_url ?? '',
       link: callLink(call),
       acceptLink: callLink(call, 'accept'),
-      channelId: callChannel(ringtone),
-      // The buzz on the ringtone's bass hits, as in the app.
-      vibration: ringtoneHaptics(ringtone),
+      channelId: sound.channelId,
+      soundUri: sound.soundUri,
+      vibration: sound.vibration,
       // A moment past the ring, so the app ends it as missed first.
-      timeoutMs: left + 1500,
+      timeoutMs: Math.max(2000, ringLeft(sentAt)) + 1500,
     });
   }
   const id = await Notifications.scheduleNotificationAsync({

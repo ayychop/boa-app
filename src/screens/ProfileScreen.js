@@ -17,6 +17,7 @@ import useBottomSpace from '../hooks/useBottomSpace';
 import useLayout from '../hooks/useLayout';
 import { useZen } from '../context/ZenContext';
 import WidgetSettings from '../components/widget/WidgetSettings';
+import CarSettings from '../components/car/CarSettings';
 import CreditsSheet from '../components/zen/CreditsSheet';
 import { colors, fonts, radius, space, type } from '../theme';
 import { useOpenHub } from '../components/hub/hubNav';
@@ -62,6 +63,7 @@ export default function ProfileScreen({ navigation }) {
   const openAccount = () => (signedIn ? navigation.navigate('HubProfile') : navigation.navigate('HubWelcome', { next: 'back' }));
   const [widgetOpen, setWidgetOpen] = useState(false);
   const [creditsOpen, setCreditsOpen] = useState(false);
+  const [carOpen, setCarOpen] = useState(false);
   const inner = Math.min(width, 1100) - space.xl * 2;
   const columns = inner >= 960 ? 3 : 2;
   const tileWidth = Math.floor((inner - GRID_GAP * (columns - 1)) / columns);
@@ -93,12 +95,12 @@ export default function ProfileScreen({ navigation }) {
           style={styles.card}
         >
           <Fog opacity={0.28} />
-          {/* Big wordmark behind the avatar: the profile sits on the brand.
+          {/* A small, faint wordmark behind the avatar: the profile sits on the brand.
               Spanning left-to-right and centred keeps the whole mark on the
               card at any width (narrow phones through to an unfolded Fold),
               so it can't clip off either edge; the card's overflow:hidden
-              trims the bleed, and 0.06 keeps it under the text and vibes. */}
-          <LogoWatermark height={132} opacity={0.06} style={{ left: 0, right: 0, top: 72, alignItems: 'center' }} />
+              trims any bleed, and 0.05 keeps it under the text and vibes. */}
+          <LogoWatermark height={84} opacity={0.05} style={{ left: 0, right: 0, top: 84, alignItems: 'center' }} />
           <Viewfinder inset={12} size={12} />
           <BoaLogo height={34} />
           <View style={styles.identity}>
@@ -249,6 +251,23 @@ export default function ProfileScreen({ navigation }) {
           ))}
         </View>
 
+        <Slate style={{ marginTop: space.xxl, marginBottom: space.md }}>Car Settings</Slate>
+        <View style={list}>
+          <Pressable
+            onPress={() => setCarOpen(true)}
+            accessibilityRole="button"
+            testID="profile-car-settings"
+            style={({ pressed }) => [row, pressed && { backgroundColor: colors.surfaceRaised }]}
+          >
+            <Ionicons name="car-sport-outline" size={19} color={colors.gold} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.linkText}>Android Auto theme</Text>
+              <Text style={styles.linkDetail}>How BOA Radio looks on your car's screen</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
+          </Pressable>
+        </View>
+
         {forms.submissions.length > 0 && (
           <>
             <Slate style={{ marginTop: space.xxl, marginBottom: space.md }}>Your submissions</Slate>
@@ -286,6 +305,7 @@ export default function ProfileScreen({ navigation }) {
       </ScrollView>
       <WidgetSettings open={widgetOpen} onClose={() => setWidgetOpen(false)} />
       <CreditsSheet open={creditsOpen} onClose={() => setCreditsOpen(false)} />
+      <CarSettings open={carOpen} onClose={() => setCarOpen(false)} />
     </View>
   );
 }

@@ -35,6 +35,11 @@ class BoaAutoModule : Module() {
       main.post { BoaAutoService.current?.onCatalogue() }
     }
 
+    // The car theme (Profile > Car Settings): noir, aurora, chrome, sunset or carbon.
+    Function("setTheme") { id: String ->
+      if (BoaAutoStore.setTheme(context, id)) main.post { BoaAutoService.current?.onTheme() }
+    }
+
     // status: idle, loading, playing, paused, ended or error. artwork is the
     // station's logo (https) or its rendered record (file://). favourite
     // and hyped are null when the car shouldn't offer the heart or the fire.

@@ -13,7 +13,7 @@ const native = Platform.OS === 'android' ? requireOptionalNativeModule('BoaCall'
 export const isAvailable = !!native;
 
 /**
- * Rings: { callId, name, avatar, link, acceptLink, channelId, timeoutMs, vibration }.
+ * Rings: { callId, name, avatar, link, acceptLink, channelId, soundUri, timeoutMs, vibration }.
  * Resolves to whether the notification went up.
  */
 export async function showIncoming(call) {
@@ -23,6 +23,36 @@ export async function showIncoming(call) {
   } catch {
     return false;
   }
+}
+
+/**
+ * Rings with the app on screen, through the same native ringer as a locked
+ * phone: { soundUri, channelId, timeoutMs, vibration }. The sound is
+ * soundUri (your own song), else channelId's (a BOA ringtone), else the
+ * phone's own ringtone. Resolves to whether it rang.
+ */
+export async function startRinger(ring) {
+  if (!native?.startRinger) return false;
+  try {
+    await native.startRinger({ soundUri: '', channelId: '', timeoutMs: 60000, vibration: [], ...ring });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Stops that ring. */
+export async function stopRinger() {
+  try {
+    await native?.stopRinger?.();
+  } catch {}
+}
+
+/** The screen is off and a call needs you: it lights up and shows the call over the lock screen. */
+export async function wakeForCall() {
+  try {
+    await native?.wakeForCall?.();
+  } catch {}
 }
 
 /** Stops ringing. */

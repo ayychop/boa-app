@@ -10,8 +10,9 @@ import * as BoaCall from '../../modules/boa-call';
 //
 // Android 13 and older grant full-screen calls with the app. On Android 14+
 // it's granted to calling apps too, but people can switch it off; only then
-// is there anything to ask, and it's asked once, plainly, after a call
-// (never at launch), at most once a month. It's asked in BOA's own words,
+// is there anything to ask, and it's asked once, plainly, after a call or
+// on opening the Creative Hub where calls live (never at app launch), at
+// most once a month. It's asked in BOA's own words,
 // in BOA's own sheet (src/components/calls/CallWakeUpPrompt.js), with a
 // button straight into the system setting; a plain alert is only the
 // fallback when that sheet isn't on screen.

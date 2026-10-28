@@ -102,9 +102,47 @@ describe('Ringtone screen', () => {
     expect(ringtoneById('nope').id).toBe('hiphop');
   });
 
+  test("nothing chosen yet: the phone's own ringtone carries the tick, and BOA's are there to pick", async () => {
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    const { ringChoice, setRingMode } = require('../src/calls/ringtone');
+    await setRingMode('phone');
+    await render(<RingtoneScreen navigation={navigation} />);
+    await act(async () => {});
+    expect(screen.getByTestId('ringtone-phone-selected')).toBeOnTheScreen();
+    expect(screen.queryByTestId('ringtone-hiphop-selected')).toBeNull();
+    // The phone's own has nothing to preview: it's the one you know.
+    expect(screen.queryByTestId('ringtone-play-phone')).toBeNull();
+    await user.press(screen.getByTestId('ringtone-hiphop'));
+    expect(ringChoice()).toBe('boa');
+    expect(screen.getByTestId('ringtone-hiphop-selected')).toBeOnTheScreen();
+    expect(screen.queryByTestId('ringtone-phone-selected')).toBeNull();
+    // And back to the phone's own.
+    await user.press(screen.getByTestId('ringtone-phone'));
+    expect(ringChoice()).toBe('phone');
+    expect(screen.getByTestId('ringtone-phone-selected')).toBeOnTheScreen();
+  });
+
+  test('a ringtone picked before the phone default existed keeps ringing; the default one alone is not a choice', async () => {
+    const ringtone = require('../src/calls/ringtone');
+    const AsyncStorage = require('@react-native-async-storage/async-storage');
+    await AsyncStorage.removeItem('boa.ringtone.mode');
+    let fresh;
+    jest.isolateModules(() => {
+      fresh = require('../src/calls/ringtone');
+    });
+    await fresh.adoptChosenRingtone('hiphop');
+    expect(await fresh.loadRingChoice()).toBe('phone');
+    await fresh.adoptChosenRingtone('bashment');
+    expect(fresh.ringChoice()).toBe('boa');
+    await AsyncStorage.removeItem('boa.ringtone.mode');
+    await ringtone.setRingMode('phone');
+  });
+
   test('preview plays without choosing; tapping a row chooses it and the checkmark moves', async () => {
     const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    await require('../src/calls/ringtone').setRingMode('boa');
     const { rerender } = await render(<RingtoneScreen navigation={navigation} />);
+    await act(async () => {});
     expect(screen.getByTestId('ringtone-hiphop-selected')).toBeOnTheScreen();
 
     createAudioPlayer.mockClear();
