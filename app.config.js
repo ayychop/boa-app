@@ -16,8 +16,23 @@ const path = require('path');
 // the call's virtual backgrounds (plugins/withBanuba.js) and hands the app
 // its token. Without it, calls use Agora's own virtual background.
 module.exports = ({ config }) => {
+  // Android FCM needs a real google-services.json on disk before prebuild
+  // runs. GOOGLE_SERVICES_JSON can reach the builder two ways: an EAS
+  // file-type variable, where it holds a path EAS has already written, or a
+  // secret string, where it holds the JSON itself. In the second case the
+  // file doesn't exist yet, so write it out and point at it; prebuild then
+  // finds it. With nothing set (local dev) the committed file is used.
   const local = path.join(__dirname, 'google-services.json');
-  const file = process.env.GOOGLE_SERVICES_JSON || (fs.existsSync(local) ? './google-services.json' : null);
+  const env = process.env.GOOGLE_SERVICES_JSON;
+  let file = null;
+  if (env && env.trim().startsWith('{')) {
+    fs.writeFileSync(local, env);
+    file = './google-services.json';
+  } else if (env) {
+    file = env;
+  } else if (fs.existsSync(local)) {
+    file = './google-services.json';
+  }
   let out = config;
   if (file) out = { ...out, android: { ...out.android, googleServicesFile: file } };
   if (process.env.BOA_AUTOMOTIVE === '1') out = { ...out, plugins: [...(out.plugins ?? []), './plugins/withAutomotiveVideo'] };
