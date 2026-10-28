@@ -898,8 +898,9 @@ const styles = StyleSheet.create({
   digits: { flexDirection: 'row', justifyContent: 'center' },
   clock: { fontFamily: fonts.extralight, color: colors.text, fontVariant: ['tabular-nums'], textAlign: 'center' },
   period: { position: 'absolute', left: '100%', marginLeft: space.sm, fontFamily: fonts.serif, color: colors.gold },
-  // Faint enough to read as part of the dial, not a logo on top of it.
-  mark: { marginTop: space.lg, opacity: 0.3 },
+  // Faint enough to read as part of the dial, not a logo on top of it, but
+  // lifted a touch so the mark is legible against a bright screensaver.
+  mark: { marginTop: space.lg, opacity: 0.42 },
   sweep: { height: 2, marginTop: space.md, borderRadius: 1, backgroundColor: 'rgba(243,239,232,0.12)', justifyContent: 'center' },
   sweepFill: { position: 'absolute', left: 0, height: 2, borderRadius: 1, backgroundColor: 'rgba(226,168,75,0.75)' },
   bead: { position: 'absolute', left: 0, width: 6, height: 6, borderRadius: 3, backgroundColor: colors.gold },

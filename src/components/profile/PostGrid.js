@@ -16,8 +16,13 @@ export const PROFILE_TABS = [
 const GAP = 2;
 export const COLUMNS = 3;
 
-/** Posts, Reels, Tagged: icon tabs with a gold bar that glides to the chosen one. */
-export function ProfileTabs({ value, onChange, width }) {
+const tabAlpha = (hex, a) => {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+};
+
+/** Posts, Reels, Tagged: icon tabs with a bar that glides to the chosen one, in the vibe's accent (gold by default). */
+export function ProfileTabs({ value, onChange, width, accent = colors.gold }) {
   const slot = width / PROFILE_TABS.length;
   const x = useSharedValue(PROFILE_TABS.findIndex((t) => t.id === value) * slot);
   useEffect(() => {
@@ -48,7 +53,12 @@ export function ProfileTabs({ value, onChange, width }) {
         );
       })}
       <Animated.View style={[styles.tabBar, { width: slot }, bar]}>
-        <LinearGradient colors={['rgba(226,168,75,0)', colors.gold, 'rgba(226,168,75,0)']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.tabBarLine} />
+        <LinearGradient
+          colors={[tabAlpha(accent, 0), accent, tabAlpha(accent, 0)]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={[styles.tabBarLine, { boxShadow: `0px 0px 8px ${tabAlpha(accent, 0.8)}` }]}
+        />
       </Animated.View>
     </View>
   );

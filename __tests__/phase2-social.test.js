@@ -63,6 +63,7 @@ jest.mock('../src/components/profile/Favourites', () => () => null);
 const splits = require('../src/api/splits');
 const posts = require('../src/api/posts');
 const dayOne = require('../src/api/dayOne');
+const vibes = require('../src/chat/vibes');
 
 const flush = () => act(async () => {});
 const nav = () => ({ navigate: jest.fn(), goBack: jest.fn(), push: jest.fn(), replace: jest.fn() });
@@ -85,6 +86,7 @@ beforeEach(() => {
   mockCalls.length = 0;
   mockRpc.mockClear();
   dayOne.forgetDayOnes();
+  vibes.resetChatVibe();
   mockHub = { userId: 'user-me', profile: ME, isOnline: () => false, blocked: new Set(), block: jest.fn(), unblock: jest.fn() };
 });
 
@@ -122,7 +124,13 @@ describe('split sheets', () => {
   });
 
   test('status reads from your side', () => {
-    const sheet = { status: 'draft', parties: [{ user_id: 'user-me', agreed_at: null }, { user_id: 'user-kofi', agreed_at: 'x' }] };
+    const sheet = {
+      status: 'draft',
+      parties: [
+        { user_id: 'user-me', agreed_at: null },
+        { user_id: 'user-kofi', agreed_at: 'x' },
+      ],
+    };
     expect(splits.sheetStatus(sheet, 'user-me').label).toBe('Waiting on you');
     expect(splits.sheetStatus(sheet, 'user-kofi').label).toBe('Waiting on 1');
     expect(splits.sheetStatus({ ...sheet, status: 'signed' }, 'user-me').label).toBe('Signed');
@@ -185,12 +193,20 @@ describe('posts and Day One, the rules', () => {
     expect(mockRpc).toHaveBeenCalledWith('claim_day_one', { k: 'station', item: 'stn-1', label: 'Capital Xtra' });
     expect(dayOne.placeLine(12)).toBe('#12 of the first 1,000');
   });
-
 });
 
 describe('the Hub profile', () => {
   const HubProfileScreen = require('../src/screens/hub/HubProfileScreen').default;
-  const POST = { id: 'p1', author_id: 'user-me', kind: 'image', media_url: 'https://cdn/p1.jpg', media_path: 'user-me/p1.jpg', caption: 'Studio night', tagged: [], created_at: '2026-10-25T20:00:00Z' };
+  const POST = {
+    id: 'p1',
+    author_id: 'user-me',
+    kind: 'image',
+    media_url: 'https://cdn/p1.jpg',
+    media_path: 'user-me/p1.jpg',
+    caption: 'Studio night',
+    tagged: [],
+    created_at: '2026-10-25T20:00:00Z',
+  };
   const REEL = { ...POST, id: 'p2', kind: 'video', media_url: 'https://cdn/p2.mp4', media_duration_ms: 31000, caption: 'Freestyle' };
 
   test('yours: a glowing ring for a BOA Star, stats, Edit profile and Splits, and no followers anywhere', async () => {
@@ -216,6 +232,16 @@ describe('the Hub profile', () => {
     expect(screen.getByTestId('chat-vibe-sheet')).toBeOnTheScreen();
     await user.press(screen.getByTestId('post-tile-p2'));
     expect(navigation.navigate).toHaveBeenCalledWith('HubPost', { post: REEL });
+  });
+
+  test('the header is themed to the chosen Chat Vibe, so the Hub matches the thread', async () => {
+    await vibes.setChatVibe('neon');
+    mockTables.posts = (calls) => (calls.some((c) => c.key === 'select' && c.args[1]?.head) ? { count: 0, error: null } : { data: [], error: null });
+    await show(HubProfileScreen, { id: 'user-kofi' });
+    // The vibe-themed backdrop is on screen, and the profile still reads fine.
+    expect(screen.getByTestId('profile-vibe-header')).toBeOnTheScreen();
+    expect(screen.getByTestId('profile-message')).toBeOnTheScreen();
+    expect(screen.getByText('Kofi Boateng')).toBeOnTheScreen();
   });
 
   test("someone else's: Message (no Follow), and an empty grid that says so", async () => {
@@ -320,7 +346,7 @@ describe('hearts', () => {
     expect(mockCalls).toHaveLength(0);
   });
 
-  test('the hearts inbox opens the liker\'s profile', async () => {
+  test("the hearts inbox opens the liker's profile", async () => {
     const HubHeartsScreen = require('../src/screens/hub/HubHeartsScreen').default;
     mockHub = { ...mockHub, seeHearts: jest.fn() };
     mockTables.hearts = { data: [{ liker_id: 'user-kofi', target_id: 'p1', created_at: new Date().toISOString() }], error: null };

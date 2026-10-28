@@ -27,5 +27,5 @@ test('the screensaver is signed with a faint BOA mark under the clock; the Zen p
   expect(screen.getByTestId('zen-screensaver')).toBeOnTheScreen();
   const mark = screen.getByTestId('zen-logo');
   expect(mark).toBeOnTheScreen();
-  expect(mark).toHaveStyle({ opacity: 0.3 });
+  expect(mark).toHaveStyle({ opacity: 0.42 });
 });

@@ -21,12 +21,31 @@ import BoaCodeSheet from '../../components/hub/BoaCode';
 import ChatVibeSheet from '../../components/chat/ChatVibeSheet';
 import { GridEmpty, PostGrid, ProfileTabs } from '../../components/profile/PostGrid';
 import Favourites from '../../components/profile/Favourites';
-import { GoldBadge, Tappable } from '../../components/ui';
+import { GoldBadge, LogoWatermark, Tappable } from '../../components/ui';
+import useChatVibe, { allowedVibe } from '../../chat/vibes';
+import { usePremiumUnlocked } from '../../context/PremiumContext';
 import { colors, fonts, radius, space, type } from '../../theme';
 import { GridSkeleton, ProfileSkeleton } from '../../components/Skeleton';
 
 // Unfolded and on tablets the profile is a centred column, like a phone's.
 const MAX_WIDTH = 720;
+
+const hexToRgb = (hex) => {
+  const n = parseInt(hex.slice(1), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+};
+const alpha = (hex, a) => {
+  const [r, g, b] = hexToRgb(hex);
+  return `rgba(${r},${g},${b},${a})`;
+};
+const luma = (hex) => {
+  const [r, g, b] = hexToRgb(hex);
+  return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+};
+// An accent that stays legible on the app's near-black chrome (the header
+// icons, the tab underline). A light vibe's accent can be near-black, so it
+// falls back to BOA gold there; the header mesh still carries its colour.
+const chromeAccent = (vibe) => (luma(vibe.accent) < 0.22 ? colors.gold : vibe.accent);
 
 /**
  * The stage light behind the header: warm gold from the top right, violet
@@ -53,6 +72,33 @@ function StageLight({ width, height, star }) {
   );
 }
 
+/**
+ * The header's backdrop, themed to the chosen Chat Vibe so the Hub matches
+ * the thread: the vibe's own diagonal mesh, a couple of its lights as soft
+ * glows (or, on the default Noir, the gold-and-violet stage light), and a
+ * sleek BOA mark tinted to the vibe bleeding off the corner. It fades into
+ * the app's black by the lower half, so the name, bio, stats and the grid
+ * below stay highly readable over any vibe, light or dark.
+ */
+function VibeHeader({ vibe, width, height, star }) {
+  const noir = vibe.id === 'noir';
+  return (
+    <View pointerEvents="none" style={StyleSheet.absoluteFill} testID="profile-vibe-header">
+      <LinearGradient colors={vibe.mesh} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+      {noir ? (
+        <StageLight width={width} height={height} star={star} />
+      ) : (
+        <>
+          <View style={[styles.vibeGlowA, { backgroundColor: vibe.lights[0].color }]} />
+          <View style={[styles.vibeGlowB, { backgroundColor: vibe.lights[1].color }]} />
+        </>
+      )}
+      <LogoWatermark height={Math.round(Math.min(width, 520) * 0.38)} opacity={vibe.light ? 0.16 : 0.12} color={vibe.accent} style={{ top: 2, right: -Math.round(width * 0.08) }} />
+      <LinearGradient colors={['rgba(5,5,6,0)', 'rgba(5,5,6,0.5)', colors.bg]} locations={[0, 0.62, 0.96]} style={StyleSheet.absoluteFill} />
+    </View>
+  );
+}
+
 function Stat({ value, label, onPress, testID, last }) {
   return (
     <Pressable
@@ -73,20 +119,26 @@ function Stat({ value, label, onPress, testID, last }) {
   );
 }
 
-/** A full-width action: gold for the main one, dark glass for the rest. */
-function Action({ label, icon, onPress, primary, disabled, testID }) {
+/**
+ * A full-width action: the main one fills with the vibe's send gradient (gold
+ * on Noir, neon on Neon, and so on) over a legible foreground; the rest are
+ * dark glass.
+ */
+function Action({ label, icon, onPress, primary, disabled, testID, send, sendFg, glow }) {
+  const fg = primary ? (sendFg ?? colors.bg) : colors.text;
   return (
     <Tappable
       onPress={disabled ? undefined : onPress}
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityState={{ disabled: !!disabled }}
-      style={[styles.action, primary ? styles.actionPrimary : styles.actionGlass, disabled && { opacity: 0.5 }]}
+      style={[styles.action, primary ? styles.actionPrimary : styles.actionGlass, primary && glow ? { boxShadow: `0px 6px 20px ${glow}` } : null, disabled && { opacity: 0.5 }]}
       testID={testID}
     >
+      {primary && send ? <LinearGradient colors={send} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} /> : null}
       {!primary ? <LinearGradient colors={['rgba(255,255,255,0.10)', 'rgba(255,255,255,0.03)']} style={StyleSheet.absoluteFill} /> : null}
-      {icon ? <Ionicons name={icon} size={16} color={primary ? colors.bg : colors.text} /> : null}
-      <Text style={[styles.actionText, { color: primary ? colors.bg : colors.text }]} numberOfLines={1}>
+      {icon ? <Ionicons name={icon} size={16} color={fg} /> : null}
+      <Text style={[styles.actionText, { color: fg }]} numberOfLines={1}>
         {label}
       </Text>
     </Tappable>
@@ -120,6 +172,15 @@ export default function HubProfileScreen({ navigation, route }) {
   const [heroH, setHeroH] = useState(420);
   const [codeOpen, setCodeOpen] = useState(false);
   const [vibeOpen, setVibeOpen] = useState(false);
+
+  // The chosen Chat Vibe, device-wide, so the Hub matches the thread (a
+  // Premium vibe shows only while Premium is on, else Noir). The header mesh
+  // and the accents below all follow it.
+  const { vibe: savedVibe } = useChatVibe();
+  const vibe = allowedVibe(savedVibe, usePremiumUnlocked());
+  const accent = chromeAccent(vibe);
+  // The default Noir keeps the app's white header icons; a vibe tints them.
+  const iconTone = vibe.id === 'noir' ? colors.text : accent;
 
   // Whether they take messages from you (their privacy setting): asked of
   // the database, which never says why.
@@ -250,9 +311,9 @@ export default function HubProfileScreen({ navigation, route }) {
         right={
           mine ? (
             <View style={styles.headerActions}>
-              <IconButton icon="qr-code-outline" label="Your BOA Code" onPress={() => setCodeOpen(true)} testID="profile-boa-code" />
-              <IconButton icon="add" label="New post" onPress={newPost} testID="profile-new-post" />
-              <IconButton icon="settings-outline" label="Hub settings" onPress={() => navigation.navigate('HubSettings')} />
+              <IconButton icon="qr-code-outline" label="Your BOA Code" onPress={() => setCodeOpen(true)} tone={iconTone} testID="profile-boa-code" />
+              <IconButton icon="add" label="New post" onPress={newPost} tone={iconTone} testID="profile-new-post" />
+              <IconButton icon="settings-outline" label="Hub settings" onPress={() => navigation.navigate('HubSettings')} tone={iconTone} />
             </View>
           ) : (
             <IconButton icon="flag-outline" label="Report user" onPress={() => setReporting({ user: person })} testID="hub-report-user" />
@@ -262,11 +323,11 @@ export default function HubProfileScreen({ navigation, route }) {
       <ScrollView
         contentContainerStyle={{ paddingBottom: insets.bottom + space.xxl, alignItems: 'center' }}
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={colors.gold} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={accent} />}
       >
         <View style={{ width }}>
           <Animated.View entering={FadeInDown.springify().damping(18)} style={styles.hero} onLayout={(e) => setHeroH(Math.round(e.nativeEvent.layout.height))}>
-            <StageLight width={width} height={heroH} star={star} />
+            <VibeHeader vibe={vibe} width={width} height={heroH} star={star} />
 
             <View style={styles.topRow}>
               <View style={[styles.avatarWrap, star && styles.avatarGlow]} testID={star ? 'profile-star-ring' : undefined}>
@@ -327,7 +388,17 @@ export default function HubProfileScreen({ navigation, route }) {
               ) : (
                 <>
                   {open ? (
-                    <Action primary label={opening ? 'Opening' : 'Message'} icon="chatbubble-ellipses" onPress={message} disabled={opening} testID="profile-message" />
+                    <Action
+                      primary
+                      label={opening ? 'Opening' : 'Message'}
+                      icon="chatbubble-ellipses"
+                      onPress={message}
+                      disabled={opening}
+                      send={vibe.send}
+                      sendFg={vibe.sendIcon}
+                      glow={alpha(vibe.accent, 0.4)}
+                      testID="profile-message"
+                    />
                   ) : (
                     <Action label="Messages off" icon="lock-closed-outline" onPress={() => Alert.alert('Messages off', MESSAGES_CLOSED)} testID="profile-messages-off" />
                   )}
@@ -355,7 +426,7 @@ export default function HubProfileScreen({ navigation, route }) {
 
           <Favourites userId={id} myId={userId} />
 
-          <ProfileTabs value={tab} onChange={setTab} width={width} />
+          <ProfileTabs value={tab} onChange={setTab} width={width} accent={accent} />
           {!grid ? (
             <GridSkeleton width={width} style={{ marginTop: space.md }} />
           ) : grid.rows.length ? (
@@ -379,6 +450,10 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   headerActions: { flexDirection: 'row', gap: space.sm },
   hero: { paddingHorizontal: space.lg, paddingTop: space.sm, overflow: 'hidden' },
+  // Two soft lights in the vibe's own colours, high in the header, standing
+  // in for the gold-and-violet stage light on anything but Noir.
+  vibeGlowA: { position: 'absolute', top: -50, left: -40, width: 220, height: 220, borderRadius: 110, opacity: 0.55 },
+  vibeGlowB: { position: 'absolute', top: -20, right: -50, width: 240, height: 240, borderRadius: 120, opacity: 0.4 },
   topRow: { flexDirection: 'row', alignItems: 'center', gap: space.lg },
   avatarWrap: { borderRadius: 999 },
   avatarGlow: { boxShadow: '0px 0px 28px rgba(226,168,75,0.7)' },
