@@ -12,7 +12,8 @@
     "preview": {
       "distribution": "internal",
       "android": {
-        "buildType": "apk"
+        "buildType": "apk",
+        "resourceClass": "large"
       },
       "buildArtifactPaths": ["android/app/build/outputs/mapping/release/mapping.txt"],
       "environment": "preview",

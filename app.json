@@ -108,6 +108,7 @@
       ],
       "./plugins/withBoaWidget",
       "./plugins/withCallPictureInPicture",
+      "./plugins/withGradleMemory",
       "expo-video",
       "expo-web-browser",
       [
