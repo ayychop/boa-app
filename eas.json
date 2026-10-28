@@ -15,7 +15,10 @@
         "buildType": "apk"
       },
       "buildArtifactPaths": ["android/app/build/outputs/mapping/release/mapping.txt"],
-      "environment": "preview"
+      "environment": "preview",
+      "env": {
+        "ORG_GRADLE_PROJECT_reactNativeArchitectures": "arm64-v8a"
+      }
     },
     "production": {
       "autoIncrement": true,
