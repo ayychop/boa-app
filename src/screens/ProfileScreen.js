@@ -93,8 +93,12 @@ export default function ProfileScreen({ navigation }) {
           style={styles.card}
         >
           <Fog opacity={0.28} />
-          {/* Big wordmark behind the avatar: the profile sits on the brand. */}
-          <LogoWatermark height={136} opacity={0.06} style={{ left: -30, top: 70 }} />
+          {/* Big wordmark behind the avatar: the profile sits on the brand.
+              Spanning left-to-right and centred keeps the whole mark on the
+              card at any width (narrow phones through to an unfolded Fold),
+              so it can't clip off either edge; the card's overflow:hidden
+              trims the bleed, and 0.06 keeps it under the text and vibes. */}
+          <LogoWatermark height={132} opacity={0.06} style={{ left: 0, right: 0, top: 72, alignItems: 'center' }} />
           <Viewfinder inset={12} size={12} />
           <BoaLogo height={34} />
           <View style={styles.identity}>
