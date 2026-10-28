@@ -1,0 +1,10 @@
+{
+  "scene": "BOA Background",
+  "version": "2.0.0",
+  "camera": {},
+  "background": {
+    "blur": 0,
+    "content_mode": "scale_to_fill",
+    "use_filter": true
+  }
+}

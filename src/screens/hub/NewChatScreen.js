@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Keyboard, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, FlatList, Keyboard, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { setStatusBarStyle } from 'expo-status-bar';
@@ -47,7 +47,7 @@ import { withChatTheme } from '../../chat/bubbleTheme';
 import { MediaTile, MediaViewer, VoiceNote } from '../../components/chat/media';
 import { SendMediaSheet, ViewOnceTile, ViewOnceViewer } from '../../components/chat/ViewOnce';
 import { Button, PulseDot } from '../../components/ui';
-import { MessagesSkeleton } from '../../components/Skeleton';
+import { LoadingDots, MessagesSkeleton } from '../../components/Skeleton';
 import ErrorBoundary from '../../components/ErrorBoundary';
 import { chatTime } from './HubChatsScreen';
 import { haptics } from '../../utils/haptics';
@@ -285,11 +285,7 @@ function Header({ name, person, online, badge, status, vibe, motion, onBack, onP
             style={({ pressed }) => [styles.round, { borderColor: vibe.accentEdge, backgroundColor: vibe.accentSoft }, pressed && styles.pressed]}
             testID="thread-call"
           >
-            {starting || callState === 'preparing' ? (
-              <ActivityIndicator size="small" color={vibe.accent} testID="thread-call-spinner" />
-            ) : (
-              <Ionicons name="videocam-outline" size={19} color={vibe.accent} />
-            )}
+            {starting || callState === 'preparing' ? <LoadingDots color={vibe.accent} size={5} testID="thread-call-spinner" /> : <Ionicons name="videocam-outline" size={19} color={vibe.accent} />}
           </Pressable>
         ) : null}
         <Pressable
@@ -804,7 +800,7 @@ function Thread({ navigation, route }) {
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="interactive"
             ListHeaderComponent={theyType ? <TypingIndicator name={name} vibe={vibe} /> : null}
-            ListFooterComponent={older === 'loading' ? <ActivityIndicator color={vibe.accent} style={{ margin: space.lg }} /> : null}
+            ListFooterComponent={older === 'loading' ? <LoadingDots color={vibe.accent} style={{ margin: space.lg }} /> : null}
             ListEmptyComponent={
               <View style={styles.empty}>
                 <Text style={[type.bodyMuted, { textAlign: 'center', color: vibe.inkMuted }]}>Say hello to {name}.</Text>

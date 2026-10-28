@@ -10,6 +10,7 @@ import * as signal from '../calls/signaling';
 import * as media from '../calls/media';
 import { startRingtone, stopRingtone } from '../calls/ringtone';
 import { DEFAULT_BEAUTY, fromStored, toStored } from '../calls/beauty';
+import { DEFAULT_BACKGROUND, fromStored as backgroundFromStored } from '../calls/backgrounds';
 import CallScreen from '../components/calls/CallScreen';
 import { haptics } from '../utils/haptics';
 import { blockScreenshots } from '../calls/privacy';
@@ -25,6 +26,7 @@ export { RING_MS };
 // How long "Call ended" stays up before the screen closes.
 const ENDED_MS = 1600;
 const BEAUTY_KEY = 'boa.call.beauty';
+const BACKGROUND_KEY = 'boa.call.background';
 // Whether you've hidden your own picture (it's still sent; you just don't see it).
 const SELF_VIEW_KEY = 'boa.call.selfHidden';
 // How long a call got ready ahead of time stays usable (its token lasts an hour).
@@ -98,6 +100,10 @@ export function CallProvider({ children }) {
   controlsRef.current = controls;
   const beautyRef = useRef(beauty);
   beautyRef.current = beauty;
+  // What's behind you on camera (src/calls/backgrounds.js), and how the
+  // last change went: 'ok', 'unsupported' (this phone can't), 'failed', or 'later'.
+  const [background, setBackgroundState] = useState(DEFAULT_BACKGROUND);
+  const [backgroundStatus, setBackgroundStatus] = useState('ok');
   const timers = useRef({});
   // The next call you place, got ready ahead (its id, token and the engine):
   // { id, at, ready }. prep says how that's going, for the call button.
@@ -117,6 +123,15 @@ export function CallProvider({ children }) {
     AsyncStorage.getItem(BEAUTY_KEY)
       .then((raw) => raw && setBeautyState(fromStored(JSON.parse(raw))))
       .catch(() => {});
+    AsyncStorage.getItem(BACKGROUND_KEY)
+      .then((raw) => {
+        if (!raw) return;
+        const saved = backgroundFromStored(JSON.parse(raw));
+        setBackgroundState(saved);
+        // Held until a call opens the camera, then drawn from its first frame.
+        media.setBackground(saved);
+      })
+      .catch(() => {});
     AsyncStorage.getItem(SELF_VIEW_KEY)
       .then((v) => v === '1' && setSelfHiddenState(true))
       .catch(() => {});
@@ -130,6 +145,18 @@ export function CallProvider({ children }) {
     AsyncStorage.setItem(BEAUTY_KEY, JSON.stringify(toStored(next))).catch(() => {});
     media.setBeauty(next);
   }, []);
+
+  // Saved at once and sent to the camera; a phone that can't do it says so.
+  const setBackground = useCallback((next) => {
+    setBackgroundState(next);
+    AsyncStorage.setItem(BACKGROUND_KEY, JSON.stringify(next)).catch(() => {});
+    Promise.resolve(media.setBackground(next))
+      .then((status) => setBackgroundStatus(status ?? 'ok'))
+      .catch(() => setBackgroundStatus('failed'));
+  }, []);
+
+  // Tap to focus, from the self view.
+  const focusAt = useCallback((x, y) => media.focusAt(x, y), []);
 
   // Brightness and Contrast while their sliders move: straight to the camera,
   // nothing saved or re-rendered until they're let go (setBeauty then).
@@ -612,6 +639,10 @@ export function CallProvider({ children }) {
       setBeauty,
       previewBrightness,
       previewContrast,
+      background,
+      setBackground,
+      backgroundStatus,
+      focusAt,
       facing,
       selfHidden,
       setSelfHidden,
@@ -636,6 +667,10 @@ export function CallProvider({ children }) {
       setBeauty,
       previewBrightness,
       previewContrast,
+      background,
+      setBackground,
+      backgroundStatus,
+      focusAt,
       facing,
       selfHidden,
       setSelfHidden,

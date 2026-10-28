@@ -1,16 +1,8 @@
 import { memo, useEffect, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useIsFocused } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Animated, {
-  Easing,
-  FadeIn,
-  useAnimatedStyle,
-  useReducedMotion,
-  useSharedValue,
-  withRepeat,
-  withTiming,
-} from 'react-native-reanimated';
+import Animated, { Easing, FadeIn, useAnimatedStyle, useReducedMotion, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { featuredProduction, productions, talent } from '../data/boaContent';
@@ -35,6 +27,7 @@ import ZenButton from '../components/display/ZenButton';
 import WeatherPill from '../components/weather/WeatherPill';
 import { openPage } from '../navigation/ref';
 import { colors, fonts, space, type } from '../theme';
+import { LoadingDots } from '../components/Skeleton';
 
 // The Radio tab's own genre filters, so the two never disagree. The first
 // four keep the slate on one line.
@@ -69,18 +62,9 @@ const HeroBackdrop = memo(function HeroBackdrop({ production, width, height, bod
     <View pointerEvents="none" style={[StyleSheet.absoluteFill, { overflow: 'hidden' }]} testID="home-hero-backdrop">
       <View style={[StyleSheet.absoluteFill, { transform: [{ translateY: lift }] }]}>{art}</View>
       <Fog opacity={0.16} />
-      <LinearGradient
-        colors={['rgba(5,5,6,0.7)', 'rgba(5,5,6,0.05)', 'rgba(5,5,6,0.55)', colors.bg]}
-        locations={[0, 0.3, 0.68, 1]}
-        style={StyleSheet.absoluteFill}
-      />
+      <LinearGradient colors={['rgba(5,5,6,0.7)', 'rgba(5,5,6,0.05)', 'rgba(5,5,6,0.55)', colors.bg]} locations={[0, 0.3, 0.68, 1]} style={StyleSheet.absoluteFill} />
       {/* Soft-focus wordmark over the key art: felt more than seen. */}
-      <LogoWatermark
-        height={Math.round(Math.min(width * 0.8, 760) / (1398 / 826))}
-        opacity={0.09}
-        blur={3}
-        style={{ left: (width - Math.min(width * 0.8, 760)) / 2, top: height * 0.22 }}
-      />
+      <LogoWatermark height={Math.round(Math.min(width * 0.8, 760) / (1398 / 826))} opacity={0.09} blur={3} style={{ left: (width - Math.min(width * 0.8, 760)) / 2, top: height * 0.22 }} />
       <Viewfinder inset={16} />
     </View>
   );
@@ -120,10 +104,7 @@ function Hero({ production, width, height, bottomInset = 0, topInset = 0 }) {
           </View>
         </View>
 
-        <View
-          style={[styles.heroBody, { bottom: space.xxl + bottomInset }]}
-          onLayout={(e) => setBodyTop(e.nativeEvent.layout.y)}
-        >
+        <View style={[styles.heroBody, { bottom: space.xxl + bottomInset }]} onLayout={(e) => setBodyTop(e.nativeEvent.layout.y)}>
           <Slate color={colors.gold} lines={2}>
             BOA Original · {metaLine(production)}
           </Slate>
@@ -136,15 +117,8 @@ function Hero({ production, width, height, bottomInset = 0, topInset = 0 }) {
             {production.logline}
           </Text>
           <View style={styles.heroActions}>
-            {production.episodes[0] && (
-              <Button label="Episode 1" icon="play" onPress={() => media.openEpisode(production)} />
-            )}
-            <Button
-              label="Watch Trailer"
-              icon="film-outline"
-              variant={production.episodes[0] ? 'ghost' : 'primary'}
-              onPress={() => media.openTrailer(production)}
-            />
+            {production.episodes[0] && <Button label="Episode 1" icon="play" onPress={() => media.openEpisode(production)} />}
+            <Button label="Watch Trailer" icon="film-outline" variant={production.episodes[0] ? 'ghost' : 'primary'} onPress={() => media.openTrailer(production)} />
           </View>
         </View>
       </View>
@@ -227,16 +201,10 @@ export default function HomeScreen({ navigation }) {
   const sections = (
     <>
       <View style={styles.section}>
-        <SectionHeader
-          index="01"
-          kicker={GENRE_KICKER}
-          title="Trending on BOA Radio"
-          action="Open radio"
-          onAction={() => navigation.navigate('Radio')}
-        />
+        <SectionHeader index="01" kicker={GENRE_KICKER} title="Trending on BOA Radio" action="Open radio" onAction={() => navigation.navigate('Radio')} />
         {trending === null ? (
           <View style={styles.tuning}>
-            <ActivityIndicator color={colors.textMuted} />
+            <LoadingDots />
             <Slate>Tuning the premium stations…</Slate>
           </View>
         ) : trending.length === 0 ? (
@@ -245,11 +213,7 @@ export default function HomeScreen({ navigation }) {
           <Row>
             {trending.map((s, i) => (
               <Animated.View key={s.id} entering={FadeIn.delay(i * 70)}>
-                <TrendingStation
-                  station={s}
-                  onPress={playStation}
-                  live={player.current?.id === s.id && player.isPlaying}
-                />
+                <TrendingStation station={s} onPress={playStation} live={player.current?.id === s.id && player.isPlaying} />
               </Animated.View>
             ))}
           </Row>
@@ -257,13 +221,7 @@ export default function HomeScreen({ navigation }) {
       </View>
 
       <View style={styles.section}>
-        <SectionHeader
-          index="02"
-          kicker="Productions"
-          title="BOA Originals"
-          action="See all"
-          onAction={() => navigation.navigate('Originals')}
-        />
+        <SectionHeader index="02" kicker="Productions" title="BOA Originals" action="See all" onAction={() => navigation.navigate('Originals')} />
         <Row>
           {productions.slice(0, 5).map((p) => (
             <Tappable key={p.id} onPress={() => navigation.navigate('Originals')} accessibilityRole="button" accessibilityLabel={p.title}>
@@ -280,12 +238,7 @@ export default function HomeScreen({ navigation }) {
             const live = player.current?.podcastId === pod.id && player.isPlaying;
             return (
               <Animated.View key={pod.id} entering={FadeIn.delay(i * 70)}>
-                <Tappable
-                  onPress={() => media.openPodcast(pod)}
-                  style={styles.podcast}
-                  accessibilityRole="button"
-                  accessibilityLabel={`${pod.title} podcast`}
-                >
+                <Tappable onPress={() => media.openPodcast(pod)} style={styles.podcast} accessibilityRole="button" accessibilityLabel={`${pod.title} podcast`}>
                   <PodcastCover podcast={pod} size={148} rounded={18} />
                   {live && (
                     <View style={[styles.liveBadge, styles.podLive]}>
@@ -307,13 +260,7 @@ export default function HomeScreen({ navigation }) {
       </View>
 
       <View style={styles.section}>
-        <SectionHeader
-          index="04"
-          kicker="The roster"
-          title="Our Talent"
-          action="See all"
-          onAction={() => navigation.navigate('Talent')}
-        />
+        <SectionHeader index="04" kicker="The roster" title="Our Talent" action="See all" onAction={() => navigation.navigate('Talent')} />
         <Row>
           {talent.map((person) => (
             <Tappable
@@ -342,10 +289,7 @@ export default function HomeScreen({ navigation }) {
         <Text style={[type.h1, { marginTop: space.md }]}>
           Talent is everywhere. <Text style={type.serif}>Opportunity is not.</Text>
         </Text>
-        <Text style={[type.bodyMuted, { marginTop: space.md }]}>
-          BOA Network exists to close that gap with real roles, on real productions, for people who were never handed a
-          way in.
-        </Text>
+        <Text style={[type.bodyMuted, { marginTop: space.md }]}>BOA Network exists to close that gap with real roles, on real productions, for people who were never handed a way in.</Text>
         <View style={styles.barriers}>
           {['Ethnicity', 'Connections', 'Clout', 'Money'].map((b, i) => (
             <View key={b} style={styles.barrier}>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeIn, FadeInDown, useReducedMotion } from 'react-native-reanimated';
@@ -7,6 +7,7 @@ import { useWeather } from '../../context/WeatherContext';
 import { haptics } from '../../utils/haptics';
 import WeatherGlyph from './WeatherGlyph';
 import { colors, fonts, radius } from '../../theme';
+import { LoadingDots } from '../Skeleton';
 
 // The temperature counts up to its value once, when it first arrives.
 function useCountUp(target, ms = 900) {
@@ -42,6 +43,7 @@ export default function WeatherPill({ onOpen, style }) {
     const loading = status === 'loading';
     return (
       <Pressable
+        hitSlop={8}
         onPress={() => {
           haptics.selection();
           if (status === 'denied') onOpen?.();
@@ -53,7 +55,7 @@ export default function WeatherPill({ onOpen, style }) {
         style={({ pressed }) => [styles.pill, styles.setup, style, pressed && styles.pressed]}
       >
         <BlurView intensity={40} tint="dark" experimentalBlurMethod="dimezisBlurView" style={StyleSheet.absoluteFill} />
-        {loading ? <ActivityIndicator size="small" color={colors.gold} /> : <Ionicons name="location-outline" size={14} color={colors.gold} />}
+        {loading ? <LoadingDots size={4} /> : <Ionicons name="location-outline" size={14} color={colors.gold} />}
         <Text style={styles.setupText}>{loading ? 'Finding you' : status === 'denied' ? 'Location off' : 'Local weather'}</Text>
       </Pressable>
     );
@@ -62,6 +64,7 @@ export default function WeatherPill({ onOpen, style }) {
   return (
     <Animated.View entering={FadeInDown.springify().damping(18)} style={style}>
       <Pressable
+        hitSlop={10}
         onPress={() => {
           haptics.selection();
           onOpen?.();

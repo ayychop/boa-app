@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,6 +10,7 @@ import { listInvoices, listSheets, money, sheetStatus, WORK_TYPES } from '../../
 import { PageHeader, Segmented } from '../../components/kit';
 import { Slate } from '../../components/ui';
 import { colors, fonts, radius, space, type } from '../../theme';
+import { CardsSkeleton } from '../../components/Skeleton';
 
 const TONE = { signed: colors.live, you: colors.gold, others: colors.textMuted };
 
@@ -29,8 +30,18 @@ function SheetCard({ sheet, myId, onPress, index }) {
   const s = sheetStatus(sheet, myId);
   const work = WORK_TYPES.find((w) => w.id === sheet.work_type)?.label ?? 'Work';
   return (
-    <Animated.View entering={FadeInDown.delay(Math.min(index, 6) * 50).springify().damping(18)}>
-      <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={`${sheet.title}, ${s.label}`} style={({ pressed }) => [styles.card, pressed && { transform: [{ scale: 0.98 }] }]} testID={`sheet-${sheet.id}`}>
+    <Animated.View
+      entering={FadeInDown.delay(Math.min(index, 6) * 50)
+        .springify()
+        .damping(18)}
+    >
+      <Pressable
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel={`${sheet.title}, ${s.label}`}
+        style={({ pressed }) => [styles.card, pressed && { transform: [{ scale: 0.98 }] }]}
+        testID={`sheet-${sheet.id}`}
+      >
         <LinearGradient colors={['rgba(255,255,255,0.08)', 'rgba(255,255,255,0.02)']} style={StyleSheet.absoluteFill} />
         <View style={styles.cardTop}>
           <Text style={styles.cardKicker}>{work.toUpperCase()}</Text>
@@ -54,8 +65,18 @@ function SheetCard({ sheet, myId, onPress, index }) {
 function InvoiceCard({ invoice, myId, onPress, index }) {
   const incoming = invoice.issuer_id !== myId;
   return (
-    <Animated.View entering={FadeInDown.delay(Math.min(index, 6) * 50).springify().damping(18)}>
-      <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={`Invoice ${invoice.number}`} style={({ pressed }) => [styles.card, styles.invoice, pressed && { transform: [{ scale: 0.98 }] }]} testID={`invoice-${invoice.id}`}>
+    <Animated.View
+      entering={FadeInDown.delay(Math.min(index, 6) * 50)
+        .springify()
+        .damping(18)}
+    >
+      <Pressable
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel={`Invoice ${invoice.number}`}
+        style={({ pressed }) => [styles.card, styles.invoice, pressed && { transform: [{ scale: 0.98 }] }]}
+        testID={`invoice-${invoice.id}`}
+      >
         <View style={styles.invoiceIcon}>
           <Ionicons name={incoming ? 'arrow-down' : 'document-text'} size={18} color={colors.gold} />
         </View>
@@ -135,17 +156,32 @@ export default function HubSplitsScreen({ navigation }) {
             </View>
             <View style={styles.heroStat}>
               <Text style={styles.heroStatValue} numberOfLines={1} adjustsFontSizeToFit>
-                {owed.length ? money(owed.reduce((s, i) => s + Number(i.total), 0), owed[0].currency) : money(0)}
+                {owed.length
+                  ? money(
+                      owed.reduce((s, i) => s + Number(i.total), 0),
+                      owed[0].currency,
+                    )
+                  : money(0)}
               </Text>
               <Text style={styles.heroStatLabel}>Outstanding</Text>
             </View>
           </View>
           <View style={styles.heroActions}>
-            <Pressable onPress={() => navigation.navigate('HubSplitSheet', {})} accessibilityRole="button" style={({ pressed }) => [styles.heroBtn, styles.heroBtnGold, pressed && { opacity: 0.85 }]} testID="splits-new-sheet">
+            <Pressable
+              onPress={() => navigation.navigate('HubSplitSheet', {})}
+              accessibilityRole="button"
+              style={({ pressed }) => [styles.heroBtn, styles.heroBtnGold, pressed && { opacity: 0.85 }]}
+              testID="splits-new-sheet"
+            >
               <Ionicons name="pie-chart" size={16} color={colors.bg} />
               <Text style={[styles.heroBtnText, { color: colors.bg }]}>New split sheet</Text>
             </Pressable>
-            <Pressable onPress={() => navigation.navigate('HubInvoice', {})} accessibilityRole="button" style={({ pressed }) => [styles.heroBtn, pressed && { opacity: 0.85 }]} testID="splits-new-invoice">
+            <Pressable
+              onPress={() => navigation.navigate('HubInvoice', {})}
+              accessibilityRole="button"
+              style={({ pressed }) => [styles.heroBtn, pressed && { opacity: 0.85 }]}
+              testID="splits-new-invoice"
+            >
               <Ionicons name="document-text-outline" size={16} color={colors.text} />
               <Text style={styles.heroBtnText}>New invoice</Text>
             </Pressable>
@@ -162,7 +198,7 @@ export default function HubSplitsScreen({ navigation }) {
         />
         <View style={{ marginTop: space.lg, gap: space.md }}>
           {data.status === 'loading' ? (
-            <ActivityIndicator color={colors.gold} />
+            <CardsSkeleton count={3} height={120} style={{ paddingHorizontal: 0, alignSelf: 'stretch' }} />
           ) : data.status === 'error' ? (
             <Text style={[type.bodyMuted, { textAlign: 'center' }]}>{data.error}</Text>
           ) : !list.length ? (
@@ -186,7 +222,15 @@ export default function HubSplitsScreen({ navigation }) {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
-  hero: { padding: space.xl, borderRadius: radius.xl, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(226,168,75,0.4)', backgroundColor: 'rgba(18,18,22,0.6)', marginBottom: space.xl },
+  hero: {
+    padding: space.xl,
+    borderRadius: radius.xl,
+    overflow: 'hidden',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(226,168,75,0.4)',
+    backgroundColor: 'rgba(18,18,22,0.6)',
+    marginBottom: space.xl,
+  },
   heroTitle: { fontFamily: fonts.semibold, fontSize: 26, lineHeight: 31, letterSpacing: -1, color: colors.text, marginTop: space.md },
   heroBody: { fontFamily: fonts.regular, fontSize: 14, lineHeight: 21, color: colors.textMuted, marginTop: space.sm },
   heroStats: { flexDirection: 'row', gap: space.md, marginTop: space.lg },
@@ -194,10 +238,30 @@ const styles = StyleSheet.create({
   heroStatValue: { fontFamily: fonts.bold, fontSize: 20, color: colors.text, letterSpacing: -0.5 },
   heroStatLabel: { fontFamily: fonts.medium, fontSize: 12, color: colors.textMuted, marginTop: 2 },
   heroActions: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, marginTop: space.lg },
-  heroBtn: { flexGrow: 1, height: 44, flexDirection: 'row', gap: 7, alignItems: 'center', justifyContent: 'center', paddingHorizontal: space.lg, borderRadius: radius.md, backgroundColor: 'rgba(255,255,255,0.08)', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.borderStrong },
+  heroBtn: {
+    flexGrow: 1,
+    height: 44,
+    flexDirection: 'row',
+    gap: 7,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: space.lg,
+    borderRadius: radius.md,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.borderStrong,
+  },
   heroBtnGold: { backgroundColor: colors.gold, borderColor: colors.gold, boxShadow: '0px 6px 20px rgba(226,168,75,0.35)' },
   heroBtnText: { fontFamily: fonts.semibold, fontSize: 14, color: colors.text },
-  card: { padding: space.lg, borderRadius: radius.lg, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255,255,255,0.14)', backgroundColor: 'rgba(18,18,22,0.7)', gap: space.sm },
+  card: {
+    padding: space.lg,
+    borderRadius: radius.lg,
+    overflow: 'hidden',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.14)',
+    backgroundColor: 'rgba(18,18,22,0.7)',
+    gap: space.sm,
+  },
   cardTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.sm },
   cardKicker: { fontFamily: fonts.mono, fontSize: 10, letterSpacing: 1.8, color: colors.textMuted },
   status: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.pill, borderWidth: 1 },

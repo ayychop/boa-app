@@ -8,6 +8,7 @@ import { usePremium, trialLeft } from '../../context/PremiumContext';
 import BoaLogo from '../BoaLogo';
 import { Button, Fog, GoldBadge, Slate, Viewfinder } from '../ui';
 import { colors, fonts, radius, space, type } from '../../theme';
+import { useSlideUp } from '../../utils/motion';
 
 import { PRICE } from './price';
 
@@ -67,7 +68,12 @@ function MemberCard({ width, member, status }) {
 }
 
 /** Full-screen BOA Premium pitch, and where your trial or membership stands. */
+/** BOA Premium, full screen: rises on the spring when opened. */
 export default function PremiumScreen({ open, onClose }) {
+  return open ? <PremiumBody onClose={onClose} /> : null;
+}
+
+function PremiumBody({ onClose }) {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const { hasPremium: isPremium, access, isAdmin } = usePremium();
@@ -79,17 +85,17 @@ export default function PremiumScreen({ open, onClose }) {
       : access.status === 'trial'
         ? `Free trial · ${trialLeft(access.trialEndsAt) ?? 'ending now'}`
         : null;
-  if (!open) return null;
+  const slide = useSlideUp(onClose);
 
   const close = () => {
     setJustJoined(false);
-    onClose();
+    slide.dismiss();
   };
   const contentWidth = Math.min(width - space.xl * 2, 520);
 
   return (
-    <Modal visible transparent animationType="slide" onRequestClose={close} statusBarTranslucent>
-      <View style={styles.screen}>
+    <Modal visible transparent animationType="none" onRequestClose={close} statusBarTranslucent>
+      <Animated.View style={[styles.screen, slide.style]}>
         {/* A warm gold aura over the charcoal: the only gold-lit screen in the app. */}
         <LinearGradient colors={['rgba(226,168,75,0.32)', 'rgba(226,168,75,0.06)', colors.bg]} locations={[0, 0.4, 0.8]} style={StyleSheet.absoluteFill} />
         <Fog opacity={0.22} />
@@ -178,7 +184,7 @@ export default function PremiumScreen({ open, onClose }) {
             </View>
           )}
         </ScrollView>
-      </View>
+      </Animated.View>
     </Modal>
   );
 }

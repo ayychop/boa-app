@@ -1,17 +1,6 @@
 import { useEffect } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
-import Animated, {
-  FadeInDown,
-  FadeInUp,
-  FadeOutDown,
-  FadeOutUp,
-  useAnimatedStyle,
-  useReducedMotion,
-  useSharedValue,
-  withSequence,
-  withSpring,
-  withTiming,
-} from 'react-native-reanimated';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import Animated, { FadeInDown, FadeInUp, FadeOutDown, FadeOutUp, useAnimatedStyle, useReducedMotion, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -33,6 +22,7 @@ import { categoryOf, soundscapeById } from '../data/sleep';
 import { haptics } from '../utils/haptics';
 import { useZen } from '../context/ZenContext';
 import { colors, fonts, radius, space } from '../theme';
+import { LoadingDots } from './Skeleton';
 
 const HEIGHT = 60;
 // Landscape phones get a slimmer pill with tighter margins.
@@ -40,9 +30,7 @@ const COMPACT_HEIGHT = 46;
 
 function useMetrics() {
   const { short } = useLayout();
-  return short
-    ? { height: COMPACT_HEIGHT, margin: space.sm, art: 34, button: 34 }
-    : { height: HEIGHT, margin: space.md, art: 42, button: 42 };
+  return short ? { height: COMPACT_HEIGHT, margin: space.sm, art: 34, button: 34 } : { height: HEIGHT, margin: space.md, art: 42, button: 42 };
 }
 
 // Space screens should leave free at the bottom so content isn't hidden.
@@ -74,12 +62,7 @@ function Glass() {
     <>
       <BlurView intensity={100} tint="dark" experimentalBlurMethod="dimezisBlurView" style={StyleSheet.absoluteFill} />
       <View style={styles.tint} />
-      <LinearGradient
-        pointerEvents="none"
-        colors={['rgba(255,255,255,0.16)', 'rgba(255,255,255,0.03)', 'rgba(255,255,255,0)']}
-        locations={[0, 0.45, 1]}
-        style={styles.sheen}
-      />
+      <LinearGradient pointerEvents="none" colors={['rgba(255,255,255,0.16)', 'rgba(255,255,255,0.03)', 'rgba(255,255,255,0)']} locations={[0, 0.45, 1]} style={styles.sheen} />
     </>
   );
 }
@@ -111,12 +94,7 @@ function ZenPill({ zen, placement, maxWidth }) {
       <View style={[styles.shell, maxWidth && { maxWidth }]}>
         <View style={[styles.pill, { height: m.height }]}>
           <Glass />
-          <Pressable
-            onPress={() => openZen()}
-            accessibilityRole="button"
-            accessibilityLabel={`Now playing: ${kind.label}, ${sound.label}. Open Zen`}
-            style={styles.info}
-          >
+          <Pressable onPress={() => openZen()} accessibilityRole="button" accessibilityLabel={`Now playing: ${kind.label}, ${sound.label}. Open Zen`} style={styles.info}>
             <View style={[styles.zenIcon, { width: m.art, height: m.art, borderRadius: m.art / 2, backgroundColor: kind.tone }]}>
               <Ionicons name={kind.icon.replace('-outline', '')} size={Math.round(m.art * 0.48)} color="#FFFFFF" />
             </View>
@@ -136,14 +114,10 @@ function ZenPill({ zen, placement, maxWidth }) {
             accessibilityRole="button"
             accessibilityLabel={playing ? `Pause ${kind.label}` : `Play ${kind.label}`}
             testID="mini-player-zen-toggle"
-            style={({ pressed }) => [
-              styles.button,
-              { width: m.button, height: m.button, borderRadius: m.button / 2 },
-              pressed && { transform: [{ scale: 0.92 }] },
-            ]}
+            style={({ pressed }) => [styles.button, { width: m.button, height: m.button, borderRadius: m.button / 2 }, pressed && { transform: [{ scale: 0.92 }] }]}
           >
             {zen.status === 'loading' ? (
-              <ActivityIndicator color={colors.bg} size="small" />
+              <LoadingDots color={colors.bg} size={4} />
             ) : (
               <Ionicons name={playing ? 'pause' : 'play'} size={20} color={colors.bg} style={playing ? null : { marginLeft: 2 }} />
             )}
@@ -187,10 +161,7 @@ function RadioPill({ onOpenRadio, placement = 'bottom', maxWidth }) {
     if (!started) return;
     halo.value = withSequence(withTiming(1, { duration: 160 }), withTiming(0, { duration: 900 }));
     if (reduceMotion) return;
-    swell.value = withSequence(
-      withSpring(1.045, { duration: 220, dampingRatio: 0.7 }),
-      withSpring(1, { duration: 600, dampingRatio: 0.5 }),
-    );
+    swell.value = withSequence(withSpring(1.045, { duration: 220, dampingRatio: 0.7 }), withSpring(1, { duration: 600, dampingRatio: 0.5 }));
   }, [started, current?.id, reduceMotion, swell, halo]);
 
   const swellStyle = useAnimatedStyle(() => ({ transform: [{ scale: swell.value }] }));
@@ -199,9 +170,7 @@ function RadioPill({ onOpenRadio, placement = 'bottom', maxWidth }) {
   if (!current) return null;
 
   const podcast = current.kind === 'podcast' ? podcastById(current.podcastId) : null;
-  const baseSubtitle = podcast
-    ? `${podcast.title}${status === 'paused' ? ' · Paused' : ''}`
-    : describePlayback(status, trackTitle || nowPlaying, retry) || 'Live radio';
+  const baseSubtitle = podcast ? `${podcast.title}${status === 'paused' ? ' · Paused' : ''}` : describePlayback(status, trackTitle || nowPlaying, retry) || 'Live radio';
   const subtitle = sleepLeft ? `Sleep in ${Math.ceil(sleepLeft / 60000)} min · ${baseSubtitle}` : baseSubtitle;
   const open = () => (podcast ? media.openPodcast(podcast, { autoplay: false }) : onOpenRadio());
 
@@ -217,17 +186,8 @@ function RadioPill({ onOpenRadio, placement = 'bottom', maxWidth }) {
         <View style={[styles.pill, { height: m.height }]}>
           {/* Frosted glass: heavy blur, a faint tint, a top sheen, a hairline. */}
           <Glass />
-          <Pressable
-            onPress={open}
-            accessibilityRole="button"
-            accessibilityLabel={`Now playing: ${current.name}. Open player`}
-            style={styles.info}
-          >
-            {podcast ? (
-              <PodcastCover podcast={podcast} size={m.art} rounded={10} />
-            ) : (
-              <StationLogo station={current} size={m.art} rounded={m.art / 2} fit="cover" />
-            )}
+          <Pressable onPress={open} accessibilityRole="button" accessibilityLabel={`Now playing: ${current.name}. Open player`} style={styles.info}>
+            {podcast ? <PodcastCover podcast={podcast} size={m.art} rounded={10} /> : <StationLogo station={current} size={m.art} rounded={m.art / 2} fit="cover" />}
             <View style={styles.body}>
               <View style={styles.titleRow}>
                 <Text style={[styles.title, { flexShrink: 1 }]} numberOfLines={1}>
@@ -246,21 +206,12 @@ function RadioPill({ onOpenRadio, placement = 'bottom', maxWidth }) {
             hitSlop={8}
             accessibilityRole="button"
             accessibilityLabel={isPlaying ? 'Pause' : 'Play'}
-            style={({ pressed }) => [
-              styles.button,
-              { width: m.button, height: m.button, borderRadius: m.button / 2 },
-              pressed && { transform: [{ scale: 0.92 }] },
-            ]}
+            style={({ pressed }) => [styles.button, { width: m.button, height: m.button, borderRadius: m.button / 2 }, pressed && { transform: [{ scale: 0.92 }] }]}
           >
             {status === 'loading' ? (
-              <ActivityIndicator color={colors.bg} size="small" />
+              <LoadingDots color={colors.bg} size={4} />
             ) : (
-              <Ionicons
-                name={isPlaying ? 'pause' : 'play'}
-                size={20}
-                color={colors.bg}
-                style={isPlaying ? null : { marginLeft: 2 }}
-              />
+              <Ionicons name={isPlaying ? 'pause' : 'play'} size={20} color={colors.bg} style={isPlaying ? null : { marginLeft: 2 }} />
             )}
           </Pressable>
           {podcast && <ProgressLine tint={podcast.palette[0]} />}

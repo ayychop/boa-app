@@ -1,4 +1,4 @@
-import { ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInDown, LinearTransition } from 'react-native-reanimated';
@@ -11,6 +11,7 @@ import { Button } from '../../components/ui';
 import NowPlaying from '../../components/hub/NowPlaying';
 import { colors, fonts, radius, space, type } from '../../theme';
 import { haptics } from '../../utils/haptics';
+import { ThreadSkeleton } from '../../components/Skeleton';
 
 /** "14:05" today, "Mon" this week, "12 Oct" before that. */
 export function chatTime(iso, now = new Date()) {
@@ -110,7 +111,7 @@ export default function HubChatsScreen({ navigation, inTab = false, bottomPaddin
         contentContainerStyle={{ paddingBottom: bottomPadding ?? insets.bottom + space.xxl, flexGrow: 1 }}
         ListEmptyComponent={
           state === 'loading' ? (
-            <ActivityIndicator color={colors.gold} style={{ marginTop: space.xxxl }} />
+            <ThreadSkeleton rows={5} />
           ) : (
             <View style={styles.empty}>
               <Ionicons name={state === 'error' ? 'cloud-offline-outline' : 'chatbubbles-outline'} size={30} color={colors.gold} />

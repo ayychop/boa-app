@@ -166,7 +166,7 @@ export default function HubPostScreen({ navigation, route }) {
         )}
         <View style={[styles.body, { width }]}>
           {author ? (
-            <Pressable onPress={() => navigation.push('HubProfile', { id: author.id })} accessibilityRole="button" style={styles.author}>
+            <Pressable hitSlop={6} onPress={() => navigation.push('HubProfile', { id: author.id })} accessibilityRole="button" style={styles.author}>
               <Avatar uri={author.avatar_url} name={name} size={36} ring={!!author.is_boa_star} />
               <Text style={styles.authorName} numberOfLines={1}>
                 {name}
@@ -178,7 +178,7 @@ export default function HubPostScreen({ navigation, route }) {
           {tagged.length ? (
             <View style={styles.tags}>
               {tagged.map((t) => (
-                <Pressable key={t.id} onPress={() => navigation.push('HubProfile', { id: t.id })} accessibilityRole="button" style={styles.tag}>
+                <Pressable hitSlop={10} key={t.id} onPress={() => navigation.push('HubProfile', { id: t.id })} accessibilityRole="button" style={styles.tag}>
                   <Text style={styles.tagText}>@{t.username}</Text>
                 </Pressable>
               ))}

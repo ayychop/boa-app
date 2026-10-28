@@ -74,7 +74,9 @@ describe('Brightness and Contrast', () => {
 
   test('the filter sheet: text-only presets, no colour circles', () => {
     const src = read('src/components/calls/CallScreen.js');
-    const panel = src.slice(src.indexOf('function BeautyPanel'), src.indexOf('function SelfView'));
+    // BeautyPanel alone: from its line to the end of the function (the Background panel follows it).
+    const start = src.indexOf('function BeautyPanel');
+    const panel = src.slice(start, src.indexOf('\n}\n', start));
     expect(panel).not.toMatch(/PRESET_SWATCH|presetSwatch|LinearGradient/);
     expect(panel).toMatch(/kind="contrast"/);
   });

@@ -1,19 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Animated, {
-  Easing,
-  FadeIn,
-  FadeOut,
-  interpolateColor,
-  useAnimatedStyle,
-  useSharedValue,
-  withDelay,
-  withRepeat,
-  withSequence,
-  withSpring,
-  withTiming,
-} from 'react-native-reanimated';
+import Animated, { Easing, FadeIn, FadeOut, interpolateColor, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { GestureDetector, usePanGesture } from 'react-native-gesture-handler';
 import { scheduleOnRN } from 'react-native-worklets';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -216,7 +204,10 @@ export default function ChatAppearanceScreen({ navigation }) {
     }
     haptics.success();
     const done = () => navigation.goBack();
-    leave.value = withSequence(withTiming(-0.04, { duration: 110 }), withTiming(1, { duration: 300, easing: Easing.in(Easing.cubic) }, (finished) => finished && scheduleOnRN(done)));
+    leave.value = withSequence(
+      withTiming(-0.04, { duration: 110 }),
+      withTiming(1, { duration: 300, easing: Easing.in(Easing.cubic) }, (finished) => finished && scheduleOnRN(done)),
+    );
   };
 
   const reset = async () => {
@@ -272,7 +263,7 @@ export default function ChatAppearanceScreen({ navigation }) {
 
           <Button label={saving ? 'Saving…' : 'Save'} icon="checkmark" onPress={save} disabled={saving} style={{ marginTop: space.xl }} testID="appearance-save" />
           {chatTheme ? (
-            <Pressable onPress={reset} accessibilityRole="button" style={styles.reset} testID="appearance-reset">
+            <Pressable hitSlop={10} onPress={reset} accessibilityRole="button" style={styles.reset} testID="appearance-reset">
               <Text style={styles.resetText}>Use my chat vibe's colours</Text>
             </Pressable>
           ) : null}
@@ -317,7 +308,17 @@ const styles = StyleSheet.create({
   track: { height: 44, justifyContent: 'center', marginTop: space.sm, marginHorizontal: 14 },
   rail: { position: 'absolute', left: 0, right: 0, height: 6, borderRadius: 3, backgroundColor: 'rgba(243,239,232,0.12)' },
   railFill: { position: 'absolute', left: 0, height: 6, borderRadius: 3, overflow: 'hidden' },
-  thumb: { position: 'absolute', left: 0, width: 28, height: 28, borderRadius: 14, backgroundColor: '#F6D38A', borderWidth: 2, borderColor: '#FFF6E2', boxShadow: '0px 0px 14px rgba(226,168,75,0.55)' },
+  thumb: {
+    position: 'absolute',
+    left: 0,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#F6D38A',
+    borderWidth: 2,
+    borderColor: '#FFF6E2',
+    boxShadow: '0px 0px 14px rgba(226,168,75,0.55)',
+  },
   sliderEnds: { flexDirection: 'row', justifyContent: 'space-between', marginHorizontal: 4 },
   sliderEnd: { fontFamily: fonts.mono, fontSize: 10, letterSpacing: 1, color: colors.textFaint, textTransform: 'uppercase' },
   note: { fontFamily: fonts.medium, fontSize: 12.5, lineHeight: 18, color: colors.textMuted, marginTop: space.lg },

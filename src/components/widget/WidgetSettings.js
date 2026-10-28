@@ -1,5 +1,5 @@
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
-import Slider from '@react-native-community/slider';
+import BoaSlider from '../BoaSlider';
 import { LinearGradient } from 'expo-linear-gradient';
 import BottomSheet from '../BottomSheet';
 import { Slate } from '../ui';
@@ -22,12 +22,7 @@ function Glass({ color, opacity, style, children, testID }) {
   return (
     <View style={[styles.widget, style]} testID={testID}>
       <View style={[StyleSheet.absoluteFill, { backgroundColor: withAlpha(color, opacity) }]} testID={testID ? `${testID}-glass` : undefined} />
-      <LinearGradient
-        colors={['rgba(255,255,255,0.18)', 'rgba(255,255,255,0.05)', 'rgba(255,255,255,0)']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={StyleSheet.absoluteFill}
-      />
+      <LinearGradient colors={['rgba(255,255,255,0.18)', 'rgba(255,255,255,0.05)', 'rgba(255,255,255,0)']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
       {children}
     </View>
   );
@@ -152,6 +147,7 @@ export default function WidgetSettings({ open, onClose }) {
             const on = c.toLowerCase() === style.color.toLowerCase();
             return (
               <Pressable
+                hitSlop={5}
                 key={c}
                 onPress={() => {
                   haptics.selection();
@@ -166,13 +162,8 @@ export default function WidgetSettings({ open, onClose }) {
           })}
         </View>
         <View style={styles.sliderRow}>
-          <LinearGradient
-            colors={[0, 60, 120, 180, 240, 300, 360].map((h) => hslHex(h))}
-            start={{ x: 0, y: 0.5 }}
-            end={{ x: 1, y: 0.5 }}
-            style={styles.hueTrack}
-          />
-          <Slider
+          <LinearGradient colors={[0, 60, 120, 180, 240, 300, 360].map((h) => hslHex(h))} start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={styles.hueTrack} />
+          <BoaSlider
             style={styles.slider}
             minimumValue={0}
             maximumValue={359}
@@ -181,7 +172,8 @@ export default function WidgetSettings({ open, onClose }) {
             onValueChange={(h) => update({ color: hslHex(h) })}
             minimumTrackTintColor="transparent"
             maximumTrackTintColor="transparent"
-            thumbTintColor={colors.text}
+            thumb="light"
+            ticks={12}
             accessibilityLabel="Custom colour"
             testID="widget-hue"
           />
@@ -191,7 +183,7 @@ export default function WidgetSettings({ open, onClose }) {
           <Slate style={styles.section}>Transparency</Slate>
           <Text style={styles.value}>{Math.round((1 - style.opacity) * 100)}%</Text>
         </View>
-        <Slider
+        <BoaSlider
           style={styles.slider}
           minimumValue={0}
           maximumValue={100}
@@ -200,16 +192,11 @@ export default function WidgetSettings({ open, onClose }) {
           onValueChange={(t) => update({ opacity: Math.round(100 - t) / 100 })}
           minimumTrackTintColor={colors.gold}
           maximumTrackTintColor="rgba(243,239,232,0.2)"
-          thumbTintColor={colors.gold}
           accessibilityLabel="Widget transparency"
           testID="widget-transparency"
         />
 
-        <Pressable
-          onPress={() => update({ color: DEFAULT_WIDGET_STYLE.color, opacity: DEFAULT_WIDGET_STYLE.opacity })}
-          accessibilityRole="button"
-          style={styles.reset}
-        >
+        <Pressable hitSlop={10} onPress={() => update({ color: DEFAULT_WIDGET_STYLE.color, opacity: DEFAULT_WIDGET_STYLE.opacity })} accessibilityRole="button" style={styles.reset}>
           <Text style={styles.resetText}>Reset to BOA glass</Text>
         </Pressable>
         <Text style={styles.note}>
@@ -265,8 +252,8 @@ const styles = StyleSheet.create({
   swatch: { width: 34, height: 34, borderRadius: 17, borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' },
   swatchOn: { borderWidth: 3, borderColor: colors.text },
   sliderRow: { marginTop: space.md, justifyContent: 'center' },
-  hueTrack: { position: 'absolute', left: 10, right: 10, height: 10, borderRadius: 5 },
-  slider: { width: '100%', height: 40 },
+  hueTrack: { position: 'absolute', left: 14, right: 14, height: 10, borderRadius: 5 },
+  slider: { width: '100%', height: 48 },
   rowHead: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' },
   value: { fontFamily: fonts.mono, fontSize: 13, color: colors.gold },
   reset: { marginTop: space.md, alignSelf: 'flex-start', paddingVertical: space.sm },

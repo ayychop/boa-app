@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -23,6 +23,7 @@ import { GridEmpty, PostGrid, ProfileTabs } from '../../components/profile/PostG
 import Favourites from '../../components/profile/Favourites';
 import { GoldBadge, Tappable } from '../../components/ui';
 import { colors, fonts, radius, space, type } from '../../theme';
+import { GridSkeleton, ProfileSkeleton } from '../../components/Skeleton';
 
 // Unfolded and on tablets the profile is a centred column, like a phone's.
 const MAX_WIDTH = 720;
@@ -166,12 +167,20 @@ export default function HubProfileScreen({ navigation, route }) {
     },
     [id],
   );
-  const loadCounts = useCallback(() => postCounts(id).then(setCounts).catch(() => {}), [id]);
+  const loadCounts = useCallback(
+    () =>
+      postCounts(id)
+        .then(setCounts)
+        .catch(() => {}),
+    [id],
+  );
 
   useEffect(() => {
     if (state !== 'ready') return;
     loadCounts();
-    listDayOnes(id).then(setDayOnes).catch(() => {});
+    listDayOnes(id)
+      .then(setDayOnes)
+      .catch(() => {});
   }, [id, state, loadCounts]);
   useEffect(() => {
     if (state === 'ready' && !grids[tab]) loadTab(tab);
@@ -219,11 +228,7 @@ export default function HubProfileScreen({ navigation, route }) {
     return (
       <View style={styles.screen}>
         <PageHeader kicker="Creative Hub" title="Profile" onBack={() => navigation.goBack()} />
-        {state === 'loading' ? (
-          <ActivityIndicator color={colors.gold} style={{ marginTop: space.xxxl }} />
-        ) : (
-          <Text style={[type.bodyMuted, { textAlign: 'center', marginTop: space.xxxl }]}>This profile isn't available.</Text>
-        )}
+        {state === 'loading' ? <ProfileSkeleton width={width} /> : <Text style={[type.bodyMuted, { textAlign: 'center', marginTop: space.xxxl }]}>This profile isn't available.</Text>}
       </View>
     );
   }
@@ -352,7 +357,7 @@ export default function HubProfileScreen({ navigation, route }) {
 
           <ProfileTabs value={tab} onChange={setTab} width={width} />
           {!grid ? (
-            <ActivityIndicator color={colors.gold} style={{ marginTop: space.xxl }} />
+            <GridSkeleton width={width} style={{ marginTop: space.md }} />
           ) : grid.rows.length ? (
             <PostGrid posts={grid.rows} width={width} onOpen={openPost} />
           ) : grid.error ? (
@@ -401,7 +406,18 @@ const styles = StyleSheet.create({
   seen: { fontFamily: fonts.medium, color: colors.textFaint },
   roles: { fontFamily: fonts.mono, fontSize: 10.5, letterSpacing: 1.6, textTransform: 'uppercase', color: colors.gold, marginTop: space.md, lineHeight: 16 },
   bio: { fontFamily: fonts.medium, fontSize: 14.5, lineHeight: 21, color: colors.text, marginTop: space.sm },
-  status: { flexDirection: 'row', gap: 8, alignItems: 'center', alignSelf: 'flex-start', maxWidth: '100%', marginTop: space.md, paddingHorizontal: 14, paddingVertical: 10, borderRadius: radius.pill, backgroundColor: colors.goldSoft },
+  status: {
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    maxWidth: '100%',
+    marginTop: space.md,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: radius.pill,
+    backgroundColor: colors.goldSoft,
+  },
   actions: { flexDirection: 'row', gap: space.sm, marginTop: space.lg },
   action: { flex: 1, height: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, borderRadius: radius.md, overflow: 'hidden', paddingHorizontal: space.md },
   actionPrimary: { backgroundColor: colors.gold, boxShadow: '0px 6px 20px rgba(226,168,75,0.35)' },

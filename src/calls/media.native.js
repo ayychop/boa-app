@@ -1,7 +1,10 @@
 import { Alert, Linking, PermissionsAndroid, Platform } from 'react-native';
 import { createAgoraRtcEngine, MediaSourceType, RtcSurfaceView, RtcTextureView } from 'react-native-agora';
+import { Asset } from 'expo-asset';
+import Constants from 'expo-constants';
 import { fetchToken } from './token';
 import { toAgora } from './beauty';
+import { DEFAULT_BACKGROUND, assetOf, toAgora as backgroundForAgora, toBanuba } from './backgrounds';
 import { lutPath, toneLutPath } from './luts';
 import { decodeMessage, encodePrivacy } from './privacy';
 import { AINS_BALANCED, AUDIO, AUDIO_PROCESSING, CAPTURE, DENOISER, ENCODER, LOW_LIGHT, MIRROR_OFF, MIRROR_ON, PREVIEW, STABILIZATION_OFF, VIDEO_SCENARIO } from './quality';
@@ -25,6 +28,17 @@ let engine = null;
 // and the camera they apply to.
 const CLEAR_VISION = { provider: 'agora_video_filters_clear_vision', extension: 'clear_vision' };
 const PRIMARY_CAMERA = MediaSourceType?.PrimaryCameraSource ?? 2;
+// Banuba Face AR's Agora extension: virtual backgrounds with softer edges,
+// in builds made with a Banuba client token (plugins/withBanuba.js). Its
+// effect, BOA's background (assets/banuba/effects), turns on segmentation
+// and contour smoothing; scripts (eval_js) then choose what's behind you.
+const BANUBA = { provider: 'Banuba', extension: 'BanubaFilter', effect: 'effects/BOABackground' };
+const banubaToken = Constants.expoConfig?.extra?.banubaToken || null;
+// Whether Banuba is running in this engine (licensed and switched on).
+let banuba = false;
+// What's behind you (src/calls/backgrounds.js), kept like the look so it goes back on when the camera restarts.
+let background = DEFAULT_BACKGROUND;
+const VIRTUAL_BACKGROUND_FEATURE = 1; // FeatureType.VideoVirtualBackground
 let engineAppId = null;
 let session = null; // { channel, token, uid, camera, mic, joined, live, speaker, privacy, streamId, handler, timer }
 // The look last asked for (src/calls/beauty.js), applied again whenever the
@@ -107,6 +121,8 @@ function setup(appId) {
     throw new Error(`Agora error ${-code}`);
   }
   engineAppId = appId;
+  // Banuba has to be switched on straight after initialize, or it won't load.
+  banuba = startBanuba();
   // Sound and picture both on before anything joins.
   // The filters (beauty, colour, the presets' grades) all run in Agora's
   // Clear Vision extension, which is off until it's switched on: without
@@ -133,6 +149,130 @@ function setup(appId) {
   engine.setCameraAutoExposureFaceModeEnabled?.(true);
   engine.setDefaultAudioRouteToSpeakerphone(true);
   return engine;
+}
+
+/**
+ * Loads Banuba's extension and hands it the licence. Only in builds with a
+ * client token; any refusal leaves Agora's virtual background to do the job.
+ */
+function startBanuba() {
+  if (!banubaToken) return false;
+  try {
+    if (Platform.OS === 'android') {
+      engine.loadExtensionProvider?.('banuba');
+      engine.loadExtensionProvider?.('banuba-plugin');
+    }
+    const on = engine.enableExtension(BANUBA.provider, BANUBA.extension, true);
+    const licensed = on === 0 ? banubaProperty('set_banuba_license_token', banubaToken) : on;
+    if (on !== 0 || licensed !== 0) {
+      console.warn('[call] Banuba not started, using Agora backgrounds', { on, licensed });
+      if (on === 0) engine.enableExtension(BANUBA.provider, BANUBA.extension, false);
+      return false;
+    }
+    // The front camera to start with (prepare): Banuba mirrors to match.
+    banubaProperty('set_require_mirroring', '1');
+    console.log('[call] Banuba ready');
+    return true;
+  } catch (err) {
+    console.warn('[call] Banuba failed to load', err?.message ?? err);
+    return false;
+  }
+}
+
+function banubaProperty(key, value) {
+  const code = engine.setExtensionProperty(BANUBA.provider, BANUBA.extension, key, value);
+  if (code !== 0) console.warn('[call] Banuba refused', key, code);
+  return code;
+}
+
+// A choice's image (a studio sweep or a scene) as a file on the phone, which
+// both engines need as an absolute path. Kept once resolved.
+const imagePaths = new Map();
+async function imagePath(bg) {
+  const asset = assetOf(bg);
+  if (!asset) return null;
+  if (imagePaths.has(asset)) return imagePaths.get(asset);
+  try {
+    const a = Asset.fromModule(asset);
+    await a.downloadAsync();
+    const file = (a.localUri ?? a.uri ?? '').replace(/^file:\/\//, '');
+    const out = file ? decodeURI(file) : null;
+    if (out) imagePaths.set(asset, out);
+    return out;
+  } catch (err) {
+    console.warn('[call] backdrop not readable', err?.message ?? err);
+    return null;
+  }
+}
+
+function agoraBackground(bg, path) {
+  const { enabled, source, segmentation } = backgroundForAgora(bg, path);
+  if (enabled && engine.isFeatureAvailableOnDevice?.(VIRTUAL_BACKGROUND_FEATURE) === false) return 'unsupported';
+  const code = engine.enableVirtualBackground(enabled, source, segmentation, PRIMARY_CAMERA);
+  if (code === -4) return 'unsupported';
+  if (code !== 0) {
+    console.warn('[call] background refused', bg, code);
+    return 'failed';
+  }
+  return 'ok';
+}
+
+function banubaBackground(bg, path) {
+  const scripts = toBanuba(bg, path);
+  if (!scripts.length) return banubaProperty('unload_effect', BANUBA.effect) === 0 ? 'ok' : 'failed';
+  // Loading the effect again clears whatever was behind you before.
+  if (banubaProperty('load_effect', BANUBA.effect) !== 0) return 'failed';
+  return scripts.every((js) => banubaProperty('eval_js', js) === 0) ? 'ok' : 'failed';
+}
+
+/**
+ * Puts what's behind you on the camera: Banuba where it's running, else
+ * Agora's own. Resolves 'ok', 'unsupported' (this phone can't separate you
+ * from the room fast enough), 'failed', or 'later' (no camera yet: it goes
+ * on as the call starts).
+ */
+async function applyBackground() {
+  const bg = background;
+  if (!engine) return 'later';
+  const path = await imagePath(bg);
+  // Something else was chosen, or the call ended, while the image was found.
+  if (bg !== background || !engine) return 'later';
+  if (banuba) {
+    const result = banubaBackground(bg, path);
+    if (result === 'ok') return result;
+    // Banuba wouldn't draw it: Agora does, from here on.
+    console.warn('[call] Banuba background failed, switching to Agora');
+    banuba = false;
+    engine.enableExtension(BANUBA.provider, BANUBA.extension, false);
+  }
+  return agoraBackground(bg, path);
+}
+
+/** Chooses what's behind you (src/calls/backgrounds.js); see applyBackground for the result. */
+export function setBackground(next) {
+  background = next ?? DEFAULT_BACKGROUND;
+  return applyBackground();
+}
+
+/** Which engine draws backgrounds in this call: 'banuba' or 'agora'. */
+export const backgroundEngine = () => (banuba ? 'banuba' : 'agora');
+
+/**
+ * Tap to focus: focus and expose where you tapped your picture, x and y
+ * from 0 to 1 across it. The front camera's preview is mirrored, so its x
+ * is turned back to the camera's own. Returns whether the camera took it.
+ */
+export function focusAt(x, y) {
+  if (!engine || !session?.camera || session.cameraOff) return false;
+  const clamp = (v) => Math.max(0, Math.min(1, Number(v) || 0));
+  const px = facing === 'front' ? 1 - clamp(x) : clamp(x);
+  const py = clamp(y);
+  let focus = null;
+  let exposure = null;
+  if (engine.isCameraFocusSupported?.() !== false) focus = engine.setCameraFocusPositionInPreview(px, py);
+  if (engine.isCameraExposurePositionSupported?.() !== false) exposure = engine.setCameraExposurePosition?.(px, py) ?? null;
+  console.log('[call] focus', { x: px, y: py, focus, exposure });
+  return focus === 0 || exposure === 0;
 }
 
 /** Whether this phone's camera takes an exposure setting (asked once the camera is open). */
@@ -223,9 +363,13 @@ export function setContrast(contrast) {
   if (engine) scheduleTone();
 }
 
-/** The camera opened again (a new size, a flip, back on): the look goes back on. */
+/**
+ * The camera opened again (a new size, a flip, back on): the look goes back
+ * on, and Agora's background with it. Banuba keeps its own across restarts.
+ */
 function reapply() {
   if (look) setBeauty(look);
+  if (!banuba && background.mode !== 'off') applyBackground();
 }
 
 /** Which way the camera faces now: 'front' or 'back'. */
@@ -287,6 +431,8 @@ export async function prepare(channel, beauty) {
     setup(pass.appId);
     setFacing('front');
     setBeauty(beauty);
+    // What's behind you, from the first frame they see.
+    if (background.mode !== 'off') applyBackground();
     // Small and fast while it rings; join success steps it up to HD.
     engine.setVideoEncoderConfiguration(PREVIEW);
     if (s.camera) engine.startPreview();
@@ -445,6 +591,8 @@ export function reset() {
   leave();
   if (channel) passes.delete(channel);
   if (!engine) return;
+  if (banuba) engine.enableExtension(BANUBA.provider, BANUBA.extension, false);
+  banuba = false;
   engine.release();
   engine = null;
   engineAppId = null;
@@ -497,6 +645,7 @@ export function switchCamera() {
   const next = facing === 'front' ? 'back' : 'front';
   setFacing(next);
   engine.setLocalRenderMode?.(RENDER_HIDDEN, next === 'front' ? MIRROR_ON : MIRROR_OFF);
+  if (banuba) banubaProperty('set_require_mirroring', next === 'front' ? '1' : '0');
   // The other camera has its own exposure range: set it again.
   reapply();
 }

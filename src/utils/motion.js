@@ -1,4 +1,7 @@
-import { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import { useCallback, useEffect, useRef } from 'react';
+import { useWindowDimensions } from 'react-native';
+import { Easing, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
+import { scheduleOnRN } from 'react-native-worklets';
 import { haptics } from './haptics';
 
 // One feel for every press and sheet in the app: a soft, premium spring
@@ -26,4 +29,28 @@ export function usePress({ to = PRESS_SCALE, haptic = true } = {}) {
       scale.value = withSpring(1, SPRING);
     },
   };
+}
+
+/**
+ * A full-screen modal that rises on the spring and eases back down before
+ * it closes. Put `style` on the modal's root Animated.View (with
+ * animationType="none") and close with `dismiss`, which runs onDone once
+ * it's out of sight.
+ */
+export function useSlideUp(onDone) {
+  const { height } = useWindowDimensions();
+  const y = useSharedValue(height);
+  const done = useRef(onDone);
+  done.current = onDone;
+  useEffect(() => {
+    y.value = withSpring(0, SPRING);
+  }, [y]);
+  const style = useAnimatedStyle(() => ({ transform: [{ translateY: y.value }] }));
+  const finish = useCallback(() => done.current?.(), []);
+  const dismiss = useCallback(() => {
+    y.value = withTiming(height, { duration: 260, easing: Easing.in(Easing.cubic) }, (ok) => {
+      if (ok) scheduleOnRN(finish);
+    });
+  }, [y, height, finish]);
+  return { style, dismiss };
 }

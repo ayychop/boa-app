@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -12,6 +12,7 @@ import BoaLogo from '../../components/BoaLogo';
 import { haptics } from '../../utils/haptics';
 import { QUOTE_CATEGORIES } from '../../data/quotes';
 import { colors, fonts, radius, space, type } from '../../theme';
+import { LoadingDots } from '../../components/Skeleton';
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
@@ -121,6 +122,7 @@ function SignIn() {
         {error ? <Text style={styles.message}>{error.text}</Text> : null}
         <Button label={busy === 'resend' ? 'Sending' : 'Resend the email'} icon="refresh" variant="ghost" disabled={!!busy} onPress={() => resend(sentTo)} style={{ marginTop: space.xl }} />
         <Pressable
+          hitSlop={10}
           onPress={() => {
             setSentTo(null);
             switchTo('signIn');
@@ -140,9 +142,7 @@ function SignIn() {
         <Text style={[type.h1, { marginTop: space.md }]}>
           Find your <Text style={type.serif}>people.</Text>
         </Text>
-        <Text style={[type.bodyMuted, { marginTop: space.sm }]}>
-          Actors, directors, musicians and crew. Get discovered, find collaborators, message in private.
-        </Text>
+        <Text style={[type.bodyMuted, { marginTop: space.sm }]}>Actors, directors, musicians and crew. Get discovered, find collaborators, message in private.</Text>
       </Hero>
 
       {/* Sign in or create an account. */}
@@ -154,6 +154,7 @@ function SignIn() {
           const on = mode === id;
           return (
             <Pressable
+              hitSlop={{ top: 2, bottom: 2 }}
               key={id}
               onPress={() => switchTo(id)}
               accessibilityRole="tab"
@@ -214,7 +215,7 @@ function SignIn() {
           style={{ marginTop: space.lg }}
         />
       ) : null}
-      <Pressable onPress={() => setShow(!show)} accessibilityRole="button" style={styles.show} testID="hub-show-password">
+      <Pressable hitSlop={10} onPress={() => setShow(!show)} accessibilityRole="button" style={styles.show} testID="hub-show-password">
         <Ionicons name={show ? 'eye-off-outline' : 'eye-outline'} size={16} color={colors.textMuted} />
         <Text style={styles.showText}>{show ? 'Hide password' : 'Show password'}</Text>
       </Pressable>
@@ -225,12 +226,12 @@ function SignIn() {
         </Text>
       ) : null}
       {error?.code === 'user_already_exists' ? (
-        <Pressable onPress={() => switchTo('signIn')} style={styles.inline} accessibilityRole="button">
+        <Pressable hitSlop={10} onPress={() => switchTo('signIn')} style={styles.inline} accessibilityRole="button">
           <Text style={styles.switchText}>Sign in with {email.trim()}</Text>
         </Pressable>
       ) : null}
       {error?.code === 'email_not_confirmed' ? (
-        <Pressable onPress={() => resend(email)} style={styles.inline} accessibilityRole="button" testID="hub-resend">
+        <Pressable hitSlop={10} onPress={() => resend(email)} style={styles.inline} accessibilityRole="button" testID="hub-resend">
           <Text style={styles.switchText}>{busy === 'resend' ? 'Sending' : 'Resend the confirmation email'}</Text>
         </Pressable>
       ) : null}
@@ -243,9 +244,7 @@ function SignIn() {
         onPress={submit}
         style={{ marginTop: space.xl }}
       />
-      {mode === 'signUp' ? (
-        <Text style={styles.fine}>We'll email you a link to confirm it's you. Your email stays private.</Text>
-      ) : null}
+      {mode === 'signUp' ? <Text style={styles.fine}>We'll email you a link to confirm it's you. Your email stays private.</Text> : null}
     </>
   );
 }
@@ -318,10 +317,7 @@ function Onboarding({ onDone }) {
           photoFailed = err?.message || "Couldn't upload the photo.";
         }
       }
-      await finishOnboarding(
-        { username: handle, display_name: displayName.trim() || null, avatar_url, bio: bio.trim() || null, roles, quote_category: spark },
-        { adultConfirmedAt: agreedAt },
-      );
+      await finishOnboarding({ username: handle, display_name: displayName.trim() || null, avatar_url, bio: bio.trim() || null, roles, quote_category: spark }, { adultConfirmedAt: agreedAt });
       haptics.success();
       if (photoFailed) Alert.alert('Your photo wasn’t added', `${photoFailed} You can add one any time from Hub settings.`);
       onDone();
@@ -378,14 +374,7 @@ function Onboarding({ onDone }) {
           <Text style={styles.label}>Roles (up to 6)</Text>
           <View style={styles.chips}>
             {hub.ROLES.map((r) => (
-              <Chip
-                key={r.id}
-                label={r.label}
-                selected={roles.includes(r.id)}
-                onPress={() =>
-                  setRoles((x) => (x.includes(r.id) ? x.filter((i) => i !== r.id) : x.length < 6 ? [...x, r.id] : x))
-                }
-              />
+              <Chip key={r.id} label={r.label} selected={roles.includes(r.id)} onPress={() => setRoles((x) => (x.includes(r.id) ? x.filter((i) => i !== r.id) : x.length < 6 ? [...x, r.id] : x))} />
             ))}
           </View>
           <Field
@@ -405,14 +394,13 @@ function Onboarding({ onDone }) {
       ok: !!spark,
       body: (
         <>
-          <Text style={[type.bodyMuted, { marginBottom: space.lg }]}>
-            One line a day on your Profile, in the kind you choose. You can see a new one every morning.
-          </Text>
+          <Text style={[type.bodyMuted, { marginBottom: space.lg }]}>One line a day on your Profile, in the kind you choose. You can see a new one every morning.</Text>
           <View style={styles.sparks}>
             {QUOTE_CATEGORIES.map((c) => {
               const on = spark === c.id;
               return (
                 <Pressable
+                  hitSlop={6}
                   key={c.id}
                   onPress={() => {
                     haptics.selection();
@@ -476,6 +464,7 @@ function Onboarding({ onDone }) {
             ))}
           </View>
           <Pressable
+            hitSlop={8}
             onPress={() => {
               haptics.selection();
               setAgreedAt(agreed ? null : new Date().toISOString());
@@ -505,7 +494,9 @@ function Onboarding({ onDone }) {
         ))}
       </View>
       <Animated.View key={step} entering={FadeInRight.springify().damping(20)} exiting={FadeOutLeft.duration(150)}>
-        <Slate>Step {step + 1} of {steps.length}</Slate>
+        <Slate>
+          Step {step + 1} of {steps.length}
+        </Slate>
         <Text style={[type.h1, { marginTop: space.sm, marginBottom: space.xl }]}>{current.title}</Text>
         {current.body}
       </Animated.View>
@@ -533,7 +524,7 @@ export function HubGate({ stage }) {
       {stage === 'off' ? (
         <NotConfigured />
       ) : stage === 'loading' || stage === 'ready' ? (
-        <ActivityIndicator color={colors.gold} style={{ marginTop: space.xxxl }} />
+        <LoadingDots style={{ marginTop: space.xxxl }} />
       ) : stage === 'signedOut' ? (
         <SignIn />
       ) : (

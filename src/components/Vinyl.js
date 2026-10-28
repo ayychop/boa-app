@@ -1,22 +1,13 @@
 import { useEffect, useRef } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
-import Animated, {
-  cancelAnimation,
-  Easing,
-  useAnimatedStyle,
-  useReducedMotion,
-  useSharedValue,
-  withRepeat,
-  withSequence,
-  withSpring,
-  withTiming,
-} from 'react-native-reanimated';
+import { StyleSheet, View } from 'react-native';
+import Animated, { cancelAnimation, Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withRepeat, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import StationLogo from './StationLogo';
 import BoaLogo from './BoaLogo';
 import { useStationLogo } from '../api/stationArt';
 import { colors } from '../theme';
+import { LoadingDots } from './Skeleton';
 
 const REVOLUTION_MS = 9000;
 // Brushed-steel ring: alternating light/dark stops read as metal once the
@@ -65,11 +56,7 @@ export default function Vinyl({ station, size, spinning, status = null, focused 
       // Ease up to speed like a platter, then hold a steady linear spin.
       angle.value = withSequence(
         withTiming(from + 25, { duration: 700, easing: Easing.in(Easing.quad) }),
-        withRepeat(
-          withTiming(from + 25 + 360, { duration: REVOLUTION_MS, easing: Easing.linear }),
-          -1,
-          false,
-        ),
+        withRepeat(withTiming(from + 25 + 360, { duration: REVOLUTION_MS, easing: Easing.linear }), -1, false),
       );
     } else {
       cancelAnimation(angle);
@@ -89,10 +76,7 @@ export default function Vinyl({ station, size, spinning, status = null, focused 
     lastStatus.current = status;
     const tapped = (status === 'loading' && prev !== 'loading') || (status === 'paused' && prev !== 'paused');
     if (!tapped || reduceMotion) return;
-    pop.value = withSequence(
-      withTiming(0.955, { duration: 90, easing: Easing.bezier(0.23, 1, 0.32, 1) }),
-      withSpring(1, { duration: 520, dampingRatio: 0.45 }),
-    );
+    pop.value = withSequence(withTiming(0.955, { duration: 90, easing: Easing.bezier(0.23, 1, 0.32, 1) }), withSpring(1, { duration: 520, dampingRatio: 0.45 }));
   }, [status, reduceMotion, pop]);
   const popStyle = useAnimatedStyle(() => ({ transform: [{ scale: pop.value }] }));
 
@@ -103,20 +87,9 @@ export default function Vinyl({ station, size, spinning, status = null, focused 
 
   return (
     <Animated.View style={[styles.shadow, { width: size, height: size, borderRadius: size / 2 }, popStyle]}>
-      <LinearGradient
-        colors={METAL}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={[StyleSheet.absoluteFill, { borderRadius: size / 2 }]}
-      />
+      <LinearGradient colors={METAL} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[StyleSheet.absoluteFill, { borderRadius: size / 2 }]} />
 
-      <Animated.View
-        style={[
-          styles.disc,
-          { top: ring, left: ring, width: disc, height: disc, borderRadius: disc / 2 },
-          spinStyle,
-        ]}
-      >
+      <Animated.View style={[styles.disc, { top: ring, left: ring, width: disc, height: disc, borderRadius: disc / 2 }, spinStyle]}>
         {GROOVES.map((r, i) => (
           <View
             key={r}
@@ -132,11 +105,7 @@ export default function Vinyl({ station, size, spinning, status = null, focused 
           />
         ))}
         <View style={[styles.label, { width: label, height: label, borderRadius: label / 2 }]}>
-          {station ? (
-            <RecordLabel station={station} size={label} />
-          ) : (
-            <View style={[StyleSheet.absoluteFill, styles.blankLabel]} />
-          )}
+          {station ? <RecordLabel station={station} size={label} /> : <View style={[StyleSheet.absoluteFill, styles.blankLabel]} />}
         </View>
         <View style={styles.spindle} />
       </Animated.View>
@@ -155,14 +124,9 @@ export default function Vinyl({ station, size, spinning, status = null, focused 
         <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.center]}>
           <View style={styles.playBadge}>
             {status === 'loading' ? (
-              <ActivityIndicator color="#fff" />
+              <LoadingDots color="#FFFFFF" />
             ) : (
-              <Ionicons
-                name={status === 'error' ? 'refresh' : 'play'}
-                size={26}
-                color="#fff"
-                style={status === 'error' ? null : { marginLeft: 3 }}
-              />
+              <Ionicons name={status === 'error' ? 'refresh' : 'play'} size={26} color="#fff" style={status === 'error' ? null : { marginLeft: 3 }} />
             )}
           </View>
         </View>

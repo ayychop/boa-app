@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { searchProfiles, roleLabel } from '../../api/hub';
 import BottomSheet from '../BottomSheet';
 import { Avatar, BoaStarBadge, Field } from '../kit';
 import { colors, fonts, space, type } from '../../theme';
+import { ListSkeleton } from '../Skeleton';
 
 /** A sheet to find a Hub member by name or @username. Calls onPick(profile). */
 export default function PersonPicker({ open, onClose, onPick, excludeIds = [], title = 'Add a creative' }) {
@@ -34,7 +35,7 @@ export default function PersonPicker({ open, onClose, onPick, excludeIds = [], t
         <Text style={type.title}>{title}</Text>
         <Field value={query} onChangeText={setQuery} placeholder="Search names or @usernames" autoCapitalize="none" autoCorrect={false} style={{ marginTop: space.md }} />
         <View style={{ minHeight: 160, marginTop: space.md }}>
-          {busy ? <ActivityIndicator color={colors.gold} style={{ marginTop: space.lg }} /> : null}
+          {busy ? <ListSkeleton rows={3} avatar={40} style={{ paddingHorizontal: 0, paddingTop: space.md }} /> : null}
           {!busy && !shown.length ? <Text style={[type.bodyMuted, { textAlign: 'center', marginTop: space.lg }]}>Nobody found. Try their @username.</Text> : null}
           {shown.slice(0, 8).map((p) => (
             <Pressable

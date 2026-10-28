@@ -64,7 +64,13 @@ function usePreview() {
 function AlarmCard({ alarm, onEdit, onToggle, index }) {
   const what = alarm.sound?.type === 'station' ? alarm.sound.station?.name : ALARM_SOUNDS.find((s) => s.id === alarm.sound?.id)?.label;
   return (
-    <Animated.View entering={FadeInDown.delay(index * 50).springify().damping(18)} exiting={FadeOut} layout={LinearTransition.springify()}>
+    <Animated.View
+      entering={FadeInDown.delay(index * 50)
+        .springify()
+        .damping(18)}
+      exiting={FadeOut}
+      layout={LinearTransition.springify()}
+    >
       <Pressable
         onPress={onEdit}
         accessibilityRole="button"
@@ -117,14 +123,7 @@ function WakeChoice({ value, onChange }) {
             testID={`alarm-wake-${m.id}`}
             style={({ pressed }) => [styles.wakeCard, on ? styles.wakeOn : styles.wakeOff, pressed && { transform: [{ scale: 0.97 }] }]}
           >
-            {on ? (
-              <LinearGradient
-                colors={['rgba(226,168,75,0.32)', 'rgba(226,168,75,0.06)']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={StyleSheet.absoluteFill}
-              />
-            ) : null}
+            {on ? <LinearGradient colors={['rgba(226,168,75,0.32)', 'rgba(226,168,75,0.06)']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} /> : null}
             <View style={[styles.wakeIcon, on && styles.wakeIconOn]}>
               <Ionicons name={on ? m.icon : `${m.icon}-outline`} size={20} color={on ? colors.bg : colors.textMuted} />
             </View>
@@ -178,6 +177,7 @@ function Editor({ initial, onDone, onDelete, isNew }) {
             const on = a.days.includes(w.day);
             return (
               <Pressable
+                hitSlop={4}
                 key={w.day}
                 onPress={() => {
                   haptics.selection();
@@ -210,6 +210,7 @@ function Editor({ initial, onDone, onDelete, isNew }) {
               const on = a.sound?.id === s.id;
               return (
                 <Pressable
+                  hitSlop={6}
                   key={s.id}
                   onPress={() => {
                     haptics.selection();
@@ -241,6 +242,7 @@ function Editor({ initial, onDone, onDelete, isNew }) {
               const on = a.sound?.station?.id === st.id;
               return (
                 <Pressable
+                  hitSlop={6}
                   key={st.id}
                   onPress={() => {
                     haptics.selection();
@@ -293,12 +295,7 @@ export default function AlarmSettingsScreen({ navigation }) {
   if (editing) {
     return (
       <View style={styles.screen} testID="alarm-editor">
-        <PageHeader
-          kicker="Zen Mode"
-          title={editing.isNew ? 'New alarm' : 'Edit alarm'}
-          backIcon="close"
-          onBack={() => setEditing(null)}
-        />
+        <PageHeader kicker="Zen Mode" title={editing.isNew ? 'New alarm' : 'Edit alarm'} backIcon="close" onBack={() => setEditing(null)} />
         <Editor
           initial={editing.alarm}
           isNew={editing.isNew}
@@ -321,6 +318,7 @@ export default function AlarmSettingsScreen({ navigation }) {
         onBack={() => navigation.goBack()}
         right={
           <Pressable
+            hitSlop={6}
             onPress={() => setEditing({ alarm: newAlarm(), isNew: true })}
             accessibilityRole="button"
             accessibilityLabel="New alarm"
@@ -339,17 +337,13 @@ export default function AlarmSettingsScreen({ navigation }) {
           </Pressable>
         )}
         {sorted.length ? (
-          sorted.map((al, i) => (
-            <AlarmCard key={al.id} index={i} alarm={al} onToggle={() => toggle(al.id)} onEdit={() => setEditing({ alarm: al, isNew: false })} />
-          ))
+          sorted.map((al, i) => <AlarmCard key={al.id} index={i} alarm={al} onToggle={() => toggle(al.id)} onEdit={() => setEditing({ alarm: al, isNew: false })} />)
         ) : (
           <View style={styles.empty}>
             <Fog opacity={0.25} />
             <Ionicons name="alarm-outline" size={34} color={colors.gold} />
             <Text style={[type.title, { marginTop: space.md, textAlign: 'center' }]}>Wake up to BOA</Text>
-            <Text style={[type.bodyMuted, { textAlign: 'center', marginTop: space.sm }]}>
-              Set an alarm with a gentle sound, or wake up to your favourite station.
-            </Text>
+            <Text style={[type.bodyMuted, { textAlign: 'center', marginTop: space.sm }]}>Set an alarm with a gentle sound, or wake up to your favourite station.</Text>
             <Button label="New alarm" icon="add" onPress={() => setEditing({ alarm: newAlarm(), isNew: true })} style={{ marginTop: space.md }} />
           </View>
         )}

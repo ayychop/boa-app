@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -14,6 +14,7 @@ import PersonPicker from '../../components/hub/PersonPicker';
 import { ShareBar } from './HubSplitsScreen';
 import { Button, Slate } from '../../components/ui';
 import { colors, fonts, radius, space, type } from '../../theme';
+import { CardsSkeleton } from '../../components/Skeleton';
 
 const nameOf = (p) => (p ? p.display_name || `@${p.username}` : 'Hub member');
 const when = (iso) => new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -136,10 +137,11 @@ export default function HubSplitSheetScreen({ navigation, route }) {
       return { ...f, parties: parties.map((x, i) => ({ ...x, share: String(even[i]) })) };
     });
   };
-  const evenOut = () => setForm((f) => {
-    const even = splits.evenShares(f.parties.length);
-    return { ...f, parties: f.parties.map((x, i) => ({ ...x, share: String(even[i]) })) };
-  });
+  const evenOut = () =>
+    setForm((f) => {
+      const even = splits.evenShares(f.parties.length);
+      return { ...f, parties: f.parties.map((x, i) => ({ ...x, share: String(even[i]) })) };
+    });
 
   const save = async () => {
     const problem = splits.splitProblem(form);
@@ -176,14 +178,26 @@ export default function HubSplitSheetScreen({ navigation, route }) {
   const remove = () =>
     Alert.alert('Delete this draft?', 'It goes for everyone on it.', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: () => splits.deleteSheet(id).then(() => navigation.goBack()).catch((e) => Alert.alert("Couldn't delete", e.message)) },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: () =>
+          splits
+            .deleteSheet(id)
+            .then(() => navigation.goBack())
+            .catch((e) => Alert.alert("Couldn't delete", e.message)),
+      },
     ]);
 
   if (status !== 'ready') {
     return (
       <View style={styles.screen}>
         <PageHeader kicker="Splits" title="Split sheet" onBack={() => navigation.goBack()} />
-        {status === 'loading' ? <ActivityIndicator color={colors.gold} style={{ marginTop: space.xxxl }} /> : <Text style={[type.bodyMuted, { textAlign: 'center', marginTop: space.xxxl }]}>This split sheet isn't available.</Text>}
+        {status === 'loading' ? (
+          <CardsSkeleton count={3} style={{ marginTop: space.xl }} />
+        ) : (
+          <Text style={[type.bodyMuted, { textAlign: 'center', marginTop: space.xxxl }]}>This split sheet isn't available.</Text>
+        )}
       </View>
     );
   }
@@ -213,12 +227,26 @@ export default function HubSplitSheetScreen({ navigation, route }) {
             <ShareBar parties={form.parties.map((p) => ({ ...p, share: splits.parseShare(p.share) || 0 }))} height={10} />
             <View style={{ gap: space.md, marginTop: space.md }}>
               {form.parties.map((p, i) => (
-                <PartyEditor key={p.user_id} party={p} person={people[p.user_id]} onChange={(patch) => setParty(i, patch)} removable={p.user_id !== userId} onRemove={() => setForm((f) => ({ ...f, parties: f.parties.filter((_, j) => j !== i) }))} />
+                <PartyEditor
+                  key={p.user_id}
+                  party={p}
+                  person={people[p.user_id]}
+                  onChange={(patch) => setParty(i, patch)}
+                  removable={p.user_id !== userId}
+                  onRemove={() => setForm((f) => ({ ...f, parties: f.parties.filter((_, j) => j !== i) }))}
+                />
               ))}
             </View>
             <Button label="Add a creative" icon="person-add-outline" variant="ghost" onPress={() => setPicking(true)} testID="split-add-party" style={{ marginTop: space.md, alignSelf: 'stretch' }} />
             <TotalMeter parties={form.parties} />
-            <Field label="Notes (optional)" value={form.notes} onChangeText={(t) => setForm((f) => ({ ...f, notes: t.slice(0, 1000) }))} placeholder="Publishing and master splits are the same." multiline style={{ marginTop: space.lg }} />
+            <Field
+              label="Notes (optional)"
+              value={form.notes}
+              onChangeText={(t) => setForm((f) => ({ ...f, notes: t.slice(0, 1000) }))}
+              placeholder="Publishing and master splits are the same."
+              multiline
+              style={{ marginTop: space.lg }}
+            />
             <Text style={styles.fine}>Saving sends it to everyone on it to agree. Changing a share later clears everyone's agreement.</Text>
             <Button label={busy ? 'Saving' : id ? 'Save changes' : 'Create split sheet'} icon="checkmark" onPress={save} disabled={busy} style={{ marginTop: space.lg, alignSelf: 'stretch' }} />
           </ScrollView>
@@ -256,7 +284,7 @@ export default function HubSplitSheetScreen({ navigation, route }) {
               const person = people[p.user_id];
               return (
                 <View key={p.id} style={[styles.line, i === sheet.parties.length - 1 && { borderBottomWidth: 0 }]}>
-                  <Pressable onPress={() => navigation.navigate('HubProfile', { id: p.user_id })} accessibilityRole="button">
+                  <Pressable hitSlop={4} onPress={() => navigation.navigate('HubProfile', { id: p.user_id })} accessibilityRole="button">
                     <Avatar uri={person?.avatar_url} name={nameOf(person)} size={40} ring={!!person?.is_boa_star} />
                   </Pressable>
                   <View style={{ flex: 1, minWidth: 0 }}>
@@ -283,7 +311,13 @@ export default function HubSplitSheetScreen({ navigation, route }) {
           <Button label={busy ? 'Agreeing' : 'I agree to this split'} icon="checkmark-done" onPress={agree} disabled={busy} style={{ marginTop: space.xl, alignSelf: 'stretch' }} />
         ) : null}
         {!signed && mineParty?.agreed_at ? <Text style={[styles.fine, { textAlign: 'center' }]}>You've agreed. It's signed once everyone else does.</Text> : null}
-        <Button label="Invoice for this work" icon="document-text-outline" variant="ghost" onPress={() => navigation.navigate('HubInvoice', { sheetId: sheet.id, title: sheet.title })} style={{ marginTop: space.md, alignSelf: 'stretch' }} />
+        <Button
+          label="Invoice for this work"
+          icon="document-text-outline"
+          variant="ghost"
+          onPress={() => navigation.navigate('HubInvoice', { sheetId: sheet.id, title: sheet.title })}
+          style={{ marginTop: space.md, alignSelf: 'stretch' }}
+        />
         {creator && !signed ? <Button label="Delete draft" icon="trash-outline" variant="ghost" onPress={remove} style={{ marginTop: space.md, alignSelf: 'stretch' }} /> : null}
       </ScrollView>
     </View>
@@ -299,10 +333,28 @@ const styles = StyleSheet.create({
   party: { padding: space.md, borderRadius: radius.lg, backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
   partyTop: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   partyName: { fontFamily: fonts.semibold, fontSize: 15, color: colors.text, flex: 1 },
-  shareBox: { flexDirection: 'row', alignItems: 'center', height: 44, paddingHorizontal: space.md, borderRadius: radius.md, backgroundColor: colors.surfaceRaised, borderWidth: 1, borderColor: 'rgba(226,168,75,0.45)' },
+  shareBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 44,
+    paddingHorizontal: space.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceRaised,
+    borderWidth: 1,
+    borderColor: 'rgba(226,168,75,0.45)',
+  },
   shareInput: { minWidth: 44, color: colors.text, fontFamily: fonts.bold, fontSize: 17, textAlign: 'right', padding: 0 },
   sharePct: { fontFamily: fonts.bold, fontSize: 15, color: colors.gold, marginLeft: 2 },
-  meter: { flexDirection: 'row', alignItems: 'center', marginTop: space.lg, padding: space.md, borderRadius: radius.lg, borderWidth: 1, borderColor: 'rgba(226,168,75,0.4)', backgroundColor: 'rgba(18,18,22,0.6)' },
+  meter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: space.lg,
+    padding: space.md,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: 'rgba(226,168,75,0.4)',
+    backgroundColor: 'rgba(18,18,22,0.6)',
+  },
   meterValue: { fontFamily: fonts.bold, fontSize: 24, letterSpacing: -0.6, marginTop: 2 },
   fine: { fontFamily: fonts.medium, fontSize: 12, lineHeight: 18, color: colors.textFaint, marginTop: space.md },
   doc: { padding: space.lg, borderRadius: radius.xl, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(226,168,75,0.4)', backgroundColor: 'rgba(18,18,22,0.7)' },

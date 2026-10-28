@@ -18,7 +18,10 @@ export function PageHeader({ title, onBack, backIcon = 'chevron-back', right, ki
       {/* A tab's own screen has nowhere to go back to. */}
       {onBack ? (
         <Pressable
-          onPress={onBack}
+          onPress={() => {
+            haptics.tap();
+            onBack();
+          }}
           hitSlop={12}
           accessibilityRole="button"
           accessibilityLabel="Back"
@@ -44,6 +47,8 @@ export function PageHeader({ title, onBack, backIcon = 'chevron-back', right, ki
         {subtitle ?? null}
       </View>
       {right ?? <View style={{ width: 40 }} />}
+      {/* A hairline of gold light along the header's foot, brightest in the middle. */}
+      <LinearGradient pointerEvents="none" colors={['rgba(226,168,75,0)', 'rgba(246,211,138,0.28)', 'rgba(226,168,75,0)']} start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={styles.headerLight} />
     </View>
   );
 }
@@ -51,7 +56,10 @@ export function PageHeader({ title, onBack, backIcon = 'chevron-back', right, ki
 export function IconButton({ icon, label, onPress, tone = colors.text, filled, testID }) {
   return (
     <Pressable
-      onPress={onPress}
+      onPress={() => {
+        haptics.tap();
+        onPress?.();
+      }}
       hitSlop={10}
       accessibilityRole="button"
       accessibilityLabel={label}
@@ -69,20 +77,30 @@ export function Field({ label, hint, error, style, inputStyle, ...input }) {
   return (
     <View style={style}>
       {label ? <Text style={styles.label}>{label}</Text> : null}
-      <TextInput
-        placeholderTextColor={colors.textFaint}
-        selectionColor={colors.gold}
-        {...input}
-        onFocus={(e) => {
-          setFocused(true);
-          input.onFocus?.(e);
-        }}
-        onBlur={(e) => {
-          setFocused(false);
-          input.onBlur?.(e);
-        }}
-        style={[styles.input, input.multiline && styles.inputMulti, focused && styles.inputFocused, error && styles.inputError, inputStyle]}
-      />
+      <View>
+        <TextInput
+          placeholderTextColor={colors.textFaint}
+          selectionColor={colors.gold}
+          {...input}
+          onFocus={(e) => {
+            setFocused(true);
+            input.onFocus?.(e);
+          }}
+          onBlur={(e) => {
+            setFocused(false);
+            input.onBlur?.(e);
+          }}
+          style={[styles.input, input.multiline && styles.inputMulti, focused && styles.inputFocused, error && styles.inputError, inputStyle]}
+        />
+        {/* Glass catches light on its top edge: a soft sheen there, gold while you type. */}
+        <LinearGradient
+          pointerEvents="none"
+          colors={focused ? ['rgba(246,211,138,0)', 'rgba(246,211,138,0.55)', 'rgba(246,211,138,0)'] : ['rgba(243,239,232,0)', 'rgba(243,239,232,0.16)', 'rgba(243,239,232,0)']}
+          start={{ x: 0, y: 0.5 }}
+          end={{ x: 1, y: 0.5 }}
+          style={styles.inputSheen}
+        />
+      </View>
       {error ? <Text style={styles.error}>{error}</Text> : hint ? <Text style={styles.hint}>{hint}</Text> : null}
     </View>
   );
@@ -129,7 +147,14 @@ export function SettingRow({ icon, title, detail, children, onPress, danger, las
   );
   if (!onPress) return Body;
   return (
-    <Pressable onPress={onPress} accessibilityRole="button" style={({ pressed }) => pressed && { backgroundColor: colors.surfaceRaised }}>
+    <Pressable
+      onPress={() => {
+        haptics.selection();
+        onPress();
+      }}
+      accessibilityRole="button"
+      style={({ pressed }) => pressed && { backgroundColor: colors.surfaceRaised }}
+    >
       {Body}
     </Pressable>
   );
@@ -150,6 +175,7 @@ export function Chip({ label, selected, onPress, icon, testID }) {
         haptics.selection();
         onPress?.();
       }}
+      hitSlop={6}
       accessibilityRole="button"
       accessibilityState={{ selected: !!selected }}
       testID={testID}
@@ -175,6 +201,7 @@ export function Segmented({ options, value, onChange }) {
               haptics.selection();
               onChange(o.id);
             }}
+            hitSlop={{ top: 4, bottom: 4 }}
             accessibilityRole="tab"
             accessibilityState={{ selected: on }}
             style={[styles.segment, on && styles.segmentOn]}
@@ -203,12 +230,7 @@ const pillText = (size) => ({ fontSize: Math.round(size * 0.52), lineHeight: Mat
 export function BoaStarBadge({ size = 18, style }) {
   const height = pillHeight(size);
   return (
-    <View
-      accessible
-      accessibilityLabel="BOA Star"
-      testID="boa-star"
-      style={[{ borderRadius: size, boxShadow: `0px 0px ${Math.round(size * 0.5)}px rgba(226,168,75,0.4)` }, style]}
-    >
+    <View accessible accessibilityLabel="BOA Star" testID="boa-star" style={[{ borderRadius: size, boxShadow: `0px 0px ${Math.round(size * 0.5)}px rgba(226,168,75,0.4)` }, style]}>
       <LinearGradient
         colors={['#FFE6A8', colors.gold, colors.goldDeep]}
         start={{ x: 0, y: 0 }}
@@ -246,12 +268,7 @@ export function DayOneBadge({ size = 18, style, label = true }) {
   // The seal sits evenly inside the round end.
   const sealInset = Math.round((height - 2 - seal) / 2);
   return (
-    <View
-      accessible
-      accessibilityLabel="Day One"
-      testID="day-one"
-      style={[{ borderRadius: size, boxShadow: `0px 0px ${Math.round(size * 0.4)}px rgba(246,211,138,0.22)` }, style]}
-    >
+    <View accessible accessibilityLabel="Day One" testID="day-one" style={[{ borderRadius: size, boxShadow: `0px 0px ${Math.round(size * 0.4)}px rgba(246,211,138,0.22)` }, style]}>
       <LinearGradient
         colors={['#1D1D21', '#111114']}
         start={{ x: 0, y: 0 }}
@@ -268,10 +285,7 @@ export function DayOneBadge({ size = 18, style, label = true }) {
           borderColor: 'rgba(246,211,138,0.55)',
         }}
       >
-        <LinearGradient
-          colors={['#FFE6A8', colors.gold]}
-          style={{ width: seal, height: seal, borderRadius: seal / 2, alignItems: 'center', justifyContent: 'center' }}
-        >
+        <LinearGradient colors={['#FFE6A8', colors.gold]} style={{ width: seal, height: seal, borderRadius: seal / 2, alignItems: 'center', justifyContent: 'center' }}>
           <Text style={{ fontFamily: fonts.extrabold, fontSize: Math.round(seal * 0.62), lineHeight: Math.round(seal * 0.8), color: colors.bg }}>1</Text>
         </LinearGradient>
         {label ? (
@@ -317,32 +331,22 @@ export function Avatar({ uri, name = '?', size = 48, online = false, ring = fals
           <View style={{ position: 'absolute', top: band, left: band, right: band, bottom: band, borderRadius: size / 2, backgroundColor: colors.bg }} />
         </LinearGradient>
       ) : null}
-      <View
-        style={[
-          styles.avatar,
-          { width: inner, height: inner, borderRadius: inner / 2 },
-          gold && { position: 'absolute', top: band + gap, left: band + gap },
-        ]}
-      >
+      <View style={[styles.avatar, { width: inner, height: inner, borderRadius: inner / 2 }, gold && { position: 'absolute', top: band + gap, left: band + gap }]}>
         {uri && !failed ? (
           <Image source={{ uri }} style={StyleSheet.absoluteFill} resizeMode="cover" onError={() => setFailed(true)} />
         ) : (
           <Text style={[styles.initials, { fontSize: inner * 0.36 }]}>{initials || '?'}</Text>
         )}
       </View>
-      {online ? (
-        <View
-          testID="online-dot"
-          accessibilityLabel="Online"
-          style={[styles.dot, { width: dot, height: dot, borderRadius: dot / 2, borderWidth: Math.max(2, size * 0.05) }]}
-        />
-      ) : null}
+      {online ? <View testID="online-dot" accessibilityLabel="Online" style={[styles.dot, { width: dot, height: dot, borderRadius: dot / 2, borderWidth: Math.max(2, size * 0.05) }]} /> : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingHorizontal: space.lg, paddingBottom: space.md },
+  headerLight: { position: 'absolute', left: space.lg, right: space.lg, bottom: 0, height: StyleSheet.hairlineWidth * 2 },
+  inputSheen: { position: 'absolute', top: 0, left: space.md, right: space.md, height: 1 },
   round: {
     width: 40,
     height: 40,

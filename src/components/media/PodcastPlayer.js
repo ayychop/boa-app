@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, { FadeIn, useAnimatedStyle, useReducedMotion, useSharedValue, withSpring } from 'react-native-reanimated';
@@ -11,6 +11,8 @@ import PodcastCover from '../PodcastCover';
 import Scrubber from '../Scrubber';
 import { Slate, Tappable } from '../ui';
 import { colors, fonts, radius, space, type } from '../../theme';
+import { useSlideUp } from '../../utils/motion';
+import { LoadingDots } from '../Skeleton';
 
 const RATES = [1, 1.25, 1.5, 2, 0.75];
 
@@ -19,15 +21,12 @@ const minutes = (sec) => (sec ? `${Math.round(sec / 60)} min` : null);
 function CircleButton({ icon, label, onPress, size = 52, primary, children }) {
   return (
     <Tappable
+      hitSlop={8}
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={label}
       scaleTo={0.9}
-      style={[
-        styles.circle,
-        { width: size, height: size, borderRadius: size / 2 },
-        primary && { backgroundColor: colors.text },
-      ]}
+      style={[styles.circle, { width: size, height: size, borderRadius: size / 2 }, primary && { backgroundColor: colors.text }]}
     >
       {children ?? <Ionicons name={icon} size={size * 0.46} color={primary ? colors.bg : colors.text} />}
     </Tappable>
@@ -54,6 +53,7 @@ export default function PodcastPlayer({ podcast, onClose }) {
   }, [playing, mine, reduceMotion, coverScale]);
   const coverStyle = useAnimatedStyle(() => ({ transform: [{ scale: coverScale.value }] }));
 
+  const slide = useSlideUp(onClose);
   if (!podcast) return null;
 
   const episode = (mine && podcast.episodes.find((e) => e.id === player.current.id)) || podcast.episodes[0];
@@ -64,20 +64,13 @@ export default function PodcastPlayer({ podcast, onClose }) {
   const nextRate = RATES[(RATES.indexOf(rate) + 1) % RATES.length];
 
   return (
-    <Modal visible transparent animationType="slide" onRequestClose={onClose} statusBarTranslucent>
+    <Modal visible transparent animationType="none" onRequestClose={slide.dismiss} statusBarTranslucent>
       <GestureHandlerRootView style={{ flex: 1 }}>
-        <View style={styles.backdrop}>
-          <LinearGradient
-            colors={[`${podcast.palette[0]}55`, `${podcast.palette[1]}88`, colors.bg]}
-            locations={[0, 0.45, 0.9]}
-            style={StyleSheet.absoluteFill}
-          />
-          <ScrollView
-            contentContainerStyle={{ alignItems: 'center', paddingTop: insets.top + space.md, paddingBottom: insets.bottom + space.xxl }}
-            showsVerticalScrollIndicator={false}
-          >
+        <Animated.View style={[styles.backdrop, slide.style]}>
+          <LinearGradient colors={[`${podcast.palette[0]}55`, `${podcast.palette[1]}88`, colors.bg]} locations={[0, 0.45, 0.9]} style={StyleSheet.absoluteFill} />
+          <ScrollView contentContainerStyle={{ alignItems: 'center', paddingTop: insets.top + space.md, paddingBottom: insets.bottom + space.xxl }} showsVerticalScrollIndicator={false}>
             <View style={[styles.topBar, { width: contentWidth }]}>
-              <Pressable onPress={onClose} hitSlop={12} accessibilityRole="button" accessibilityLabel="Close player" style={styles.close}>
+              <Pressable onPress={slide.dismiss} hitSlop={12} accessibilityRole="button" accessibilityLabel="Close player" style={styles.close}>
                 <Ionicons name="chevron-down" size={24} color={colors.text} />
               </Pressable>
               <View style={{ alignItems: 'center' }}>
@@ -95,9 +88,7 @@ export default function PodcastPlayer({ podcast, onClose }) {
 
             <View style={{ width: contentWidth }}>
               <View style={styles.epMeta}>
-                <Slate color={podcast.palette[0]}>
-                  {[podcast.category, minutes(episode.duration)].filter(Boolean).join(' · ')}
-                </Slate>
+                <Slate color={podcast.palette[0]}>{[podcast.category, minutes(episode.duration)].filter(Boolean).join(' · ')}</Slate>
                 {episode.sample && (
                   <View style={styles.sampleBadge}>
                     <Text style={styles.sampleText}>Sample Episode</Text>
@@ -112,32 +103,17 @@ export default function PodcastPlayer({ podcast, onClose }) {
               </Text>
 
               <View style={{ marginTop: space.xl }}>
-                <Scrubber
-                  position={mine ? position : 0}
-                  duration={mine ? duration : 0}
-                  onSeek={player.seek}
-                  tint={podcast.palette[0]}
-                />
+                <Scrubber position={mine ? position : 0} duration={mine ? duration : 0} onSeek={player.seek} tint={podcast.palette[0]} />
               </View>
 
               <View style={styles.controls}>
-                <Tappable
-                  onPress={() => player.setRate(nextRate)}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Playback speed ${rate}x`}
-                  style={styles.rate}
-                >
+                <Tappable hitSlop={10} onPress={() => player.setRate(nextRate)} accessibilityRole="button" accessibilityLabel={`Playback speed ${rate}x`} style={styles.rate}>
                   <Text style={styles.rateText}>{rate}×</Text>
                 </Tappable>
                 <CircleButton icon="play-back" label="Back 15 seconds" onPress={() => player.skip(-15)} />
-                <CircleButton
-                  primary
-                  size={76}
-                  label={playing ? 'Pause' : 'Play'}
-                  onPress={() => (mine ? player.toggle() : player.play(item))}
-                >
+                <CircleButton primary size={76} label={playing ? 'Pause' : 'Play'} onPress={() => (mine ? player.toggle() : player.play(item))}>
                   {mine && player.status === 'loading' ? (
-                    <ActivityIndicator color={colors.bg} />
+                    <LoadingDots color={colors.bg} />
                   ) : (
                     <Ionicons name={playing ? 'pause' : 'play'} size={32} color={colors.bg} style={playing ? null : { marginLeft: 4 }} />
                   )}
@@ -146,14 +122,9 @@ export default function PodcastPlayer({ podcast, onClose }) {
                 {/* Balances the speed pill so play stays centred. */}
                 <View style={styles.rate} />
               </View>
-              {mine && player.status === 'error' && (
-                <Text style={[type.caption, { textAlign: 'center', marginTop: space.md }]}>
-                  This episode couldn't load. Tap play to retry.
-                </Text>
-              )}
+              {mine && player.status === 'error' && <Text style={[type.caption, { textAlign: 'center', marginTop: space.md }]}>This episode couldn't load. Tap play to retry.</Text>}
 
               <Text style={[type.bodyMuted, { marginTop: space.xl }]}>{podcast.tagline}</Text>
-
 
               <Slate style={{ marginTop: space.xxl, marginBottom: space.md }}>Episodes</Slate>
               {podcast.episodes.map((ep, i) => {
@@ -166,9 +137,7 @@ export default function PodcastPlayer({ podcast, onClose }) {
                       accessibilityLabel={`Play ${ep.title}${ep.sample ? ' (sample episode)' : ''}`}
                       style={({ pressed }) => [styles.epRow, isCurrent && styles.epRowActive, pressed && { opacity: 0.7 }]}
                     >
-                      <Text style={[styles.epNum, isCurrent && { color: podcast.palette[0] }]}>
-                        {String(i + 1).padStart(2, '0')}
-                      </Text>
+                      <Text style={[styles.epNum, isCurrent && { color: podcast.palette[0] }]}>{String(i + 1).padStart(2, '0')}</Text>
                       <View style={{ flex: 1, minWidth: 0 }}>
                         <Text style={styles.epTitle} numberOfLines={1}>
                           {ep.title}
@@ -177,18 +146,14 @@ export default function PodcastPlayer({ podcast, onClose }) {
                           {[i === 0 ? 'Latest' : null, minutes(ep.duration), ep.sample ? 'Sample Episode' : null].filter(Boolean).join(' · ')}
                         </Text>
                       </View>
-                      <Ionicons
-                        name={isCurrent && playing ? 'pulse' : 'play-circle-outline'}
-                        size={22}
-                        color={isCurrent ? podcast.palette[0] : colors.textMuted}
-                      />
+                      <Ionicons name={isCurrent && playing ? 'pulse' : 'play-circle-outline'} size={22} color={isCurrent ? podcast.palette[0] : colors.textMuted} />
                     </Pressable>
                   </Animated.View>
                 );
               })}
             </View>
           </ScrollView>
-        </View>
+        </Animated.View>
       </GestureHandlerRootView>
     </Modal>
   );

@@ -3,16 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useIsFocused } from '@react-navigation/native';
-import Animated, {
-  FadeIn,
-  FadeInDown,
-  FadeOut,
-  useAnimatedStyle,
-  useSharedValue,
-  withSequence,
-  withSpring,
-  withTiming,
-} from 'react-native-reanimated';
+import Animated, { FadeIn, FadeInDown, FadeOut, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { fetchStationsByTag, GENRES } from '../api/radio';
 import { backupStations, curatedStations } from '../data/radioStations';
 import { checkAhead, healList, markAlive, markDead, useDeadStations } from '../api/stationHealth';
@@ -49,8 +40,12 @@ function GenrePills({ selected, onSelect, style }) {
     const active = g.tag === selected;
     return (
       <Pressable
+        hitSlop={8}
         key={g.tag}
-        onPress={() => onSelect(g.tag)}
+        onPress={() => {
+          haptics.selection();
+          onSelect(g.tag);
+        }}
         accessibilityRole="button"
         accessibilityState={{ selected: active }}
         style={({ pressed }) => [styles.pill, active && styles.pillActive, pressed && { opacity: 0.6 }]}
@@ -60,12 +55,7 @@ function GenrePills({ selected, onSelect, style }) {
     );
   });
   return (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      style={[styles.pillsScroll, style]}
-      contentContainerStyle={styles.pills}
-    >
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={[styles.pillsScroll, style]} contentContainerStyle={styles.pills}>
       {pills}
     </ScrollView>
   );
@@ -100,12 +90,7 @@ function StationText({ station, track, status, meta, compact, saved, onSave, hif
   const onAir = status === 'playing';
   return (
     <View style={styles.textBlock}>
-      <Animated.View
-        key={station.id}
-        entering={FadeInDown.springify().damping(18).stiffness(160)}
-        exiting={FadeOut.duration(120)}
-        style={styles.textInner}
-      >
+      <Animated.View key={station.id} entering={FadeInDown.springify().damping(18).stiffness(160)} exiting={FadeOut.duration(120)} style={styles.textInner}>
         <View style={styles.nameRow}>
           <Text style={[styles.name, compact && styles.nameCompact, { flexShrink: 1 }]} numberOfLines={2} accessibilityRole="header">
             {station.name}
@@ -170,13 +155,7 @@ const SongInfo = memo(function SongInfo({ track }) {
       {track ? (
         <View style={styles.songButtons}>
           <SongButton icon="musical-note" label="Shazam" a11y={`Shazam ${parts?.title ?? track}`} onPress={openShazam} />
-          <SongButton
-            icon="logo-youtube"
-            label="YouTube Music"
-            a11y={`Find ${parts ? `${parts.title} by ${parts.artist}` : track} on YouTube Music`}
-            onPress={() => openYouTubeMusic(track)}
-            primary
-          />
+          <SongButton icon="logo-youtube" label="YouTube Music" a11y={`Find ${parts ? `${parts.title} by ${parts.artist}` : track} on YouTube Music`} onPress={() => openYouTubeMusic(track)} primary />
         </View>
       ) : (
         <View style={styles.songButtons}>
@@ -192,19 +171,8 @@ const SongInfo = memo(function SongInfo({ track }) {
 function StageWash({ color }) {
   const tint = color || FALLBACK_GLOW;
   return (
-    <Animated.View
-      key={tint}
-      entering={FadeIn.duration(700)}
-      exiting={FadeOut.duration(700)}
-      pointerEvents="none"
-      style={StyleSheet.absoluteFill}
-      testID="stage-wash"
-    >
-      <LinearGradient
-        colors={[withAlpha(tint, 0.34), withAlpha(tint, 0.1), 'rgba(5,5,6,0)']}
-        locations={[0, 0.45, 0.85]}
-        style={StyleSheet.absoluteFill}
-      />
+    <Animated.View key={tint} entering={FadeIn.duration(700)} exiting={FadeOut.duration(700)} pointerEvents="none" style={StyleSheet.absoluteFill} testID="stage-wash">
+      <LinearGradient colors={[withAlpha(tint, 0.34), withAlpha(tint, 0.1), 'rgba(5,5,6,0)']} locations={[0, 0.45, 0.85]} style={StyleSheet.absoluteFill} />
     </Animated.View>
   );
 }
@@ -215,7 +183,7 @@ function Notice({ title, body, action, onAction }) {
       <Text style={[styles.name, styles.nameCompact]}>{title}</Text>
       {body && <Text style={[styles.subtitle, { textAlign: 'center' }]}>{body}</Text>}
       {action && (
-        <Pressable onPress={onAction} style={({ pressed }) => [styles.retry, pressed && { opacity: 0.8 }]}>
+        <Pressable hitSlop={8} onPress={onAction} style={({ pressed }) => [styles.retry, pressed && { opacity: 0.8 }]}>
           <Text style={styles.retryText}>{action}</Text>
         </Pressable>
       )}
@@ -379,16 +347,7 @@ export default function RadioScreen({ route, navigation }) {
   // The record fills ~70% of its column, but never so tall that the name
   // and track line get pushed under the mini player, or (on its side) out
   // of the stage.
-  const discSize = stage
-    ? Math.max(
-        0,
-        Math.round(
-          landscape
-            ? Math.min(recordWidth * 0.7, stage.height - 48, 440)
-            : Math.min(recordWidth * 0.7, (stage.height - TEXT_BLOCK) * 0.86, 440),
-        ),
-      )
-    : 0;
+  const discSize = stage ? Math.max(0, Math.round(landscape ? Math.min(recordWidth * 0.7, stage.height - 48, 440) : Math.min(recordWidth * 0.7, (stage.height - TEXT_BLOCK) * 0.86, 440))) : 0;
   const compact = recordWidth < 420;
 
   const statusFor = (station) => (player.current?.id === station.id ? player.status : null);
@@ -412,8 +371,7 @@ export default function RadioScreen({ route, navigation }) {
   };
 
   // While it plays, the stream's own titles (native ICY) win over polling.
-  const trackFor = (station) =>
-    (player.current?.id === station.id && player.trackTitle) || fetchedTrack;
+  const trackFor = (station) => (player.current?.id === station.id && player.trackTitle) || fetchedTrack;
   const itemWidth = carouselItemWidth(discSize);
 
   let record;
@@ -422,16 +380,7 @@ export default function RadioScreen({ route, navigation }) {
   else if (data.status === 'ready' && stations.length > 0) {
     record = (
       <View style={{ width: recordWidth, height: discSize + 40 }}>
-        <GlowField
-          items={stations}
-          colorsById={glows}
-          index={index}
-          x={scrollX}
-          itemWidth={itemWidth}
-          discSize={discSize}
-          centerY={(discSize + 40) / 2}
-          width={recordWidth}
-        />
+        <GlowField items={stations} colorsById={glows} index={index} x={scrollX} itemWidth={itemWidth} discSize={discSize} centerY={(discSize + 40) / 2} width={recordWidth} />
         <RecordCarousel
           key={genre}
           position={scrollX}
@@ -446,13 +395,7 @@ export default function RadioScreen({ route, navigation }) {
           // On its side, neighbours would slide under the track info.
           peek={!landscape}
           renderItem={(station, i) => (
-            <Vinyl
-              station={station}
-              focused={i === index}
-              size={discSize}
-              status={statusFor(station)}
-              spinning={player.current?.id === station.id && player.status === 'playing'}
-            />
+            <Vinyl station={station} focused={i === index} size={discSize} status={statusFor(station)} spinning={player.current?.id === station.id && player.status === 'playing'} />
           )}
         />
       </View>
@@ -464,9 +407,7 @@ export default function RadioScreen({ route, navigation }) {
             station={active}
             saved={user.isSaved(active.id)}
             hifi={hasPremium}
-            onSave={() =>
-              requirePremium(() => user.toggleSaved(active), 'Upgrade to BOA Premium to save your favourite stations.')
-            }
+            onSave={() => requirePremium(() => user.toggleSaved(active), 'Upgrade to BOA Premium to save your favourite stations.')}
             track={trackFor(active)}
             status={statusFor(active)}
             meta={metaFor(active)}
@@ -487,12 +428,7 @@ export default function RadioScreen({ route, navigation }) {
         {loading ? (
           <Notice title="Tuning in…" body={`Finding ${label} stations on air`} />
         ) : data.status === 'error' ? (
-          <Notice
-            title="Couldn't reach the airwaves"
-            body="Check your connection and try again."
-            action="Retry"
-            onAction={() => load(genre)}
-          />
+          <Notice title="Couldn't reach the airwaves" body="Check your connection and try again." action="Retry" onAction={() => load(genre)} />
         ) : (
           <Notice title={`No ${label} on air`} body="Try another genre." />
         )}
@@ -507,13 +443,7 @@ export default function RadioScreen({ route, navigation }) {
       <StageWash color={active ? glows[active.id] : null} />
       {stage && <FogPlane x={scrollX} width={stage.width} span={itemWidth * stations.length} />}
 
-      <View
-        style={[
-          styles.header,
-          { paddingTop: insets.top + (short ? space.sm : space.lg) },
-          short && styles.headerShort,
-        ]}
-      >
+      <View style={[styles.header, { paddingTop: insets.top + (short ? space.sm : space.lg) }, short && styles.headerShort]}>
         <Text style={styles.title}>Radio</Text>
         {/* Short screens keep the genres in the header row. */}
         {short && pills}
@@ -549,9 +479,7 @@ export default function RadioScreen({ route, navigation }) {
             {info}
           </Animated.View>
         )}
-        {isFocused && player.current?.kind === 'radio' && player.status === 'playing' && (
-          <Reactions style={[{ right: space.lg }, { bottom: bottomPad - space.xs }]} />
-        )}
+        {isFocused && player.current?.kind === 'radio' && player.status === 'playing' && <Reactions style={[{ right: space.lg }, { bottom: bottomPad - space.xs }]} />}
         {data.status === 'ready' && !player.current && stations.length > 0 && (
           <Text
             style={[
@@ -561,7 +489,8 @@ export default function RadioScreen({ route, navigation }) {
               landscape && { left: 0, width: recordWidth, textAlign: 'center' },
             ]}
           >
-            Swipe to browse · Tap the record to play</Text>
+            Swipe to browse · Tap the record to play
+          </Text>
         )}
       </View>
       <EqualizerSheet open={eqOpen} onClose={() => setEqOpen(false)} />

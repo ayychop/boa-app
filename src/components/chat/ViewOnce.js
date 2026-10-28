@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { ActivityIndicator, BackHandler, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { BackHandler, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useVideoPlayer, VideoView } from 'expo-video';
@@ -10,6 +10,7 @@ import BottomSheet from '../BottomSheet';
 import { Toggle } from '../kit';
 import { Button } from '../ui';
 import { colors, fonts, radius, space, type } from '../../theme';
+import { LoadingDots } from '../Skeleton';
 
 /** The "1" in a ring that marks view-once media everywhere. */
 export function OnceMark({ size = 22, color = colors.gold, dim = false }) {
@@ -44,7 +45,7 @@ export function ViewOnceTile({ message, mine, onOpen, opening, accent = colors.g
       style={({ pressed }) => [styles.tile, pressed && { opacity: 0.7 }]}
       testID={`view-once-${message.id}`}
     >
-      {opening ? <ActivityIndicator size="small" color={accent} /> : <OnceMark color={accent} dim={opened} />}
+      {opening ? <LoadingDots color={accent} size={5} /> : <OnceMark color={accent} dim={opened} />}
       <View style={{ flexShrink: 1 }}>
         <Text style={[styles.tileTitle, { color: textColor }]} numberOfLines={1}>
           {label}
@@ -130,9 +131,7 @@ export function SendMediaSheet({ file, viewOnce, onViewOnce, onCancel, onSend })
           <OnceMark size={24} />
           <View style={{ flex: 1 }}>
             <Text style={styles.onceTitle}>View once</Text>
-            <Text style={[type.bodyMuted, styles.onceBody]}>
-              They can open it once. Then it's deleted, and screenshots are blocked on Android.
-            </Text>
+            <Text style={[type.bodyMuted, styles.onceBody]}>They can open it once. Then it's deleted, and screenshots are blocked on Android.</Text>
           </View>
           <Toggle value={viewOnce} onChange={onViewOnce} label="View once" testID="send-view-once" />
         </View>

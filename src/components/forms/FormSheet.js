@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Platform, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Platform, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import Animated, { FadeIn, FadeInDown, ZoomIn } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import BottomSheet from '../BottomSheet';
 import { Button, Fog, Slate } from '../ui';
 import { colors, fonts, radius, space, type } from '../../theme';
+import { LoadingDots } from '../Skeleton';
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const HANDLE_OR_URL = /^(@[\w.]{2,30}|(https?:\/\/)?[\w-]+(\.[\w-]+)+(\/\S*)?)$/i;
@@ -120,12 +121,7 @@ function Field({ field, value, error, onChange, inputRef, onSubmitEditing, last 
         blurOnSubmit={!field.multiline}
         accessibilityLabel={field.label}
         aria-invalid={!!error}
-        style={[
-          styles.input,
-          field.multiline && styles.multiline,
-          focused && styles.inputFocused,
-          error && styles.inputError,
-        ]}
+        style={[styles.input, field.multiline && styles.multiline, focused && styles.inputFocused, error && styles.inputError]}
       />
       {error ? (
         <Animated.Text entering={FadeIn.duration(150)} style={styles.error}>
@@ -188,9 +184,7 @@ export default function FormSheet({ kind, open, initialValues, onSubmit, onClose
           </Animated.View>
           <Text style={[type.h1, { textAlign: 'center', marginTop: space.xl }]}>{form.success[0]}</Text>
           <Text style={[type.serif, styles.doneSerif]}>{form.success[1]}</Text>
-          <Text style={[type.bodyMuted, { textAlign: 'center', marginTop: space.md }]}>
-            {values.email ? `We’ll reply to ${values.email.trim()}.` : ''}
-          </Text>
+          <Text style={[type.bodyMuted, { textAlign: 'center', marginTop: space.md }]}>{values.email ? `We’ll reply to ${values.email.trim()}.` : ''}</Text>
           <Button label="Done" onPress={onClose} style={{ marginTop: space.xl, alignSelf: 'stretch' }} />
         </Animated.View>
       ) : (
@@ -218,7 +212,7 @@ export default function FormSheet({ kind, open, initialValues, onSubmit, onClose
           ))}
           {phase === 'sending' ? (
             <View style={[styles.sending]}>
-              <ActivityIndicator color={colors.bg} />
+              <LoadingDots color={colors.bg} />
             </View>
           ) : (
             <Button label={form.submitLabel} icon="arrow-forward" onPress={submit} style={{ marginTop: space.sm }} />

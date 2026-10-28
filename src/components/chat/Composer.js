@@ -124,6 +124,7 @@ export default function Composer({ onSend, onAttach, onVoice, onTyping, bottomIn
   const submit = () => {
     const text = draft.trim();
     if (!text) return;
+    haptics.tap();
     setDraft('');
     if (lastPing.current) onTyping?.(false);
     lastPing.current = 0;
@@ -137,6 +138,14 @@ export default function Composer({ onSend, onAttach, onVoice, onTyping, bottomIn
       {Platform.OS === 'ios' ? <BlurView intensity={50} tint={vibe.light ? 'light' : 'dark'} style={StyleSheet.absoluteFill} /> : null}
       {/* The glass's tint, which is also its look wherever blur isn't drawn. */}
       <View style={[StyleSheet.absoluteFill, { backgroundColor: vibe.bar }]} />
+      {/* The glass's top edge catching the light. */}
+      <LinearGradient
+        pointerEvents="none"
+        colors={vibe.light ? ['rgba(17,17,19,0)', 'rgba(17,17,19,0.12)', 'rgba(17,17,19,0)'] : ['rgba(243,239,232,0)', 'rgba(243,239,232,0.22)', 'rgba(243,239,232,0)']}
+        start={{ x: 0, y: 0.5 }}
+        end={{ x: 1, y: 0.5 }}
+        style={styles.edgeLight}
+      />
       {recording ? (
         <Animated.View entering={FadeIn.duration(160)} exiting={FadeOut.duration(120)} style={styles.row} testID="voice-recording">
           <Pressable onPress={() => finish(false)} accessibilityRole="button" accessibilityLabel="Discard voice note" hitSlop={10} style={styles.side}>
@@ -149,7 +158,7 @@ export default function Composer({ onSend, onAttach, onVoice, onTyping, bottomIn
               <Waveform levels={downsample(levels.current.slice(-60), 30)} progress={1} mine={false} height={22} />
             </View>
           </View>
-          <Pressable onPress={() => finish(true)} accessibilityRole="button" accessibilityLabel="Send voice note" style={styles.send} testID="voice-send">
+          <Pressable onPress={() => finish(true)} accessibilityRole="button" accessibilityLabel="Send voice note" hitSlop={6} style={styles.send} testID="voice-send">
             <LinearGradient colors={vibe.send} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
             <Ionicons name="arrow-up" size={20} color={vibe.sendIcon} />
           </Pressable>
@@ -183,7 +192,7 @@ export default function Composer({ onSend, onAttach, onVoice, onTyping, bottomIn
           />
           {typing ? (
             <GlowRing testID="hub-send-glow" vibe={vibe}>
-              <Pressable onPress={submit} accessibilityRole="button" accessibilityLabel="Send" style={({ pressed }) => [styles.send, pressed && styles.pressed]} testID="hub-send">
+              <Pressable onPress={submit} accessibilityRole="button" accessibilityLabel="Send" hitSlop={6} style={({ pressed }) => [styles.send, pressed && styles.pressed]} testID="hub-send">
                 <LinearGradient colors={vibe.send} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
                 <Ionicons name="arrow-up" size={20} color={vibe.sendIcon} />
               </Pressable>
@@ -194,6 +203,7 @@ export default function Composer({ onSend, onAttach, onVoice, onTyping, bottomIn
                 onPress={start}
                 accessibilityRole="button"
                 accessibilityLabel="Record a voice note"
+                hitSlop={6}
                 style={({ pressed }) => [styles.mic, { backgroundColor: vibe.accentSoft }, pressed && styles.pressed]}
                 testID="hub-mic"
               >
@@ -208,6 +218,7 @@ export default function Composer({ onSend, onAttach, onVoice, onTyping, bottomIn
 }
 
 const styles = StyleSheet.create({
+  edgeLight: { position: 'absolute', top: 0, left: 0, right: 0, height: 1 },
   wrap: {
     overflow: 'hidden',
     paddingHorizontal: space.md,

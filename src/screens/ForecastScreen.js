@@ -1,23 +1,15 @@
 import { useEffect } from 'react';
-import { ActivityIndicator, Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import Animated, {
-  Easing,
-  FadeIn,
-  FadeInDown,
-  interpolateColor,
-  useAnimatedStyle,
-  useReducedMotion,
-  useSharedValue,
-  withTiming,
-} from 'react-native-reanimated';
+import Animated, { Easing, FadeIn, FadeInDown, interpolateColor, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useWeather } from '../context/WeatherContext';
 import { hourLabel } from '../api/weather';
 import WeatherGlyph, { SKY } from '../components/weather/WeatherGlyph';
 import { Button, Slate } from '../components/ui';
 import { colors, fonts, radius, space, type } from '../theme';
+import { CardsSkeleton } from '../components/Skeleton';
 
 // A day's temperature range as a bar on the week's scale, warm at the top
 // end, so the week reads at a glance.
@@ -69,13 +61,7 @@ export default function ForecastScreen({ navigation }) {
   const skyStyle = useAnimatedStyle(() => ({ backgroundColor: interpolateColor(tone.value, [0, 1], [colors.bg, sky[0]]) }));
 
   const close = (
-    <Pressable
-      onPress={() => navigation.goBack()}
-      hitSlop={12}
-      accessibilityRole="button"
-      accessibilityLabel="Close forecast"
-      style={({ pressed }) => [styles.close, pressed && { opacity: 0.6 }]}
-    >
+    <Pressable onPress={() => navigation.goBack()} hitSlop={12} accessibilityRole="button" accessibilityLabel="Close forecast" style={({ pressed }) => [styles.close, pressed && { opacity: 0.6 }]}>
       <Ionicons name="chevron-down" size={22} color={colors.text} />
     </Pressable>
   );
@@ -92,7 +78,7 @@ export default function ForecastScreen({ navigation }) {
             : 'BOA uses your approximate location (never precise, never stored on a server) to show the forecast here and on the home screen widget.'}
         </Text>
         {status === 'loading' ? (
-          <ActivityIndicator color={colors.gold} style={{ marginTop: space.xl }} />
+          <CardsSkeleton count={4} height={92} style={{ marginTop: space.xl, paddingHorizontal: 0 }} />
         ) : status === 'denied' ? (
           <Button label="Open Settings" icon="settings-outline" onPress={() => Linking.openSettings()} style={{ marginTop: space.xl }} />
         ) : (
@@ -125,7 +111,7 @@ export default function ForecastScreen({ navigation }) {
           <Text style={styles.nowLabel}>{data.label}</Text>
           <Text style={styles.outlook}>{data.outlook}</Text>
           <Text style={styles.hilo}>
-            H {data.high}°  ·  L {data.low}°  ·  Feels like {data.feels}°
+            H {data.high}° · L {data.low}° · Feels like {data.feels}°
           </Text>
         </Animated.View>
 
@@ -154,7 +140,9 @@ export default function ForecastScreen({ navigation }) {
           {data.days.map((d, i) => (
             <Animated.View
               key={d.date}
-              entering={FadeInDown.delay(80 + i * 50).springify().damping(20)}
+              entering={FadeInDown.delay(80 + i * 50)
+                .springify()
+                .damping(20)}
               style={[styles.day, i === data.days.length - 1 && { borderBottomWidth: 0 }]}
               accessible
               accessibilityLabel={`${d.name}: ${d.label}, high ${d.high}, low ${d.low}, ${d.precip}% chance of rain`}

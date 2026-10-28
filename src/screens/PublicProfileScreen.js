@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Image, Platform, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Image, Platform, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '../lib/supabase';
@@ -10,6 +10,7 @@ import StationLogo from '../components/StationLogo';
 import BoaLogo from '../components/BoaLogo';
 import { Button, Slate } from '../components/ui';
 import { colors, fonts, radius, space, type } from '../theme';
+import { ProfileSkeleton } from '../components/Skeleton';
 
 const MAX_WIDTH = 720;
 const CARD = 120;
@@ -117,7 +118,7 @@ export default function PublicProfileScreen({ username }) {
         </View>
 
         {status === 'loading' ? (
-          <ActivityIndicator color={colors.gold} style={{ marginTop: space.xxxl }} />
+          <ProfileSkeleton />
         ) : status === 'missing' ? (
           <View style={styles.missing}>
             <Text style={type.title} accessibilityRole="header">

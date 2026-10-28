@@ -30,6 +30,7 @@ export function ProfileTabs({ value, onChange, width }) {
         const on = t.id === value;
         return (
           <Pressable
+            hitSlop={8}
             key={t.id}
             onPress={() => {
               haptics.selection();
@@ -136,10 +137,31 @@ const styles = StyleSheet.create({
   tile: { overflow: 'hidden', backgroundColor: colors.surface },
   tileFallback: { alignItems: 'center', justifyContent: 'center', padding: space.sm, gap: 6 },
   tileCaption: { fontFamily: fonts.medium, fontSize: 10.5, lineHeight: 14, color: colors.textMuted, textAlign: 'center' },
-  tileBadge: { position: 'absolute', top: 6, right: 6, flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 6, paddingVertical: 3, borderRadius: radius.pill, backgroundColor: 'rgba(5,5,6,0.55)' },
+  tileBadge: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: radius.pill,
+    backgroundColor: 'rgba(5,5,6,0.55)',
+  },
   tileBadgeText: { fontFamily: fonts.stamp, fontSize: 10, color: '#fff' },
   empty: { alignItems: 'center', paddingVertical: space.xxxl, paddingHorizontal: space.xl },
-  emptyRing: { width: 72, height: 72, borderRadius: 36, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: 'rgba(226,168,75,0.55)', backgroundColor: colors.goldSoft, boxShadow: '0px 0px 24px rgba(226,168,75,0.25)' },
+  emptyRing: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: 'rgba(226,168,75,0.55)',
+    backgroundColor: colors.goldSoft,
+    boxShadow: '0px 0px 24px rgba(226,168,75,0.25)',
+  },
   emptyTitle: { fontFamily: fonts.semibold, fontSize: 19, letterSpacing: -0.5, color: colors.text, marginTop: space.lg, textAlign: 'center' },
   emptyBody: { fontFamily: fonts.regular, fontSize: 14, lineHeight: 20, color: colors.textMuted, marginTop: 6, textAlign: 'center' },
   emptyAction: { marginTop: space.lg, paddingHorizontal: space.lg, paddingVertical: 10, borderRadius: radius.pill, borderWidth: 1, borderColor: 'rgba(226,168,75,0.6)' },

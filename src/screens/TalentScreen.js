@@ -11,6 +11,7 @@ import CastingBoard from '../components/casting/CastingBoard';
 import { Button, Fog, Slate, Tappable } from '../components/ui';
 import useBottomSpace from '../hooks/useBottomSpace';
 import useLayout from '../hooks/useLayout';
+import { haptics } from '../utils/haptics';
 import { colors, fonts, radius, space, type } from '../theme';
 
 const FILTERS = [
@@ -35,12 +36,7 @@ function TalentCard({ person, width, onPress, delay, selected }) {
   return (
     <Animated.View entering={FadeInDown.delay(delay).springify().damping(18)} layout={LinearTransition.springify().damping(20)}>
       <Tappable onPress={() => onPress(person)} accessibilityRole="button" accessibilityLabel={`${person.name}, ${person.role}`}>
-        <Headshot
-          person={person}
-          width={width}
-          ratio={person.ratio}
-          caption={{ kicker: person.role, title: person.name, highlight: selected }}
-        />
+        <Headshot person={person} width={width} ratio={person.ratio} caption={{ kicker: person.role, title: person.name, highlight: selected }} />
       </Tappable>
     </Animated.View>
   );
@@ -90,29 +86,26 @@ export default function TalentScreen({ route, navigation }) {
 
   const browse = (
     <ScrollView testID="talent-scroll" contentContainerStyle={{ paddingBottom: bottom }} showsVerticalScrollIndicator={false}>
-      <View
-        style={[
-          styles.hero,
-          { paddingTop: insets.top + space.xxl, paddingHorizontal: (pane - contentWidth) / 2 + space.xl },
-        ]}
-      >
+      <View style={[styles.hero, { paddingTop: insets.top + space.xxl, paddingHorizontal: (pane - contentWidth) / 2 + space.xl }]}>
         <Fog opacity={0.22} />
         <LinearGradient colors={['transparent', colors.bg]} locations={[0.5, 1]} style={StyleSheet.absoluteFill} />
         <Slate dot>03 · Talent</Slate>
         <Text style={[type.display, { marginTop: space.md }]}>
           The <Text style={[type.serif, styles.serifBig]}>roster.</Text>
         </Text>
-        <Text style={[type.bodyMuted, styles.lede]}>
-          Actors and models we believe in. Most of them came through an open call. None of them came through a favour.
-        </Text>
+        <Text style={[type.bodyMuted, styles.lede]}>Actors and models we believe in. Most of them came through an open call. None of them came through a favour.</Text>
         <View style={styles.filters}>
           {FILTERS.map((f) => {
             const active = f.id === filter;
             const count = talent.filter(f.test).length;
             return (
               <Pressable
+                hitSlop={{ top: 4, bottom: 4 }}
                 key={f.id}
-                onPress={() => setFilter(f.id)}
+                onPress={() => {
+                  haptics.selection();
+                  setFilter(f.id);
+                }}
                 accessibilityRole="button"
                 accessibilityState={{ selected: active }}
                 style={({ pressed }) => [styles.filter, active && styles.filterActive, pressed && { opacity: 0.7 }]}
@@ -135,13 +128,7 @@ export default function TalentScreen({ route, navigation }) {
         {grid.map((col, c) => (
           <View key={c} style={{ width: colWidth, gap: space.lg }}>
             {col.map((person, i) => (
-              <TalentCard
-                key={person.id}
-                person={person}
-                width={colWidth}
-                onPress={open}
-                delay={(i * columns + c) * 55}
-              />
+              <TalentCard key={person.id} person={person} width={colWidth} onPress={open} delay={(i * columns + c) * 55} />
             ))}
           </View>
         ))}
@@ -151,9 +138,7 @@ export default function TalentScreen({ route, navigation }) {
         <Text style={[type.h1, { textAlign: 'center' }]}>
           The next face here could be <Text style={type.serif}>yours.</Text>
         </Text>
-        <Text style={[type.bodyMuted, { textAlign: 'center', marginTop: space.sm }]}>
-          No agent. No followers. No fee. Send us what you have and a real person will watch it.
-        </Text>
+        <Text style={[type.bodyMuted, { textAlign: 'center', marginTop: space.sm }]}>No agent. No followers. No fee. Send us what you have and a real person will watch it.</Text>
         <Button label="Get seen" icon="arrow-forward" onPress={forms.openGetSeen} style={{ marginTop: space.xl }} />
       </Animated.View>
     </ScrollView>

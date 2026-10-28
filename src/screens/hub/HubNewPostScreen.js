@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,6 +11,7 @@ import { CAPTION_MAX, createPost, parseTags, postProblem, resolveUsernames } fro
 import { Field, PageHeader } from '../../components/kit';
 import { Button, Slate } from '../../components/ui';
 import { colors, fonts, radius, space } from '../../theme';
+import { LoadingDots } from '../../components/Skeleton';
 
 function VideoPreview({ uri }) {
   const player = useVideoPlayer({ uri }, (p) => {
@@ -71,7 +72,11 @@ export default function HubNewPostScreen({ navigation }) {
         <ScrollView contentContainerStyle={{ padding: space.lg, paddingBottom: insets.bottom + space.xxl }} keyboardShouldPersistTaps="handled">
           <Pressable onPress={pick} accessibilityRole="button" accessibilityLabel={asset ? 'Choose a different photo or video' : 'Choose a photo or video'} style={styles.media} testID="new-post-pick">
             {asset ? (
-              video ? <VideoPreview uri={asset.uri} /> : <Image source={{ uri: asset.uri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+              video ? (
+                <VideoPreview uri={asset.uri} />
+              ) : (
+                <Image source={{ uri: asset.uri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+              )
             ) : (
               <LinearGradient colors={['rgba(226,168,75,0.16)', 'rgba(255,255,255,0.02)']} style={[StyleSheet.absoluteFill, styles.mediaEmpty]}>
                 <View style={styles.mediaRing}>
@@ -109,8 +114,14 @@ export default function HubNewPostScreen({ navigation }) {
             style={{ marginTop: space.lg }}
           />
           <Slate style={{ marginTop: space.xl }}>Shared on your Hub profile</Slate>
-          <Button label={busy ? 'Posting' : asset ? 'Share' : 'Choose a photo or video'} icon={asset ? 'paper-plane' : 'images-outline'} onPress={share} disabled={busy} style={{ marginTop: space.md, alignSelf: 'stretch' }} />
-          {busy ? <ActivityIndicator color={colors.gold} style={{ marginTop: space.lg }} /> : null}
+          <Button
+            label={busy ? 'Posting' : asset ? 'Share' : 'Choose a photo or video'}
+            icon={asset ? 'paper-plane' : 'images-outline'}
+            onPress={share}
+            disabled={busy}
+            style={{ marginTop: space.md, alignSelf: 'stretch' }}
+          />
+          {busy ? <LoadingDots style={{ marginTop: space.lg }} /> : null}
         </ScrollView>
       </KeyboardAvoidingView>
     </View>
@@ -119,11 +130,34 @@ export default function HubNewPostScreen({ navigation }) {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
-  media: { aspectRatio: 1, width: '100%', maxWidth: 560, alignSelf: 'center', borderRadius: radius.xl, overflow: 'hidden', backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(226,168,75,0.35)' },
+  media: {
+    aspectRatio: 1,
+    width: '100%',
+    maxWidth: 560,
+    alignSelf: 'center',
+    borderRadius: radius.xl,
+    overflow: 'hidden',
+    backgroundColor: colors.surface,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(226,168,75,0.35)',
+  },
   mediaEmpty: { alignItems: 'center', justifyContent: 'center', padding: space.xl },
   mediaRing: { width: 72, height: 72, borderRadius: 36, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: 'rgba(226,168,75,0.55)', backgroundColor: colors.goldSoft },
   mediaTitle: { fontFamily: fonts.semibold, fontSize: 18, color: colors.text, marginTop: space.lg, textAlign: 'center' },
   mediaBody: { fontFamily: fonts.regular, fontSize: 13, color: colors.textMuted, marginTop: 4, textAlign: 'center' },
-  swap: { position: 'absolute', right: space.md, bottom: space.md, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 7, borderRadius: radius.pill, backgroundColor: 'rgba(5,5,6,0.6)', borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255,255,255,0.25)' },
+  swap: {
+    position: 'absolute',
+    right: space.md,
+    bottom: space.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: radius.pill,
+    backgroundColor: 'rgba(5,5,6,0.6)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.25)',
+  },
   swapText: { fontFamily: fonts.semibold, fontSize: 12.5, color: '#fff' },
 });

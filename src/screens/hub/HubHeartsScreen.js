@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -12,6 +12,7 @@ import { Avatar, BoaStarBadge, PageHeader } from '../../components/kit';
 import { HEART } from '../../components/HeartBurst';
 import { Slate } from '../../components/ui';
 import { colors, fonts, radius, space, type } from '../../theme';
+import { ListSkeleton } from '../../components/Skeleton';
 
 function ago(iso) {
   const mins = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
@@ -84,7 +85,7 @@ export default function HubHeartsScreen({ navigation }) {
           <Ionicons name="lock-closed" size={11} color={colors.textFaint} /> Only you see these. Nobody is told when you look at their profile.
         </Text>
         {status === 'loading' ? (
-          <ActivityIndicator color={colors.gold} style={{ marginTop: space.xl }} />
+          <ListSkeleton rows={6} avatar={44} style={{ marginTop: space.sm }} />
         ) : status === 'error' ? (
           <Text style={[type.bodyMuted, { textAlign: 'center', marginTop: space.xl }]}>{error}</Text>
         ) : !shown.length ? (
@@ -102,7 +103,12 @@ export default function HubHeartsScreen({ navigation }) {
               const post = postsById[h.target_id];
               const name = p ? p.display_name || `@${p.username}` : 'Someone';
               return (
-                <Animated.View key={`${h.liker_id}:${h.target_id}`} entering={FadeInDown.delay(Math.min(i, 8) * 40).springify().damping(20)}>
+                <Animated.View
+                  key={`${h.liker_id}:${h.target_id}`}
+                  entering={FadeInDown.delay(Math.min(i, 8) * 40)
+                    .springify()
+                    .damping(20)}
+                >
                   <Pressable
                     onPress={() => navigation.navigate('HubProfile', { id: h.liker_id })}
                     accessibilityRole="button"
@@ -148,9 +154,30 @@ export default function HubHeartsScreen({ navigation }) {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   private: { fontFamily: fonts.medium, fontSize: 12, lineHeight: 18, color: colors.textFaint },
-  empty: { alignItems: 'center', padding: space.xl, marginTop: space.xl, borderRadius: radius.xl, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255,59,92,0.35)', backgroundColor: 'rgba(18,18,22,0.6)' },
+  empty: {
+    alignItems: 'center',
+    padding: space.xl,
+    marginTop: space.xl,
+    borderRadius: radius.xl,
+    overflow: 'hidden',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,59,92,0.35)',
+    backgroundColor: 'rgba(18,18,22,0.6)',
+  },
   row: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md, paddingHorizontal: space.sm, borderRadius: radius.md },
-  heartDot: { position: 'absolute', right: -2, bottom: -2, width: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: HEART, borderWidth: 2, borderColor: colors.bg },
+  heartDot: {
+    position: 'absolute',
+    right: -2,
+    bottom: -2,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: HEART,
+    borderWidth: 2,
+    borderColor: colors.bg,
+  },
   line: { fontFamily: fonts.medium, fontSize: 14.5, lineHeight: 20, color: colors.textMuted },
   name: { fontFamily: fonts.semibold, color: colors.text },
   time: { fontFamily: fonts.medium, fontSize: 12.5, color: colors.textFaint },

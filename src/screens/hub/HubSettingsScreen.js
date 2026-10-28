@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
+import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -14,6 +14,7 @@ import useChatVibe from '../../chat/vibes';
 import VibePicker from '../../components/chat/VibePicker';
 import { ringtoneById } from '../../calls/ringtone';
 import { colors, fonts, radius, space } from '../../theme';
+import { LoadingDots } from '../../components/Skeleton';
 
 /**
  * Your Hub profile and privacy: name, photo, bio and roles; your Daily
@@ -151,27 +152,23 @@ export default function HubSettingsScreen({ navigation }) {
   };
 
   const confirmDelete = () =>
-    Alert.alert(
-      'Delete your Hub account?',
-      'This permanently erases your profile, photo, conversations and messages from BOA HUB. It cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete everything',
-          style: 'destructive',
-          onPress: async () => {
-            setBusy('delete');
-            try {
-              await deleteAccount();
-              navigation.popToTop();
-            } catch (err) {
-              Alert.alert('Delete failed', err.message);
-              setBusy(null);
-            }
-          },
+    Alert.alert('Delete your Hub account?', 'This permanently erases your profile, photo, conversations and messages from BOA HUB. It cannot be undone.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete everything',
+        style: 'destructive',
+        onPress: async () => {
+          setBusy('delete');
+          try {
+            await deleteAccount();
+            navigation.popToTop();
+          } catch (err) {
+            Alert.alert('Delete failed', err.message);
+            setBusy(null);
+          }
         },
-      ],
-    );
+      },
+    ]);
 
   return (
     <View style={styles.screen} testID="hub-settings">
@@ -181,20 +178,13 @@ export default function HubSettingsScreen({ navigation }) {
           <View style={styles.photoRow}>
             <Pressable onPress={changePhoto} accessibilityRole="button" accessibilityLabel="Change profile photo">
               <Avatar uri={profile.avatar_url} name={profile.display_name || profile.username} size={76} ring />
-              {busy === 'photo' && <ActivityIndicator color={colors.gold} style={StyleSheet.absoluteFill} />}
+              {busy === 'photo' && <LoadingDots style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(5,5,6,0.55)', borderRadius: 999 }]} />}
             </Pressable>
             <Button label="Change photo" icon="camera-outline" variant="ghost" onPress={changePhoto} />
           </View>
 
           <Field label="Display name" value={form.display_name} onChangeText={(t) => setForm((f) => ({ ...f, display_name: t.slice(0, 50) }))} style={{ marginTop: space.xl }} />
-          <Field
-            label="Bio"
-            value={form.bio}
-            onChangeText={(t) => setForm((f) => ({ ...f, bio: t.slice(0, 280) }))}
-            multiline
-            hint={`${form.bio.length}/280`}
-            style={{ marginTop: space.lg }}
-          />
+          <Field label="Bio" value={form.bio} onChangeText={(t) => setForm((f) => ({ ...f, bio: t.slice(0, 280) }))} multiline hint={`${form.bio.length}/280`} style={{ marginTop: space.lg }} />
           <Slate style={styles.section}>Roles</Slate>
           <View style={styles.chips}>
             {hub.ROLES.map((r) => (
@@ -258,12 +248,7 @@ export default function HubSettingsScreen({ navigation }) {
             <SettingRow icon="musical-notes-outline" title="Show what I'm playing" detail="'Listening to' a station or 'Watching' a BOA Original, on your profile.">
               <Toggle value={shareStatus} onChange={setShareStatus} label="Show what I'm playing" testID="hub-share-status" />
             </SettingRow>
-            <SettingRow
-              icon="globe-outline"
-              title="Show my profile in search"
-              detail="Google can list your name and picture. Your posts and reels are only ever shown to people with an account."
-              last
-            >
+            <SettingRow icon="globe-outline" title="Show my profile in search" detail="Google can list your name and picture. Your posts and reels are only ever shown to people with an account." last>
               <Toggle value={searchable && profile.visible_on_hub} onChange={chooseSearchable} label="Show my profile in search" testID="hub-searchable" />
             </SettingRow>
           </View>
@@ -299,11 +284,7 @@ export default function HubSettingsScreen({ navigation }) {
 
           <Slate style={styles.section}>Chat</Slate>
           <View style={styles.group}>
-            <SettingRow
-              icon="timer-outline"
-              title="Disappearing messages"
-              detail="Messages you send vanish for both of you after 24 hours."
-            >
+            <SettingRow icon="timer-outline" title="Disappearing messages" detail="Messages you send vanish for both of you after 24 hours.">
               <Toggle
                 value={!!disappearing}
                 onChange={(on) => setDisappearing?.(on).catch((err) => Alert.alert("Couldn't save", err.message))}
@@ -332,7 +313,11 @@ export default function HubSettingsScreen({ navigation }) {
             ))}
           </View>
           <Text style={styles.credit}>
-            New-message sound. {CHAT_SOUNDS.filter((s) => s.source).map((s) => `${s.label}: ${s.license.toLowerCase()} recording via Wikimedia Commons`).join(' · ')}. The rest are BOA originals.
+            New-message sound.{' '}
+            {CHAT_SOUNDS.filter((s) => s.source)
+              .map((s) => `${s.label}: ${s.license.toLowerCase()} recording via Wikimedia Commons`)
+              .join(' · ')}
+            . The rest are BOA originals.
           </Text>
 
           {blockedPeople.length > 0 && (
@@ -351,11 +336,11 @@ export default function HubSettingsScreen({ navigation }) {
           <Slate style={styles.section}>Your data</Slate>
           <View style={styles.group}>
             <SettingRow icon="download-outline" title="Export my data" detail="Everything the Hub holds about you, as JSON." onPress={exportData}>
-              {busy === 'export' ? <ActivityIndicator color={colors.gold} /> : <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />}
+              {busy === 'export' ? <LoadingDots size={5} /> : <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />}
             </SettingRow>
             <SettingRow icon="log-out-outline" title="Sign out" onPress={() => signOut().then(() => navigation.popToTop())} />
             <SettingRow icon="trash-outline" title="Delete my Hub account" detail="Erases your profile and all your conversations." danger onPress={confirmDelete} last>
-              {busy === 'delete' ? <ActivityIndicator color="#FF6B6B" /> : null}
+              {busy === 'delete' ? <LoadingDots color="#FF6B6B" size={5} /> : null}
             </SettingRow>
           </View>
         </ScrollView>

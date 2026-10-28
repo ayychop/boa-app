@@ -10,11 +10,18 @@ const path = require('path');
 // BOA_AUTOMOTIVE=1 makes the Android Automotive OS video build instead
 // (plugins/withAutomotiveVideo.js). Off by default: the phone build never
 // gets it.
+//
+// BANUBA_CLIENT_TOKEN (an EAS secret; the project's is saved as
+// BANBUBA_CLIENT_TOKEN, so either name works) builds in Banuba Face AR for
+// the call's virtual backgrounds (plugins/withBanuba.js) and hands the app
+// its token. Without it, calls use Agora's own virtual background.
 module.exports = ({ config }) => {
   const local = path.join(__dirname, 'google-services.json');
   const file = process.env.GOOGLE_SERVICES_JSON || (fs.existsSync(local) ? './google-services.json' : null);
   let out = config;
   if (file) out = { ...out, android: { ...out.android, googleServicesFile: file } };
   if (process.env.BOA_AUTOMOTIVE === '1') out = { ...out, plugins: [...(out.plugins ?? []), './plugins/withAutomotiveVideo'] };
+  const banuba = (process.env.BANUBA_CLIENT_TOKEN || process.env.BANBUBA_CLIENT_TOKEN)?.trim();
+  if (banuba) out = { ...out, plugins: [...(out.plugins ?? []), './plugins/withBanuba'], extra: { ...out.extra, banubaToken: banuba } };
   return out;
 };

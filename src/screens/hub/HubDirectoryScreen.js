@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -10,11 +10,16 @@ import { lastSeen, statusLine } from '../../components/hub/hubNav';
 import NowPlaying from '../../components/hub/NowPlaying';
 import { GoldBadge } from '../../components/ui';
 import { colors, fonts, radius, space, type } from '../../theme';
+import { ListSkeleton, LoadingDots } from '../../components/Skeleton';
 
 function PersonRow({ person, online, onPress, index }) {
   const status = statusLine(person);
   return (
-    <Animated.View entering={FadeInDown.delay(Math.min(index, 8) * 40).springify().damping(20)}>
+    <Animated.View
+      entering={FadeInDown.delay(Math.min(index, 8) * 40)
+        .springify()
+        .damping(20)}
+    >
       <Pressable
         onPress={onPress}
         accessibilityRole="button"
@@ -34,11 +39,7 @@ function PersonRow({ person, online, onPress, index }) {
           <Text style={styles.roles} numberOfLines={1}>
             {person.roles.map(roleLabel).join(' · ') || `@${person.username}`}
           </Text>
-          {status ? (
-            <NowPlaying person={person} style={{ marginTop: 3 }} />
-          ) : (
-            <Text style={styles.seen}>{lastSeen(person.last_seen_at, online)}</Text>
-          )}
+          {status ? <NowPlaying person={person} style={{ marginTop: 3 }} /> : <Text style={styles.seen}>{lastSeen(person.last_seen_at, online)}</Text>}
         </View>
         <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
       </Pressable>
@@ -102,9 +103,7 @@ export default function HubDirectoryScreen({ navigation }) {
       <FlatList
         data={visible}
         keyExtractor={(p) => p.id}
-        renderItem={({ item, index }) => (
-          <PersonRow person={item} index={index} online={isOnline(item.id)} onPress={() => navigation.navigate('HubProfile', { id: item.id })} />
-        )}
+        renderItem={({ item, index }) => <PersonRow person={item} index={index} online={isOnline(item.id)} onPress={() => navigation.navigate('HubProfile', { id: item.id })} />}
         onEndReachedThreshold={0.5}
         onEndReached={() => {
           if (more && state === 'ready') load(page + 1);
@@ -125,20 +124,18 @@ export default function HubDirectoryScreen({ navigation }) {
         }
         ListEmptyComponent={
           state === 'loading' ? (
-            <ActivityIndicator color={colors.gold} style={{ marginTop: space.xxxl }} />
+            <ListSkeleton rows={7} style={{ marginTop: space.md }} />
           ) : (
             <View style={styles.empty}>
               <Ionicons name={state === 'error' ? 'cloud-offline-outline' : 'people-outline'} size={30} color={colors.gold} />
-              <Text style={[type.title, { marginTop: space.md, textAlign: 'center' }]}>
-                {state === 'error' ? "Couldn't reach the Hub" : 'No one here yet'}
-              </Text>
+              <Text style={[type.title, { marginTop: space.md, textAlign: 'center' }]}>{state === 'error' ? "Couldn't reach the Hub" : 'No one here yet'}</Text>
               <Text style={[type.bodyMuted, { textAlign: 'center', marginTop: space.sm }]}>
                 {state === 'error' ? error : role ? `No ${roleLabel(role).toLowerCase()}s match. Try another role.` : 'Try a different search.'}
               </Text>
             </View>
           )
         }
-        ListFooterComponent={state === 'paging' ? <ActivityIndicator color={colors.gold} style={{ margin: space.xl }} /> : null}
+        ListFooterComponent={state === 'paging' ? <LoadingDots style={{ margin: space.xl }} /> : null}
       />
     </View>
   );

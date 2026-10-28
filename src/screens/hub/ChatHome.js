@@ -169,6 +169,7 @@ function InboxFilters({ value, onChange, counts }) {
         const n = counts[f.id] ?? 0;
         return (
           <Pressable
+            hitSlop={6}
             key={f.id}
             onPress={() => {
               if (on) return;

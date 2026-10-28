@@ -1,5 +1,5 @@
 import { Component, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, BackHandler, Image, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { BackHandler, Image, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { setStatusBarHidden } from 'expo-status-bar';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import { useVideoPlayer, VideoView } from 'expo-video';
@@ -44,6 +44,7 @@ import StationLogo from '../components/StationLogo';
 import { PulseDot, Slate } from '../components/ui';
 import { colors, fonts, radius, space } from '../theme';
 import BoaLogo from '../components/BoaLogo';
+import { LoadingDots } from '../components/Skeleton';
 
 // Fades: slow and soft, like a room's lights dimming.
 const DIM = Easing.bezier(0.33, 0, 0.2, 1);
@@ -74,10 +75,13 @@ function useMinute() {
     let id;
     const schedule = () => {
       const d = new Date();
-      id = setTimeout(() => {
-        setNow(new Date());
-        schedule();
-      }, 60000 - (d.getSeconds() * 1000 + d.getMilliseconds()) + 20);
+      id = setTimeout(
+        () => {
+          setNow(new Date());
+          schedule();
+        },
+        60000 - (d.getSeconds() * 1000 + d.getMilliseconds()) + 20,
+      );
     };
     schedule();
     return () => clearTimeout(id);
@@ -94,7 +98,11 @@ function clockParts(date) {
   try {
     const parts = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' }).formatToParts(date);
     return {
-      time: parts.filter((p) => p.type !== 'dayPeriod').map((p) => p.value).join('').trim(),
+      time: parts
+        .filter((p) => p.type !== 'dayPeriod')
+        .map((p) => p.value)
+        .join('')
+        .trim(),
       period: parts.find((p) => p.type === 'dayPeriod')?.value ?? null,
     };
   } catch {
@@ -141,9 +149,7 @@ function MeshBlob({ clock, blob, color, width, height, id }) {
     };
   });
   return (
-    <Animated.View
-      style={[{ position: 'absolute', left: width * blob.x - BLOB / 2, top: height * blob.y - BLOB / 2, width: BLOB, height: BLOB }, style]}
-    >
+    <Animated.View style={[{ position: 'absolute', left: width * blob.x - BLOB / 2, top: height * blob.y - BLOB / 2, width: BLOB, height: BLOB }, style]}>
       <Svg width={BLOB} height={BLOB}>
         <Defs>
           <RadialGradient id={id} cx="50%" cy="50%" r="50%">
@@ -169,15 +175,7 @@ function MeshGradient({ width, height, running }) {
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
       {BLOBS.map((blob, i) => (
-        <MeshBlob
-          key={i}
-          id={`zen-mesh-${i}`}
-          clock={clock}
-          blob={blob}
-          color={shiftHex(HOUSE_TONE, ...blob.tone)}
-          width={width}
-          height={height}
-        />
+        <MeshBlob key={i} id={`zen-mesh-${i}`} clock={clock} blob={blob} color={shiftHex(HOUSE_TONE, ...blob.tone)} width={width} height={height} />
       ))}
     </View>
   );
@@ -197,11 +195,7 @@ function ScenePhoto({ scene, width, height, running }) {
   }, [reduceMotion, running, drift]);
   const style = useAnimatedStyle(() => ({
     opacity: shown.value,
-    transform: [
-      { scale: 1.08 + drift.value * 0.1 },
-      { translateX: (drift.value - 0.5) * width * 0.04 },
-      { translateY: (0.5 - drift.value) * height * 0.03 },
-    ],
+    transform: [{ scale: 1.08 + drift.value * 0.1 }, { translateX: (drift.value - 0.5) * width * 0.04 }, { translateY: (0.5 - drift.value) * height * 0.03 }],
   }));
   return (
     <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, style]}>
@@ -309,11 +303,7 @@ function Atmosphere({ sceneId, width, height, running, withVideo = true }) {
       </Animated.View>
       <DriftingFog width={width} height={height} opacity={0.45} running={running} />
       <Grain width={width} height={height} opacity={0.05} running={running} />
-      <LinearGradient
-        colors={['rgba(5,5,6,0.62)', 'rgba(5,5,6,0.36)', 'rgba(5,5,6,0.46)', 'rgba(5,5,6,0.9)']}
-        locations={[0, 0.32, 0.6, 1]}
-        style={StyleSheet.absoluteFill}
-      />
+      <LinearGradient colors={['rgba(5,5,6,0.62)', 'rgba(5,5,6,0.36)', 'rgba(5,5,6,0.46)', 'rgba(5,5,6,0.9)']} locations={[0, 0.32, 0.6, 1]} style={StyleSheet.absoluteFill} />
     </View>
   );
 }
@@ -399,9 +389,7 @@ function Clock({ width, height, compact, signed = false }) {
       <Slate>{dateLine(now)}</Slate>
       <View style={{ marginTop: space.sm }} accessibilityRole="timer" accessibilityLabel={`${time}${period ? ` ${period}` : ''}`} accessible>
         <Digits time={time} size={clockSize} lineHeight={lineHeight} />
-        {period ? (
-          <Text style={[styles.period, { fontSize: Math.round(clockSize * 0.24), bottom: Math.round(lineHeight * 0.16) }]}>{period}</Text>
-        ) : null}
+        {period ? <Text style={[styles.period, { fontSize: Math.round(clockSize * 0.24), bottom: Math.round(lineHeight * 0.16) }]}>{period}</Text> : null}
       </View>
       <MinuteSweep now={now} width={Math.round(Math.min(clockSize * 1.8, width * 0.6))} />
       {signed ? (
@@ -423,9 +411,7 @@ function NowLine({ sound, withRadio = true, onOpenSound }) {
   const podcast = current?.kind === 'podcast' ? podcastById(current.podcastId) : null;
   // A paused station isn't "on": only a playing one gets a line.
   const radioOn = status === 'playing' || status === 'loading';
-  const radioLine = current && withRadio && radioOn
-    ? [podcast ? podcast.title : current.name, podcast ? current.name : trackTitle || nowPlaying].filter(Boolean).join(' · ')
-    : null;
+  const radioLine = current && withRadio && radioOn ? [podcast ? podcast.title : current.name, podcast ? current.name : trackTitle || nowPlaying].filter(Boolean).join(' · ') : null;
   const scape = sound.id && sound.status !== 'idle' ? soundscapeById(sound.id) : null;
   const kind = scape ? categoryOf(scape.id) : null;
   const soundLine = scape ? `${kind.label} · ${scape.label}` : null;
@@ -475,12 +461,7 @@ function GlassButton({ icon, label, onPress, size = 48, primary, children }) {
       hitSlop={8}
       accessibilityRole="button"
       accessibilityLabel={label}
-      style={({ pressed }) => [
-        styles.glass,
-        { width: size, height: size, borderRadius: size / 2 },
-        primary && styles.glassPrimary,
-        pressed && { transform: [{ scale: 0.92 }] },
-      ]}
+      style={({ pressed }) => [styles.glass, { width: size, height: size, borderRadius: size / 2 }, primary && styles.glassPrimary, pressed && { transform: [{ scale: 0.92 }] }]}
     >
       {children ?? <Ionicons name={icon} size={Math.round(size * 0.42)} color={primary ? colors.bg : colors.text} />}
     </Pressable>
@@ -535,7 +516,7 @@ function KindCard({ kind, state }) {
       <Animated.View style={[styles.card, frame]}>
         <View style={styles.cardTop}>
           <Ionicons name={kind.icon} size={20} color={on ? '#FFFFFF' : tone} />
-          {loading ? <ActivityIndicator size="small" color="#FFFFFF" /> : on ? <Equalizer color="#FFFFFF" /> : null}
+          {loading ? <LoadingDots color="#FFFFFF" size={5} /> : on ? <Equalizer color="#FFFFFF" /> : null}
         </View>
         <Text style={[styles.cardLabel, { color: ink }]} numberOfLines={1} testID={`soundscape-${kind.id}-label`}>
           {mine ? mine.label : kind.label}
@@ -559,6 +540,7 @@ function SoundChoices({ state }) {
           const on = state.id === sound.id;
           return (
             <Pressable
+              hitSlop={{ top: 5, bottom: 5 }}
               key={sound.id}
               onPress={() => {
                 haptics.selection();
@@ -569,11 +551,7 @@ function SoundChoices({ state }) {
               accessibilityHint={sound.detail}
               accessibilityState={{ selected: on }}
               testID={`zen-sound-${sound.id}`}
-              style={({ pressed }) => [
-                styles.chip,
-                on && { backgroundColor: kind.tone, borderColor: kind.tone },
-                pressed && { opacity: 0.7 },
-              ]}
+              style={({ pressed }) => [styles.chip, on && { backgroundColor: kind.tone, borderColor: kind.tone }, pressed && { opacity: 0.7 }]}
             >
               <Text style={[styles.chipText, on && { color: '#FFFFFF' }]}>{sound.label}</Text>
             </Pressable>
@@ -613,6 +591,7 @@ function TimerRow() {
           const on = m == null ? !active : active && chosen === m;
           return (
             <Pressable
+              hitSlop={{ top: 5, bottom: 5 }}
               key={m ?? 'off'}
               onPress={() => pick(m)}
               accessibilityRole="button"
@@ -620,9 +599,7 @@ function TimerRow() {
               accessibilityState={{ selected: on }}
               style={({ pressed }) => [styles.chip, on && styles.chipOn, pressed && { opacity: 0.7 }]}
             >
-              <Text style={[styles.chipText, on && styles.chipTextOn]}>
-                {m == null ? 'Off' : m < 60 ? `${m} min` : m === 60 ? '1 hr' : `${m / 60} hr`}
-              </Text>
+              <Text style={[styles.chipText, on && styles.chipTextOn]}>{m == null ? 'Off' : m < 60 ? `${m} min` : m === 60 ? '1 hr' : `${m / 60} hr`}</Text>
             </Pressable>
           );
         })}
@@ -639,11 +616,7 @@ function Transport() {
     <View style={styles.transport}>
       {canStep && <GlassButton icon="play-skip-back" label="Previous station" onPress={previous} size={40} />}
       <GlassButton label={isPlaying ? 'Pause radio' : 'Play radio'} onPress={() => toggle()} size={48} primary>
-        {status === 'loading' ? (
-          <ActivityIndicator color={colors.bg} />
-        ) : (
-          <Ionicons name={isPlaying ? 'pause' : 'play'} size={20} color={colors.bg} style={isPlaying ? null : { marginLeft: 2 }} />
-        )}
+        {status === 'loading' ? <LoadingDots color={colors.bg} /> : <Ionicons name={isPlaying ? 'pause' : 'play'} size={20} color={colors.bg} style={isPlaying ? null : { marginLeft: 2 }} />}
       </GlassButton>
       {canStep && <GlassButton icon="play-skip-forward" label="Next station" onPress={next} size={40} />}
     </View>
@@ -699,7 +672,6 @@ function ZenRoom() {
   const bottomSpace = useBottomSpace(space.md);
   const hint = useSharedValue(0);
 
-
   // The radio card shows while the radio plays, and stays once shown, so
   // a radio paused from the screensaver can be played again from it.
   const [radioShown, setRadioShown] = useState(false);
@@ -719,9 +691,7 @@ function ZenRoom() {
   }, [focused, ambient, wake]);
 
   useEffect(() => {
-    hint.value = ambient
-      ? withDelay(1400, withSequence(withTiming(1, { duration: 1200 }), withDelay(5000, withTiming(0.35, { duration: 1500 }))))
-      : withTiming(0, { duration: 200 });
+    hint.value = ambient ? withDelay(1400, withSequence(withTiming(1, { duration: 1200 }), withDelay(5000, withTiming(0.35, { duration: 1500 })))) : withTiming(0, { duration: 200 });
     return () => cancelAnimation(hint);
   }, [ambient, hint]);
 
@@ -772,7 +742,7 @@ function ZenRoom() {
   const edge = { left: space.xl, right: space.xl };
   const panelBeside = !ambient && short;
   const radioCard = ambient && !!current && (isPlaying || radioShown);
-  const backTo = returnTab ? TAB_TITLES[returnTab] ?? returnTab : null;
+  const backTo = returnTab ? (TAB_TITLES[returnTab] ?? returnTab) : null;
   // Tall enough for the soundscapes, the timer and the radio's controls
   // without scrolling.
   const panelHeight = short ? 0 : sound.id ? 372 : 312;
@@ -810,12 +780,7 @@ function ZenRoom() {
       {/* The controls only exist outside the screensaver, so screen readers
           never land on invisible buttons. They fade in and out. */}
       {!ambient && (
-        <Animated.View
-          entering={FadeIn.duration(reduceMotion ? 150 : 450)}
-          exiting={FadeOut.duration(reduceMotion ? 150 : 600)}
-          pointerEvents="box-none"
-          style={StyleSheet.absoluteFill}
-        >
+        <Animated.View entering={FadeIn.duration(reduceMotion ? 150 : 450)} exiting={FadeOut.duration(reduceMotion ? 150 : 600)} pointerEvents="box-none" style={StyleSheet.absoluteFill}>
           <View style={[styles.topBar, edge, { top }]} pointerEvents="box-none">
             <Slate dot color={colors.text}>
               Sleep & Meditation
@@ -824,12 +789,7 @@ function ZenRoom() {
           <View
             pointerEvents="box-none"
             testID="zen-panel"
-            style={[
-              styles.panel,
-              panelBeside
-                ? { top: top + 48, bottom, right: space.lg, width: width / 2 - space.xl }
-                : { left: space.lg, right: space.lg, bottom, maxHeight: panelHeight },
-            ]}
+            style={[styles.panel, panelBeside ? { top: top + 48, bottom, right: space.lg, width: width / 2 - space.xl } : { left: space.lg, right: space.lg, bottom, maxHeight: panelHeight }]}
           >
             <ScrollView contentContainerStyle={styles.panelBody} showsVerticalScrollIndicator={false}>
               {/* The radio's controls share the top row, so they are always
@@ -893,11 +853,7 @@ class ZenBoundary extends Component {
         <Text style={styles.fallbackBody} numberOfLines={3}>
           {String(this.state.error?.message ?? this.state.error)}
         </Text>
-        <Pressable
-          onPress={() => this.setState({ error: null })}
-          accessibilityRole="button"
-          style={({ pressed }) => [styles.retry, pressed && { opacity: 0.8 }]}
-        >
+        <Pressable hitSlop={8} onPress={() => this.setState({ error: null })} accessibilityRole="button" style={({ pressed }) => [styles.retry, pressed && { opacity: 0.8 }]}>
           <Text style={styles.retryText}>Try again</Text>
         </Pressable>
       </View>

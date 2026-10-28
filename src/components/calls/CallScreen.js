@@ -16,14 +16,15 @@ import Animated, {
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
-import { GestureDetector, GestureHandlerRootView, usePanGesture } from 'react-native-gesture-handler';
+import { GestureDetector, GestureHandlerRootView, useCompetingGestures, usePanGesture, useTapGesture } from 'react-native-gesture-handler';
 import { LinearGradient } from 'expo-linear-gradient';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
-import Slider from '@react-native-community/slider';
 import { useCall, END_REASONS } from '../../context/CallContext';
 import { PRESETS, brightnessLabel, contrastLabel, presetById } from '../../calls/beauty';
+import { BLURS, SCENES, STUDIO, choiceOf, describe as describeBackground } from '../../calls/backgrounds';
+import BoaSlider from '../BoaSlider';
 import { LocalVideo, RemoteVideo } from '../../calls/media';
 import { haptics } from '../../utils/haptics';
 import { SPRING, usePress } from '../../utils/motion';
@@ -172,9 +173,9 @@ function CallButton({ icon, label, caption, onPress, on = false, onColor, tone, 
  * re-renders the call), sends each move straight to the camera about 30
  * times a second, and saves where you let go.
  */
-function ToneSlider({ kind, value, enabled, onPreview, onCommit, style }) {
+function ToneSlider({ kind, value, enabled, onPreview, onCommit, style, title, hint }) {
   const bright = kind === 'brightness';
-  const name = bright ? 'Brightness' : 'Contrast';
+  const name = title ?? (bright ? 'Brightness' : 'Contrast');
   const middle = bright ? 'Auto' : 'Normal';
   const label = bright ? brightnessLabel : contrastLabel;
   const [shown, setShown] = useState(value);
@@ -214,7 +215,7 @@ function ToneSlider({ kind, value, enabled, onPreview, onCommit, style }) {
           <Pressable
             onPress={() => done(0.5)}
             disabled={!enabled}
-            hitSlop={8}
+            hitSlop={14}
             accessibilityRole="button"
             accessibilityLabel={`${name} back to ${middle}`}
             style={styles.auto}
@@ -229,8 +230,7 @@ function ToneSlider({ kind, value, enabled, onPreview, onCommit, style }) {
         <View style={{ flex: 1 }}>
           {/* The middle: the camera's own. */}
           <View pointerEvents="none" style={styles.sliderMid} />
-          <Slider
-            style={{ height: 40 }}
+          <BoaSlider
             minimumValue={0}
             maximumValue={1}
             step={0}
@@ -240,13 +240,13 @@ function ToneSlider({ kind, value, enabled, onPreview, onCommit, style }) {
             onSlidingComplete={done}
             minimumTrackTintColor={colors.gold}
             maximumTrackTintColor="rgba(243,239,232,0.18)"
-            thumbTintColor={colors.gold}
             accessibilityLabel={name}
             testID={`call-${kind}`}
           />
         </View>
         <Ionicons name={bright ? 'sunny' : 'add-circle'} size={16} color={colors.gold} />
       </View>
+      {hint ? <Text style={styles.toneHint}>{hint}</Text> : null}
     </View>
   );
 }
@@ -302,11 +302,218 @@ function BeautyPanel({ beauty, setBeauty, previewBrightness, previewContrast, on
   );
 }
 
+// The Background sheet's three kinds, as tabs.
+const BACKGROUND_TABS = [
+  { id: 'studio', label: 'Studio', icon: 'square' },
+  { id: 'scene', label: 'Scenes', icon: 'images' },
+  { id: 'blur', label: 'Blur', icon: 'aperture' },
+];
+const UNSUPPORTED_NOTE = "This phone can't cut you out of the room smoothly enough for a backdrop. Your call is unchanged.";
+
+/** One choice in the sheet: a framed tile, gold when it's on. */
+function BackdropTile({ on, label, detail, onPress, width, height, children, testID }) {
+  const press = usePress({ to: 0.95 });
+  return (
+    <Pressable
+      onPress={onPress}
+      onPressIn={press.onPressIn}
+      onPressOut={press.onPressOut}
+      accessibilityRole="radio"
+      accessibilityState={{ selected: on }}
+      accessibilityLabel={`${label}${detail ? `: ${detail}` : ''}`}
+      testID={testID}
+      style={{ width }}
+    >
+      <Animated.View style={[styles.tile, { height }, on && styles.tileOn, press.style]}>
+        {children}
+        <LinearGradient pointerEvents="none" colors={['rgba(5,5,6,0)', 'rgba(5,5,6,0.78)']} locations={[0.45, 1]} style={StyleSheet.absoluteFill} />
+        {on ? (
+          <Animated.View entering={ZoomIn.springify().damping(14)} style={styles.tileCheck}>
+            <Ionicons name="checkmark" size={13} color={colors.bg} />
+          </Animated.View>
+        ) : null}
+        <View style={styles.tileFoot}>
+          <Text style={[styles.tileLabel, on && { color: GOLD_LIGHT }]} numberOfLines={1}>
+            {label}
+          </Text>
+          {detail ? (
+            <Text style={styles.tileDetail} numberOfLines={1}>
+              {detail}
+            </Text>
+          ) : null}
+        </View>
+      </Animated.View>
+    </Pressable>
+  );
+}
+
+/**
+ * Background: what's behind you, cut out by AI (src/calls/backgrounds.js).
+ * Studio tones, Scenes and Blur in tabs, Off at the top, and Match lighting
+ * under them (the camera's exposure), to sit you naturally in the backdrop.
+ */
+function BackgroundPanel({ background, setBackground, status, beauty, setBeauty, previewBrightness, onClose, width, maxHeight }) {
+  const [tab, setTab] = useState(background.mode === 'off' ? 'studio' : background.mode);
+  const on = background.mode !== 'off' && !!choiceOf(background);
+  const inner = width - space.lg * 2;
+  const pick = (mode, id) => {
+    haptics.selection();
+    setBackground(background.mode === mode && background.id === id ? { mode: 'off', id: null } : { mode, id });
+  };
+  const third = Math.floor((inner - space.sm * 2) / 3);
+  return (
+    <Animated.View entering={FadeInDown.springify().damping(18)} exiting={FadeOutDown.duration(160)} style={[styles.panel, { width }]} testID="call-background">
+      <Glass tint="rgba(10,10,12,0.84)" />
+      <LinearGradient pointerEvents="none" colors={['rgba(246,211,138,0.10)', 'rgba(246,211,138,0)']} locations={[0, 0.35]} style={StyleSheet.absoluteFill} />
+      <View style={styles.panelHead}>
+        <Ionicons name="image" size={16} color={colors.gold} />
+        <Text style={styles.panelTitle}>Background</Text>
+        <Text style={styles.bgNow} numberOfLines={1} testID="call-background-now">
+          {describeBackground(background)}
+        </Text>
+        <View style={{ flex: 1 }} />
+        {on ? (
+          <Pressable
+            onPress={() => {
+              haptics.tap();
+              setBackground({ mode: 'off', id: null });
+            }}
+            hitSlop={12}
+            accessibilityRole="button"
+            accessibilityLabel="Background off"
+            style={styles.auto}
+            testID="call-background-off"
+          >
+            <Text style={styles.autoText}>Off</Text>
+          </Pressable>
+        ) : null}
+        <Pressable onPress={onClose} hitSlop={12} accessibilityRole="button" accessibilityLabel="Close background" style={styles.panelClose}>
+          <Ionicons name="chevron-down" size={22} color={colors.textMuted} />
+        </Pressable>
+      </View>
+      <Text style={styles.panelNote}>AI finds you, hair and all, and the room behind you goes. They see exactly what you see.</Text>
+      {/* The tabs: one tap each, gold under the one that's open. */}
+      <View style={styles.bgTabs} accessibilityRole="tablist">
+        {BACKGROUND_TABS.map((t) => {
+          const open = tab === t.id;
+          return (
+            <Pressable
+              key={t.id}
+              onPress={() => {
+                if (open) return;
+                haptics.selection();
+                setTab(t.id);
+              }}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: open }}
+              style={[styles.bgTab, open && styles.bgTabOn]}
+              testID={`call-background-tab-${t.id}`}
+            >
+              <Ionicons name={`${t.icon}${open ? '' : '-outline'}`} size={15} color={open ? colors.gold : colors.textMuted} />
+              <Text style={[styles.bgTabLabel, open && { color: colors.text }]}>{t.label}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+      {status === 'unsupported' ? (
+        <Text style={styles.bgWarn} testID="call-background-unsupported">
+          {UNSUPPORTED_NOTE}
+        </Text>
+      ) : null}
+      <ScrollView style={{ maxHeight }} showsVerticalScrollIndicator={false}>
+        <Animated.View key={tab} entering={FadeIn.duration(180)}>
+          {tab === 'studio' ? (
+            <View style={styles.bgRow}>
+              {STUDIO.map((c) => (
+                <BackdropTile
+                  key={c.id}
+                  on={background.mode === 'studio' && background.id === c.id}
+                  label={c.label}
+                  detail={c.hex}
+                  width={third}
+                  height={Math.round(third * 1.25)}
+                  onPress={() => pick('studio', c.id)}
+                  testID={`call-backdrop-${c.id}`}
+                >
+                  <Image source={c.asset} style={StyleSheet.absoluteFill} resizeMode="cover" />
+                </BackdropTile>
+              ))}
+            </View>
+          ) : null}
+          {tab === 'scene' ? (
+            SCENES.length ? (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.bgCarousel} snapToInterval={Math.round(inner * 0.62) + space.sm} decelerationRate="fast">
+                {SCENES.map((c) => (
+                  <BackdropTile
+                    key={c.id}
+                    on={background.mode === 'scene' && background.id === c.id}
+                    label={c.label}
+                    detail={c.detail}
+                    width={Math.round(inner * 0.62)}
+                    height={Math.round(inner * 0.62 * 0.62)}
+                    onPress={() => pick('scene', c.id)}
+                    testID={`call-scene-${c.id}`}
+                  >
+                    <Image source={c.thumb ?? c.asset} style={StyleSheet.absoluteFill} resizeMode="cover" />
+                  </BackdropTile>
+                ))}
+              </ScrollView>
+            ) : (
+              // Until the scenes arrive: empty frames, like a gallery wall waiting for its prints.
+              <View testID="call-scenes-empty">
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.bgCarousel} scrollEnabled={false}>
+                  {[0, 1].map((i) => (
+                    <View key={i} style={[styles.sceneFrame, { width: Math.round(inner * 0.62), height: Math.round(inner * 0.62 * 0.62) }]}>
+                      <Ionicons name="image-outline" size={22} color="rgba(246,211,138,0.45)" />
+                    </View>
+                  ))}
+                </ScrollView>
+                <Text style={styles.presetDetail}>Scenes are being shot. They'll appear here as they land.</Text>
+              </View>
+            )
+          ) : null}
+          {tab === 'blur' ? (
+            <View style={styles.bgRow}>
+              {BLURS.map((c, i) => (
+                <BackdropTile
+                  key={c.id}
+                  on={background.mode === 'blur' && background.id === c.id}
+                  label={c.label}
+                  detail={c.detail}
+                  width={third}
+                  height={Math.round(third * 1.25)}
+                  onPress={() => pick('blur', c.id)}
+                  testID={`call-blur-${c.id}`}
+                >
+                  {/* The lens opening: smaller numbers, wider aperture, softer room. */}
+                  <View style={styles.aperture}>
+                    <LinearGradient colors={['#2A2A30', '#0E0E11']} style={StyleSheet.absoluteFill} />
+                    <View style={[styles.apertureRing, { width: 22 + i * 14, height: 22 + i * 14, borderRadius: 11 + i * 7 }]} />
+                  </View>
+                </BackdropTile>
+              ))}
+            </View>
+          ) : null}
+        </Animated.View>
+        <ToneSlider
+          kind="brightness"
+          title="Match lighting"
+          hint="Lift or deepen your exposure so you sit naturally in the backdrop."
+          value={beauty.brightness ?? 0.5}
+          enabled
+          onPreview={previewBrightness}
+          onCommit={(v) => setBeauty({ brightness: v })}
+        />
+      </ScrollView>
+    </Animated.View>
+  );
+}
+
 /**
  * You, floating over their picture. Starts top right; drag it anywhere and
  * it springs to the nearest corner, clear of the controls.
  */
-function SelfView({ size, top, bottomRoom, width, height, onHide, children }) {
+function SelfView({ size, top, bottomRoom, width, height, onHide, onFocus, children }) {
   const margin = space.lg;
   const minX = -(width - size.width - margin * 2);
   const maxY = Math.max(0, height - top - size.height - bottomRoom);
@@ -343,19 +550,63 @@ function SelfView({ size, top, bottomRoom, width, height, onHide, children }) {
       });
     },
   });
+  // Tap to focus: the gold square lands where you tapped, like the iPhone camera.
+  const [focus, setFocus] = useState(null);
+  const tap = useTapGesture({
+    runOnJS: true,
+    maxDistance: 10,
+    onActivate: (e) => {
+      if (!onFocus) return;
+      // The hide button's corner is the button's, not the picture's.
+      if (e.x < 44 && e.y > size.height - 44) return;
+      haptics.selection();
+      onFocus(e.x / size.width, e.y / size.height);
+      setFocus({ x: e.x, y: e.y, key: Date.now() });
+    },
+  });
+  const gesture = useCompetingGestures(pan, tap);
   const style = useAnimatedStyle(() => ({
     transform: [{ translateX: x.value }, { translateY: y.value }],
   }));
   return (
-    <GestureDetector gesture={pan}>
+    <GestureDetector gesture={gesture}>
       <Animated.View entering={FadeIn.delay(150).duration(300)} style={[styles.pip, size, { top, right: margin }, style]} testID="call-self-view">
-        <View style={styles.pipInner}>{children}</View>
+        <View style={styles.pipInner}>
+          {children}
+          {focus ? <FocusSquare key={focus.key} x={focus.x} y={focus.y} onDone={() => setFocus(null)} /> : null}
+        </View>
         {/* Hide yourself: you're still sent, you just stop seeing you. */}
-        <Pressable onPress={onHide} hitSlop={10} accessibilityRole="button" accessibilityLabel="Hide your video" style={styles.pipHide} testID="call-self-hide">
+        <Pressable onPress={onHide} hitSlop={12} accessibilityRole="button" accessibilityLabel="Hide your video" style={styles.pipHide} testID="call-self-hide">
           <Ionicons name="eye-off" size={13} color={colors.text} />
         </Pressable>
       </Animated.View>
     </GestureDetector>
+  );
+}
+
+const FOCUS_SIZE = 44;
+
+/**
+ * The focus square: lands a little large, springs in to size, pulses once
+ * as the camera settles, then fades, as on an iPhone camera.
+ */
+function FocusSquare({ x, y, onDone }) {
+  const scale = useSharedValue(1.5);
+  const opacity = useSharedValue(1);
+  useEffect(() => {
+    scale.value = withSpring(1, { damping: 14, stiffness: 260 });
+    opacity.value = withDelay(900, withTiming(0, { duration: 350 }));
+    const t = setTimeout(onDone, 1300);
+    return () => clearTimeout(t);
+  }, [scale, opacity, onDone]);
+  const style = useAnimatedStyle(() => ({ opacity: opacity.value, transform: [{ scale: scale.value }] }));
+  return (
+    <Animated.View pointerEvents="none" style={[styles.focus, { left: x - FOCUS_SIZE / 2, top: y - FOCUS_SIZE / 2 }, style]} testID="call-focus-square">
+      <View style={[styles.focusTick, { top: -1, left: FOCUS_SIZE / 2 - 1, height: 6 }]} />
+      <View style={[styles.focusTick, { bottom: -1, left: FOCUS_SIZE / 2 - 1, height: 6 }]} />
+      <View style={[styles.focusTick, { left: -1, top: FOCUS_SIZE / 2 - 1, width: 6, height: 2 }]} />
+      <View style={[styles.focusTick, { right: -1, top: FOCUS_SIZE / 2 - 1, width: 6, height: 2 }]} />
+    </Animated.View>
   );
 }
 
@@ -535,6 +786,10 @@ export default function CallScreen({ me }) {
     setBeauty,
     previewBrightness,
     previewContrast,
+    background,
+    setBackground,
+    backgroundStatus,
+    focusAt,
     facing,
     selfHidden,
     setSelfHidden,
@@ -550,14 +805,18 @@ export default function CallScreen({ me }) {
   } = useCall();
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
-  const [filtersOpen, setFiltersOpen] = useState(false);
+  // One panel above the dock at a time: the filters or the background.
+  const [panel, setPanel] = useState(null); // null | 'filters' | 'background'
+  const filtersOpen = panel === 'filters';
+  const backgroundOpen = panel === 'background';
+  const setFiltersOpen = (open) => setPanel(open ? 'filters' : null);
   const [dockH, setDockH] = useState(220);
   // Hide the controls (walking about, phone in hand) and bring them back
   // with the button they leave behind, or a tap on the picture.
   const [controlsHidden, setControlsHidden] = useState(false);
   const tuck = useSharedValue(0);
   const hideControls = () => {
-    setFiltersOpen(false);
+    setPanel(null);
     setControlsHidden(true);
     tuck.value = withSpring(1, SPRING);
   };
@@ -585,7 +844,7 @@ export default function CallScreen({ me }) {
   }, [awake]);
   useEffect(() => {
     if (call) return;
-    setFiltersOpen(false);
+    setPanel(null);
     setControlsHidden(false);
     tuck.value = 0;
   }, [call, tuck]);
@@ -598,7 +857,7 @@ export default function CallScreen({ me }) {
   const canShrink = !incoming && phase !== 'ended';
   const shrink = () => {
     haptics.tap();
-    setFiltersOpen(false);
+    setPanel(null);
     minimize();
   };
   if (inPip && !incoming) return <PipCall call={call} video={video} status={status} />;
@@ -622,10 +881,10 @@ export default function CallScreen({ me }) {
   const pipW = Math.round(Math.min(wide ? 176 : 150, width * 0.34));
   const pip = { width: pipW, height: Math.round(pipW * 1.42) };
   const panelWidth = Math.min(width - space.lg * 2, 480);
-  // The dock: one row of seven unfolded; on the cover screen a 4 x 2 grid,
+  // The dock: one row of eight unfolded; on the cover screen a 4 x 2 grid,
   // so every button can be big. Never smaller than 56, never past 72.
-  const dockWidth = Math.min(width - space.lg * 2, wide ? 720 : 440);
-  const cols = wide ? 7 : 4;
+  const dockWidth = Math.min(width - space.lg * 2, wide ? 760 : 440);
+  const cols = wide ? 8 : 4;
   const button = Math.floor(Math.max(56, Math.min(72, (dockWidth - DOCK_PAD * 2 - DOCK_GAP * (cols - 1)) / cols)));
   // They've turned screenshots off: say so at the top, and move everything else down to make room.
   const theyrePrivate = phase === 'active' && !!video?.remotePrivacy;
@@ -764,8 +1023,23 @@ export default function CallScreen({ me }) {
                       />
                     </View>
                   ) : null}
+                  {backgroundOpen ? (
+                    <View style={styles.panelWrap} pointerEvents="box-none">
+                      <BackgroundPanel
+                        background={background}
+                        setBackground={setBackground}
+                        status={backgroundStatus}
+                        beauty={beauty}
+                        setBeauty={setBeauty}
+                        previewBrightness={previewBrightness}
+                        onClose={() => setPanel(null)}
+                        width={panelWidth}
+                        maxHeight={Math.max(200, height - dockH - insets.top - insets.bottom - 220)}
+                      />
+                    </View>
+                  ) : null}
                   {/* The looks, one tap each, right above the dock; Brightness opens the panel. */}
-                  {!filtersOpen && !controlsHidden ? (
+                  {!panel && !controlsHidden ? (
                     <Animated.View entering={FadeIn.duration(200)} style={[styles.filterRow, { width: dockWidth }, !beauty.enabled && { opacity: 0.5 }]} testID="call-filter-line">
                       {PRESETS.map((p) => {
                         const on = beauty.enabled && beauty.preset === p.id;
@@ -835,7 +1109,25 @@ export default function CallScreen({ me }) {
                           testID="call-camera"
                         />
                         <CallButton size={button} caption="Flip" icon="camera-reverse" label="Switch camera" onPress={flipCamera} testID="call-flip" />
-                        <CallButton size={button} caption="Filters" icon="sparkles" label="Filters" on={filtersOpen} onPress={() => setFiltersOpen((o) => !o)} testID="call-filters-button" />
+                        <CallButton
+                          size={button}
+                          caption="Filters"
+                          icon="sparkles"
+                          label="Filters"
+                          on={filtersOpen}
+                          onPress={() => setPanel((p) => (p === 'filters' ? null : 'filters'))}
+                          testID="call-filters-button"
+                        />
+                        <CallButton
+                          size={button}
+                          caption="Backdrop"
+                          icon={background.mode !== 'off' ? 'image' : 'image-outline'}
+                          label="Background"
+                          on={backgroundOpen}
+                          onColor={background.mode !== 'off' ? colors.gold : undefined}
+                          onPress={() => setPanel((p) => (p === 'background' ? null : 'background'))}
+                          testID="call-background-button"
+                        />
                         <CallButton
                           size={button}
                           caption="Privacy"
@@ -854,17 +1146,7 @@ export default function CallScreen({ me }) {
                           onPress={() => toggle('speaker')}
                           testID="call-speaker"
                         />
-                        <CallButton
-                          size={button}
-                          width={wide ? undefined : button * 2 + DOCK_GAP}
-                          caption="End"
-                          icon="call"
-                          label="End"
-                          tone={RED}
-                          glow="0px 0px 22px rgba(255,59,78,0.55)"
-                          onPress={hangUp}
-                          testID="call-end"
-                        />
+                        <CallButton size={button} caption="End" icon="call" label="End" tone={RED} glow="0px 0px 22px rgba(255,59,78,0.55)" onPress={hangUp} testID="call-end" />
                       </View>
                     </Animated.View>
                     {/* Controls tucked away: one small glass button brings them back. */}
@@ -898,7 +1180,15 @@ export default function CallScreen({ me }) {
 
           {/* You, in the corner; or, hidden, a small button to bring you back. */}
           {!incoming && phase !== 'ended' && !selfHidden ? (
-            <SelfView size={pip} top={top} bottomRoom={insets.bottom + space.lg + dockH + space.md} width={width} height={height} onHide={() => setSelfHidden(true)}>
+            <SelfView
+              size={pip}
+              top={top}
+              bottomRoom={insets.bottom + space.lg + dockH + space.md}
+              width={width}
+              height={height}
+              onHide={() => setSelfHidden(true)}
+              onFocus={controls.cameraOff ? null : focusAt}
+            >
               {controls.cameraOff ? (
                 <Ionicons name="videocam-off" size={26} color={colors.textMuted} />
               ) : (
@@ -913,9 +1203,9 @@ export default function CallScreen({ me }) {
                   <Ionicons name="shield-checkmark" size={11} color={colors.gold} />
                 </View>
               ) : null}
-              {beauty.enabled && !controls.cameraOff ? (
+              {(beauty.enabled || background.mode !== 'off') && !controls.cameraOff ? (
                 <View style={styles.pipTag}>
-                  <Ionicons name="sparkles" size={10} color={colors.gold} />
+                  <Ionicons name={background.mode !== 'off' ? 'image' : 'sparkles'} size={10} color={colors.gold} />
                 </View>
               ) : null}
             </SelfView>
@@ -1196,7 +1486,7 @@ const styles = StyleSheet.create({
   auto: { paddingHorizontal: space.sm, paddingVertical: 3, borderRadius: radius.pill, borderWidth: 1, borderColor: 'rgba(246,211,138,0.5)', marginLeft: space.xs },
   autoText: { fontFamily: fonts.mono, fontSize: 10, color: colors.gold, letterSpacing: 0.8, textTransform: 'uppercase' },
   sliderRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  sliderMid: { position: 'absolute', left: '50%', top: 12, width: 2, height: 16, marginLeft: -1, borderRadius: 1, backgroundColor: 'rgba(243,239,232,0.35)' },
+  sliderMid: { position: 'absolute', left: '50%', top: 16, width: 2, height: 16, marginLeft: -1, borderRadius: 1, backgroundColor: 'rgba(243,239,232,0.35)' },
   dock: {
     paddingHorizontal: DOCK_PAD,
     paddingBottom: DOCK_PAD,
@@ -1279,6 +1569,60 @@ const styles = StyleSheet.create({
   toneSide: { flex: 1 },
   presetDetail: { fontFamily: fonts.medium, fontSize: 12, color: colors.textMuted, marginTop: space.sm, textAlign: 'center' },
   filterHead: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  toneHint: { fontFamily: fonts.medium, fontSize: 11.5, color: colors.textFaint, marginTop: -2 },
+  panelClose: { marginLeft: space.sm, width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
+  bgNow: { fontFamily: fonts.mono, fontSize: 10.5, letterSpacing: 0.6, color: colors.gold, marginLeft: space.xs, flexShrink: 1 },
+  bgTabs: {
+    flexDirection: 'row',
+    marginTop: space.md,
+    padding: 4,
+    gap: 4,
+    borderRadius: radius.pill,
+    backgroundColor: 'rgba(243,239,232,0.06)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(243,239,232,0.12)',
+  },
+  bgTab: { flex: 1, minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: radius.pill },
+  bgTabOn: { backgroundColor: 'rgba(226,168,75,0.16)', borderWidth: 1, borderColor: 'rgba(246,211,138,0.55)' },
+  bgTabLabel: { fontFamily: fonts.semibold, fontSize: 13.5, color: colors.textMuted },
+  bgWarn: { fontFamily: fonts.medium, fontSize: 12, lineHeight: 17, color: GOLD_LIGHT, marginTop: space.md },
+  bgRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: space.md },
+  bgCarousel: { gap: space.sm, paddingTop: space.md },
+  tile: {
+    borderRadius: radius.lg,
+    overflow: 'hidden',
+    borderWidth: 1.5,
+    borderColor: 'rgba(243,239,232,0.14)',
+    backgroundColor: '#0E0E11',
+  },
+  tileOn: { borderColor: colors.gold, boxShadow: '0px 0px 16px rgba(226,168,75,0.45)' },
+  tileFoot: { position: 'absolute', left: space.sm, right: space.sm, bottom: space.sm },
+  tileLabel: { fontFamily: fonts.semibold, fontSize: 13, color: colors.text, letterSpacing: -0.1 },
+  tileDetail: { fontFamily: fonts.mono, fontSize: 9.5, letterSpacing: 0.6, color: colors.textMuted, marginTop: 1, textTransform: 'uppercase' },
+  tileCheck: {
+    position: 'absolute',
+    top: space.sm,
+    right: space.sm,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.gold,
+  },
+  sceneFrame: {
+    borderRadius: radius.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: 'rgba(246,211,138,0.35)',
+    backgroundColor: 'rgba(243,239,232,0.03)',
+  },
+  aperture: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center', paddingBottom: 26 },
+  apertureRing: { borderWidth: 2, borderColor: 'rgba(246,211,138,0.8)', boxShadow: '0px 0px 14px rgba(226,168,75,0.5)' },
+  focus: { position: 'absolute', width: FOCUS_SIZE, height: FOCUS_SIZE, borderWidth: 1.5, borderColor: colors.gold, borderRadius: 3 },
+  focusTick: { position: 'absolute', width: 2, backgroundColor: colors.gold },
   filterLabel: {
     flex: 1,
     fontFamily: fonts.semibold,

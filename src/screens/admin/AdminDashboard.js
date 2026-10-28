@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -15,6 +15,7 @@ import { Avatar, BoaStarBadge, Field, PageHeader, Toggle } from '../../component
 import { Button, PulseDot } from '../../components/ui';
 import { haptics } from '../../utils/haptics';
 import { colors, fonts, radius, space, type } from '../../theme';
+import { CardsSkeleton } from '../../components/Skeleton';
 
 const TABS = [
   { id: 'talent', label: 'Talent', icon: 'star-outline' },
@@ -63,6 +64,7 @@ function Panel({ children, style, testID }) {
 function Action({ label, icon, onPress, tone = colors.text, testID }) {
   return (
     <Pressable
+      hitSlop={{ top: 5, bottom: 5 }}
       onPress={() => {
         haptics.selection();
         onPress();
@@ -112,12 +114,7 @@ function TalentDirectory({ users, query, setQuery, onToggleStar, onTogglePremium
             <Text style={styles.toggleLabel}>
               BOA Premium <Text style={styles.mono}>{(u.subscription_status ?? 'trial').toUpperCase()}</Text>
             </Text>
-            <Toggle
-              value={u.subscription_status === 'active'}
-              onChange={(v) => onTogglePremium(u, v)}
-              label={`BOA Premium for ${nameOf(u)}`}
-              testID={`admin-premium-${u.username}`}
-            />
+            <Toggle value={u.subscription_status === 'active'} onChange={(v) => onTogglePremium(u, v)} label={`BOA Premium for ${nameOf(u)}`} testID={`admin-premium-${u.username}`} />
           </View>
           {u.id !== myId ? (
             <View style={styles.deleteRow}>
@@ -153,13 +150,9 @@ function Moderation({ reports, onBan, onDismiss, onUnban }) {
       ) : null}
       {r.details ? <Text style={styles.sub}>{r.details}</Text> : null}
       <View style={styles.actions}>
-        {r.reported && !r.reported.banned_at ? (
-          <Action label="Ban user" icon="ban" tone="#FF6B6B" onPress={() => onBan(r)} testID={`admin-ban-${r.id}`} />
-        ) : null}
+        {r.reported && !r.reported.banned_at ? <Action label="Ban user" icon="ban" tone="#FF6B6B" onPress={() => onBan(r)} testID={`admin-ban-${r.id}`} /> : null}
         {r.reported?.banned_at ? <Action label="Lift ban" icon="refresh" onPress={() => onUnban(r)} testID={`admin-unban-${r.id}`} /> : null}
-        {r.status !== 'dismissed' && r.status !== 'actioned' ? (
-          <Action label="Dismiss" icon="close" tone={colors.textMuted} onPress={() => onDismiss(r)} testID={`admin-dismiss-${r.id}`} />
-        ) : null}
+        {r.status !== 'dismissed' && r.status !== 'actioned' ? <Action label="Dismiss" icon="close" tone={colors.textMuted} onPress={() => onDismiss(r)} testID={`admin-dismiss-${r.id}`} /> : null}
       </View>
     </Panel>
   ));
@@ -171,7 +164,10 @@ function Evidence({ url }) {
   const [open, setOpen] = useState(false);
   useEffect(() => {
     let alive = true;
-    admin.evidenceLink(url).then((l) => alive && setLink(l)).catch(() => {});
+    admin
+      .evidenceLink(url)
+      .then((l) => alive && setLink(l))
+      .catch(() => {});
     return () => {
       alive = false;
     };
@@ -292,13 +288,36 @@ function RadioManager({ picked, onAdd, onRemove, onMove }) {
                   {s.genreLabel ?? s.genre ?? 'Radio'}
                 </Text>
               </View>
-              <Pressable onPress={() => onMove(i, -1)} disabled={i === 0} accessibilityRole="button" accessibilityLabel={`Move ${s.name} up`} testID={`admin-trending-up-${s.id}`} style={[styles.iconBtn, i === 0 && { opacity: 0.3 }]}>
+              <Pressable
+                hitSlop={5}
+                onPress={() => onMove(i, -1)}
+                disabled={i === 0}
+                accessibilityRole="button"
+                accessibilityLabel={`Move ${s.name} up`}
+                testID={`admin-trending-up-${s.id}`}
+                style={[styles.iconBtn, i === 0 && { opacity: 0.3 }]}
+              >
                 <Ionicons name="chevron-up" size={18} color={MONO_GOLD} />
               </Pressable>
-              <Pressable onPress={() => onMove(i, 1)} disabled={i === picked.length - 1} accessibilityRole="button" accessibilityLabel={`Move ${s.name} down`} testID={`admin-trending-down-${s.id}`} style={[styles.iconBtn, i === picked.length - 1 && { opacity: 0.3 }]}>
+              <Pressable
+                hitSlop={5}
+                onPress={() => onMove(i, 1)}
+                disabled={i === picked.length - 1}
+                accessibilityRole="button"
+                accessibilityLabel={`Move ${s.name} down`}
+                testID={`admin-trending-down-${s.id}`}
+                style={[styles.iconBtn, i === picked.length - 1 && { opacity: 0.3 }]}
+              >
                 <Ionicons name="chevron-down" size={18} color={MONO_GOLD} />
               </Pressable>
-              <Pressable onPress={() => onRemove(s)} accessibilityRole="button" accessibilityLabel={`Take ${s.name} off trending`} testID={`admin-trending-remove-${s.id}`} style={styles.iconBtn}>
+              <Pressable
+                hitSlop={5}
+                onPress={() => onRemove(s)}
+                accessibilityRole="button"
+                accessibilityLabel={`Take ${s.name} off trending`}
+                testID={`admin-trending-remove-${s.id}`}
+                style={styles.iconBtn}
+              >
                 <Ionicons name="close" size={18} color="#FF6B6B" />
               </Pressable>
             </View>
@@ -439,8 +458,12 @@ export default function AdminDashboard({ navigation }) {
           const on = t.id === tab;
           return (
             <Pressable
+              hitSlop={{ top: 3, bottom: 3 }}
               key={t.id}
-              onPress={() => setTab(t.id)}
+              onPress={() => {
+                haptics.selection();
+                setTab(t.id);
+              }}
               accessibilityRole="tab"
               accessibilityState={{ selected: on }}
               testID={`admin-tab-${t.id}`}
@@ -468,7 +491,7 @@ export default function AdminDashboard({ navigation }) {
         }
       >
         {!data.ready ? (
-          <ActivityIndicator color={colors.gold} style={{ marginTop: space.xxl }} />
+          <CardsSkeleton count={4} style={{ marginTop: space.xl, paddingHorizontal: 0 }} />
         ) : error ? (
           <Animated.View entering={FadeIn}>
             <Text style={styles.empty}>The control room couldn't load: {error}</Text>
@@ -482,14 +505,10 @@ export default function AdminDashboard({ navigation }) {
             onTogglePremium={(u, on) => run(() => admin.setSubscription(u.id, on ? 'active' : 'expired'))}
             myId={userId}
             onDelete={(u) =>
-              Alert.alert(
-                `Delete ${nameOf(u)}?`,
-                'This permanently deletes their account, profile, posts, messages, blocks and files. It cannot be undone.',
-                [
-                  { text: 'Cancel', style: 'cancel' },
-                  { text: 'Delete forever', style: 'destructive', onPress: () => run(() => admin.deleteUser(u.id)) },
-                ],
-              )
+              Alert.alert(`Delete ${nameOf(u)}?`, 'This permanently deletes their account, profile, posts, messages, blocks and files. It cannot be undone.', [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Delete forever', style: 'destructive', onPress: () => run(() => admin.deleteUser(u.id)) },
+              ])
             }
           />
         ) : tab === 'moderation' ? (

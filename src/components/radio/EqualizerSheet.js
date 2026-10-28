@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import Slider from '@react-native-community/slider';
+import BoaSlider from '../BoaSlider';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
@@ -32,7 +32,7 @@ function Band({ label, hint, value, onChange, locked, testID }) {
         <Text style={styles.bandLabel}>{label}</Text>
         <Text style={styles.bandValue}>{db(value)}</Text>
       </View>
-      <Slider
+      <BoaSlider
         style={styles.slider}
         minimumValue={-1}
         maximumValue={1}
@@ -43,7 +43,6 @@ function Band({ label, hint, value, onChange, locked, testID }) {
         onSlidingComplete={() => haptics.selection()}
         minimumTrackTintColor={colors.gold}
         maximumTrackTintColor="rgba(243,239,232,0.18)"
-        thumbTintColor={locked ? colors.textFaint : colors.gold}
         accessibilityLabel={`${label}, ${db(value)}`}
         testID={testID}
       />
@@ -92,6 +91,7 @@ export default function EqualizerSheet({ open, onClose }) {
               const on = preset === p.id;
               return (
                 <Pressable
+                  hitSlop={6}
                   key={p.id}
                   disabled={locked}
                   onPress={() => {
@@ -165,7 +165,17 @@ export default function EqualizerSheet({ open, onClose }) {
 const styles = StyleSheet.create({
   body: { padding: space.xl, overflow: 'hidden' },
   head: { flexDirection: 'row', alignItems: 'flex-end', marginBottom: space.lg },
-  live: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, height: 26, borderRadius: radius.pill, backgroundColor: 'rgba(18,18,22,0.7)', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
+  live: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    height: 26,
+    borderRadius: radius.pill,
+    backgroundColor: 'rgba(18,18,22,0.7)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+  },
   liveDot: { width: 6, height: 6, borderRadius: 3 },
   liveText: { fontFamily: fonts.mono, fontSize: 9.5, letterSpacing: 1.4, color: colors.textMuted },
   presets: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, marginBottom: space.md },
@@ -185,7 +195,7 @@ const styles = StyleSheet.create({
   bandHead: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
   bandLabel: { fontFamily: fonts.semibold, fontSize: 15, color: colors.text },
   bandValue: { fontFamily: fonts.mono, fontSize: 12, color: colors.gold, fontVariant: ['tabular-nums'] },
-  slider: { height: 40, marginHorizontal: -4 },
+  slider: { height: 48, marginHorizontal: -4 },
   scale: { flexDirection: 'row', justifyContent: 'space-between' },
   scaleText: { fontFamily: fonts.mono, fontSize: 8.5, letterSpacing: 1.4, color: colors.textFaint },
   spatial: {

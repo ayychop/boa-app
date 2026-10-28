@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Image, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
@@ -9,6 +9,7 @@ import { claim, register } from '../../audio/focus';
 import { ensureAudioSession } from '../../audio/session';
 import { haptics } from '../../utils/haptics';
 import { colors, fonts, radius, space } from '../../theme';
+import { LoadingDots } from '../Skeleton';
 
 export const WAVE_BARS = 40;
 
@@ -63,10 +64,7 @@ export function Waveform({ levels, progress = 0, mine, height = 28 }) {
   return (
     <View style={[styles.wave, { height }]} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
       {bars.map((v, i) => (
-        <View
-          key={i}
-          style={[styles.bar, { height: Math.max(3, (v / 100) * height), backgroundColor: i / bars.length < progress ? played : rest }]}
-        />
+        <View key={i} style={[styles.bar, { height: Math.max(3, (v / 100) * height), backgroundColor: i / bars.length < progress ? played : rest }]} />
       ))}
     </View>
   );
@@ -103,6 +101,7 @@ export function VoiceNote({ message, mine }) {
   return (
     <View style={styles.voice} testID={`voice-note-${message.id}`}>
       <Pressable
+        hitSlop={8}
         onPress={toggle}
         disabled={!url}
         accessibilityRole="button"
@@ -110,7 +109,7 @@ export function VoiceNote({ message, mine }) {
         style={[styles.play, mine ? styles.playMine : styles.playTheirs]}
       >
         {!url && !failed ? (
-          <ActivityIndicator size="small" color={mine ? colors.gold : colors.bg} />
+          <LoadingDots color={mine ? colors.gold : colors.bg} size={4} />
         ) : (
           <Ionicons name={failed ? 'alert' : playing ? 'pause' : 'play'} size={18} color={mine ? colors.gold : colors.bg} style={!playing && !failed && { marginLeft: 2 }} />
         )}
@@ -144,7 +143,7 @@ export function MediaTile({ message, onOpen }) {
     >
       {url && !video ? <Image source={{ uri: url }} style={StyleSheet.absoluteFill} resizeMode="cover" /> : null}
       {video ? <View style={[StyleSheet.absoluteFill, styles.videoBack]} /> : null}
-      {!url && !failed ? <ActivityIndicator color={colors.gold} /> : null}
+      {!url && !failed ? <LoadingDots /> : null}
       {failed ? <Ionicons name="image-outline" size={26} color={colors.textFaint} /> : null}
       {video && url ? (
         <View style={styles.playBig}>
@@ -154,7 +153,7 @@ export function MediaTile({ message, onOpen }) {
       {video && message.media_duration_ms ? <Text style={styles.tileTime}>{clock(message.media_duration_ms)}</Text> : null}
       {message.pending ? (
         <View style={[StyleSheet.absoluteFill, styles.uploading]}>
-          <ActivityIndicator color={colors.text} />
+          <LoadingDots color={colors.text} />
         </View>
       ) : null}
     </Pressable>

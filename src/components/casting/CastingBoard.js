@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { Easing, FadeInDown, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
@@ -12,6 +12,7 @@ import { Chip, Field } from '../kit';
 import { Button, Slate } from '../ui';
 import { haptics } from '../../utils/haptics';
 import { colors, fonts, radius, space, type } from '../../theme';
+import { CardsSkeleton } from '../Skeleton';
 
 /**
  * The backdrop for BOA's own casting calls: drawn, not photographed, so
@@ -422,7 +423,7 @@ export default function CastingBoard({ navigation }) {
       ) : null}
 
       {calls === null ? (
-        <ActivityIndicator color={colors.gold} style={{ marginVertical: space.xl }} />
+        <CardsSkeleton count={3} style={{ marginVertical: space.xl, paddingHorizontal: 0 }} />
       ) : error ? (
         <Text style={[type.bodyMuted, styles.empty]}>Casting couldn't load just now. {error}</Text>
       ) : board.length === 0 ? (
