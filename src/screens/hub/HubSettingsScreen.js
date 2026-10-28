@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useHub } from '../../context/HubContext';
 import { useAppFont } from '../../context/FontContext';
+import { useCallMaybe } from '../../context/CallContext';
 import * as hub from '../../api/hub';
 import { Avatar, Chip, Field, PageHeader, SettingRow, Toggle } from '../../components/kit';
 import { Button, Slate } from '../../components/ui';
@@ -27,6 +28,10 @@ import { LoadingDots } from '../../components/Skeleton';
 export default function HubSettingsScreen({ navigation }) {
   const insets = useSafeAreaInsets();
   const appFont = useAppFont();
+  // Null outside a call provider (e.g. a standalone render); the row just shows off.
+  const callCtx = useCallMaybe();
+  const lockDuringPip = callCtx?.lockDuringPip ?? false;
+  const setLockDuringPip = callCtx?.setLockDuringPip ?? (() => {});
   const {
     userId,
     profile,
@@ -297,8 +302,16 @@ export default function HubSettingsScreen({ navigation }) {
               <View style={[styles.themeDot, { backgroundColor: chatTheme?.color ?? vibe.accent }]} />
               <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
             </SettingRow>
-            <SettingRow icon="musical-notes-outline" title="Ringtone" detail={`Incoming calls play ${ringtoneById(ringtone).label}`} onPress={() => navigation.navigate('Ringtone')} last>
+            <SettingRow icon="musical-notes-outline" title="Ringtone" detail={`Incoming calls play ${ringtoneById(ringtone).label}`} onPress={() => navigation.navigate('Ringtone')}>
               <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
+            </SettingRow>
+            <SettingRow
+              icon="lock-closed-outline"
+              title="Lock screen during PiP"
+              detail="While a call floats in its small window, you can still tap the app behind it. Turn this on to block those taps so you don't hit anything by accident."
+              last
+            >
+              <Toggle value={!!lockDuringPip} onChange={setLockDuringPip} label="Lock screen during PiP" testID="hub-lock-pip" />
             </SettingRow>
           </View>
 
