@@ -87,7 +87,7 @@ function Hero({ production, width, height, bottomInset = 0, topInset = 0 }) {
         <View style={[styles.heroTop, { top: insets.top + space.xl + topInset }]}>
           <View>
             <View style={styles.logoRow}>
-              <BoaLogo height={30} />
+              <BoaLogo height={30} sheen />
               <PulseDot size={7} style={styles.vybDot} />
             </View>
             {width >= 600 && (

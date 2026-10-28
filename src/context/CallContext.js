@@ -658,6 +658,14 @@ export function CallProvider({ children }) {
 
   const flipCamera = useCallback(() => media.switchCamera(), []);
 
+  // The floating picture-in-picture window's own buttons: Mute toggles the
+  // mic, End hangs up. Nothing else reaches the call while it's in the window.
+  useEffect(() => BoaCall.addPipActionListener((action) => (action === 'mute' ? toggle('muted') : action === 'end' ? hangUp() : undefined)), [toggle, hangUp]);
+  // Keep that window's Mute button showing the call's real mute state.
+  useEffect(() => {
+    BoaCall.setPipMuted(controls.muted);
+  }, [controls.muted]);
+
   const value = useMemo(
     () => ({
       call,

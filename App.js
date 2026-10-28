@@ -46,6 +46,7 @@ import { WeatherProvider } from './src/context/WeatherContext';
 import { AlarmProvider, useAlarms } from './src/context/AlarmContext';
 import { HubProvider } from './src/context/HubContext';
 import { CallProvider } from './src/context/CallContext';
+import { FontProvider } from './src/context/FontContext';
 import CallWakeUpPrompt from './src/components/calls/CallWakeUpPrompt';
 import { reportDeviceThreats } from './src/security/integrity';
 import { currentTab, goToTab, navigationRef, openPage } from './src/navigation/ref';
@@ -527,6 +528,7 @@ function Root() {
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.bg }}>
       <SafeAreaProvider>
         <SafeBottomFloor>
+          <FontProvider>
           <UserProvider>
             <PlayerProvider>
               <SleepTimerProvider>
@@ -552,6 +554,7 @@ function Root() {
               </SleepTimerProvider>
             </PlayerProvider>
           </UserProvider>
+          </FontProvider>
         </SafeBottomFloor>
       </SafeAreaProvider>
     </GestureHandlerRootView>

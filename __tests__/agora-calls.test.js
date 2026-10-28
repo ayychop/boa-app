@@ -352,6 +352,30 @@ describe('Agora video calls', () => {
     await act(async () => jest.advanceTimersByTime(2000));
   });
 
+  test('the floating call window has native Mute and End buttons wired to the call', async () => {
+    const BoaCall = require('../modules/boa-call');
+    BoaCall.setPipMuted.mockClear();
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    await mount();
+    await user.press(screen.getByText('Call Kofi'));
+    const { callId } = signal.send.mock.calls.at(-1)[2];
+    await act(async () => mockSignal('accept', { callId }));
+    await act(async () => handler().onJoinChannelSuccess({}, 10));
+    engine.muteLocalAudioStream.mockClear();
+    // Mute on the window mutes the call, and the window's own button follows the state.
+    await act(async () => BoaCall.__pipAction('mute'));
+    expect(engine.muteLocalAudioStream).toHaveBeenLastCalledWith(true);
+    expect(BoaCall.setPipMuted).toHaveBeenLastCalledWith(true);
+    await act(async () => BoaCall.__pipAction('mute'));
+    expect(engine.muteLocalAudioStream).toHaveBeenLastCalledWith(false);
+    expect(BoaCall.setPipMuted).toHaveBeenLastCalledWith(false);
+    // End on the window ends the call.
+    signal.send.mockClear();
+    await act(async () => BoaCall.__pipAction('end'));
+    expect(signal.send).toHaveBeenCalledWith(expect.anything(), 'end', expect.objectContaining({ callId }));
+    await act(async () => jest.advanceTimersByTime(2000));
+  });
+
   test('the app manifest allows picture in picture, and the activity never restarts going in or out', () => {
     const plugins = require('../app.json').expo.plugins;
     expect(plugins).toContain('./plugins/withCallPictureInPicture');

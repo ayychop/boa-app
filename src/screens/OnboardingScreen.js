@@ -132,7 +132,7 @@ export default function OnboardingScreen() {
       <Viewfinder inset={16} />
 
       <View style={[styles.top, { paddingTop: insets.top + space.xl }]}>
-        <BoaLogo height={30} />
+        <BoaLogo height={30} sheen />
         {/* Step one was the intro's welcome. */}
         <View style={styles.dots} accessibilityLabel="Step 2 of 2">
           <View style={styles.dot} />

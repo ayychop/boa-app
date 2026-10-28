@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useHub } from '../../context/HubContext';
+import { useAppFont } from '../../context/FontContext';
 import * as hub from '../../api/hub';
 import { Avatar, Chip, Field, PageHeader, SettingRow, Toggle } from '../../components/kit';
 import { Button, Slate } from '../../components/ui';
@@ -25,6 +26,7 @@ import { LoadingDots } from '../../components/Skeleton';
  */
 export default function HubSettingsScreen({ navigation }) {
   const insets = useSafeAreaInsets();
+  const appFont = useAppFont();
   const {
     userId,
     profile,
@@ -237,6 +239,24 @@ export default function HubSettingsScreen({ navigation }) {
             ))}
           </View>
 
+          {/* App typeface: a curated headline face, saved as soon as it's picked. */}
+          <Slate style={styles.section}>Typeface</Slate>
+          <View style={styles.chips}>
+            {appFont.options.map((f) => (
+              <Chip
+                key={f.id}
+                label={f.label}
+                selected={appFont.fontId === f.id}
+                onPress={() => {
+                  haptics.selection();
+                  appFont.choose(f.id);
+                }}
+                testID={`hub-font-${f.id}`}
+              />
+            ))}
+          </View>
+          <Text style={styles.fontHint}>Sets the headline face for your profile name and section titles. The BOA wordmark and slate labels stay exactly as they are.</Text>
+
           <Slate style={styles.section}>Presence</Slate>
           <View style={styles.group}>
             <SettingRow icon="eye-outline" title="Visible on Hub" detail="Show up in Find talent and appear online. Off: only people you already talk to can see you.">
@@ -354,6 +374,7 @@ const styles = StyleSheet.create({
   photoRow: { flexDirection: 'row', alignItems: 'center', gap: space.lg },
   section: { marginTop: space.xl, marginBottom: space.md },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
+  fontHint: { fontFamily: fonts.regular, fontSize: 12.5, lineHeight: 18, color: colors.textMuted, marginTop: space.md },
   themeDot: { width: 18, height: 18, borderRadius: 9, borderWidth: 1, borderColor: 'rgba(255,255,255,0.4)' },
   group: { borderRadius: radius.lg, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
   credit: { fontFamily: fonts.regular, fontSize: 11, lineHeight: 16, color: colors.textFaint, marginTop: space.sm },

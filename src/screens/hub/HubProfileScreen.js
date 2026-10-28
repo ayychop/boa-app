@@ -24,6 +24,7 @@ import Favourites from '../../components/profile/Favourites';
 import { GoldBadge, LogoWatermark, Tappable } from '../../components/ui';
 import useChatVibe, { allowedVibe } from '../../chat/vibes';
 import { usePremiumUnlocked } from '../../context/PremiumContext';
+import { useHeadlineFont } from '../../context/FontContext';
 import { colors, fonts, radius, space, type } from '../../theme';
 import { GridSkeleton, ProfileSkeleton } from '../../components/Skeleton';
 
@@ -162,6 +163,7 @@ export default function HubProfileScreen({ navigation, route }) {
   const insets = useSafeAreaInsets();
   const window = useWindowDimensions();
   const width = Math.min(window.width, MAX_WIDTH);
+  const headlineFont = useHeadlineFont();
   const { userId, profile: me, isOnline, blocked, unblock } = useHub();
   const id = route.params?.id ?? userId;
   const mine = id === userId;
@@ -348,7 +350,7 @@ export default function HubProfileScreen({ navigation, route }) {
             </View>
 
             <View style={styles.nameRow}>
-              <Text style={styles.name} numberOfLines={2}>
+              <Text style={[styles.name, { fontFamily: headlineFont }]} numberOfLines={2}>
                 {name}
               </Text>
             </View>
@@ -418,14 +420,19 @@ export default function HubProfileScreen({ navigation, route }) {
           {dayOnes.length ? (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dayOnes} testID="profile-day-ones">
               {dayOnes.map((d) => (
-                <View key={`${d.kind}:${d.item_id}`} style={[styles.dayOne, { maxWidth: Math.min(280, width - space.lg * 2) }]}>
-                  <Ionicons name={d.kind === 'original' ? 'film-outline' : 'radio-outline'} size={13} color={colors.gold} />
-                  <Text style={styles.dayOneTitle} numberOfLines={1}>
-                    {d.item_label || (d.kind === 'original' ? 'BOA Original' : 'Station')}
-                  </Text>
-                  <Text style={styles.dayOneRank} numberOfLines={1}>
-                    {placeLine(d.rank)}
-                  </Text>
+                <View key={`${d.kind}:${d.item_id}`} style={[styles.dayOne, { maxWidth: Math.min(260, width - space.lg * 3) }]}>
+                  <View style={styles.dayOneIcon}>
+                    <Ionicons name={d.kind === 'original' ? 'film' : 'radio'} size={17} color={colors.gold} />
+                  </View>
+                  <View style={styles.dayOneText}>
+                    <Text style={styles.dayOneKicker}>Day One</Text>
+                    <Text style={styles.dayOneTitle} numberOfLines={1}>
+                      {d.item_label || (d.kind === 'original' ? 'BOA Original' : 'Station')}
+                    </Text>
+                    <Text style={styles.dayOneRank} numberOfLines={1}>
+                      {placeLine(d.rank)}
+                    </Text>
+                  </View>
                 </View>
               ))}
             </ScrollView>
@@ -505,20 +512,35 @@ const styles = StyleSheet.create({
   actionPrimary: { backgroundColor: colors.gold, boxShadow: '0px 6px 20px rgba(226,168,75,0.35)' },
   actionGlass: { backgroundColor: 'rgba(18,18,22,0.7)', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.borderStrong },
   actionText: { fontFamily: fonts.semibold, fontSize: 14, flexShrink: 1 },
-  // Slim glass chips, one line each: where you're a Day One and your place.
-  dayOnes: { paddingHorizontal: space.lg, gap: space.sm, paddingTop: space.md },
+  // Accolade cards: where you were a Day One, each one legible on two lines,
+  // a gold mark set off from the name and its place. Premium, not a crammed pill.
+  dayOnes: { paddingHorizontal: space.lg, gap: space.sm + 2, paddingTop: space.md },
   dayOne: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    height: 32,
-    paddingHorizontal: space.md,
-    borderRadius: radius.pill,
+    gap: space.md,
+    paddingLeft: space.sm + 2,
+    paddingRight: space.lg,
+    paddingVertical: space.sm + 2,
+    borderRadius: radius.lg,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(246,211,138,0.4)',
-    backgroundColor: 'rgba(18,18,22,0.7)',
+    borderColor: 'rgba(246,211,138,0.45)',
+    backgroundColor: 'rgba(28,24,16,0.72)',
+    boxShadow: '0px 4px 16px rgba(0,0,0,0.35)',
   },
-  dayOneTitle: { flexShrink: 1, fontFamily: fonts.semibold, fontSize: 12.5, color: colors.text },
-  dayOneRank: { flexShrink: 0, fontFamily: fonts.mono, fontSize: 9.5, letterSpacing: 0.8, color: '#F6D38A' },
+  dayOneIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.goldSoft,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(246,211,138,0.5)',
+  },
+  dayOneText: { flexShrink: 1 },
+  dayOneKicker: { fontFamily: fonts.mono, fontSize: 8.5, letterSpacing: 1.6, textTransform: 'uppercase', color: colors.gold },
+  dayOneTitle: { fontFamily: fonts.semibold, fontSize: 14.5, lineHeight: 19, letterSpacing: -0.3, color: colors.text, marginTop: 2 },
+  dayOneRank: { fontFamily: fonts.medium, fontSize: 11.5, color: colors.textMuted, marginTop: 1 },
   gridError: { textAlign: 'center', marginTop: space.xxl, paddingHorizontal: space.lg },
 });

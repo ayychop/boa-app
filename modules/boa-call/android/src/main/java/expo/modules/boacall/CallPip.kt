@@ -1,8 +1,13 @@
 package expo.modules.boacall
 
 import android.app.Activity
+import android.app.PendingIntent
 import android.app.PictureInPictureParams
+import android.app.RemoteAction
+import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.drawable.Icon
 import android.os.Build
 import android.os.Bundle
 import android.util.Rational
@@ -18,6 +23,14 @@ import java.lang.ref.WeakReference
  * window over everything, their picture in it, like WhatsApp and FaceTime.
  * Tap the window to come back to the full call.
  *
+ * The window is too small for the in-app controls, so it carries native
+ * floating buttons instead (setActions): Mute, which toggles between a mic
+ * and a struck-through mic, and End. A tap on one broadcasts to
+ * CallPipReceiver and reaches JS, which mutes or ends the call. JS keeps the
+ * Mute button in step with the real state (setMuted). So the window only ever
+ * shows the call: their video (or a black screen with their photo when the
+ * camera is off) and those two buttons, never app chrome or media controls.
+ *
  * JS says when a call is on (BoaCall.setPipReady). Android 12+ then goes
  * into the window by itself as you leave (auto-enter, a smooth animation
  * from the full screen); Android 8 to 11 is asked to on the way out
@@ -27,6 +40,7 @@ import java.lang.ref.WeakReference
 object CallPip : ReactActivityLifecycleListener {
   private var activity = WeakReference<Activity>(null)
   private var ready = false
+  private var muted = false
   private var watching: WeakReference<Activity> = WeakReference(null)
   // Set while the module (and so JS) is alive.
   @Volatile var onChange: ((Boolean) -> Unit)? = null
@@ -37,10 +51,12 @@ object CallPip : ReactActivityLifecycleListener {
   fun supported(a: Activity?): Boolean =
     a != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && a.packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)
 
-  // A portrait window: a face on a phone call.
-  private fun params(): PictureInPictureParams? {
+  // A portrait window with Mute and End on it: a face on a phone call.
+  private fun params(a: Activity): PictureInPictureParams? {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return null
     val b = PictureInPictureParams.Builder().setAspectRatio(Rational(9, 16))
+    // The buttons are a nicety: if they can't be built, the call still floats.
+    runCatching { b.setActions(listOf(muteAction(a), endAction(a))) }
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
       b.setAutoEnterEnabled(ready)
       b.setSeamlessResizeEnabled(true)
@@ -48,13 +64,39 @@ object CallPip : ReactActivityLifecycleListener {
     return b.build()
   }
 
+  private fun muteAction(ctx: Context): RemoteAction {
+    val icon = Icon.createWithResource(ctx, if (muted) R.drawable.ic_pip_mic else R.drawable.ic_pip_mic_off)
+    val title = if (muted) "Unmute" else "Mute"
+    return RemoteAction(icon, title, title, broadcast(ctx, CallPipReceiver.ACTION_PIP_MUTE, REQUEST_MUTE))
+  }
+
+  private fun endAction(ctx: Context): RemoteAction {
+    val icon = Icon.createWithResource(ctx, R.drawable.ic_pip_end)
+    return RemoteAction(icon, "End", "End call", broadcast(ctx, CallPipReceiver.ACTION_PIP_END, REQUEST_END))
+  }
+
+  private fun broadcast(ctx: Context, action: String, request: Int): PendingIntent {
+    val intent = Intent(ctx, CallPipReceiver::class.java).setAction(action)
+    return PendingIntent.getBroadcast(ctx, request, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+  }
+
   /** A call is on (true) or over (false). Main thread. */
   fun setReady(on: Boolean) {
     ready = on
+    if (!on) muted = false
     val a = activity.get() ?: return
     if (!supported(a)) return
     watch(a)
-    runCatching { params()?.let { a.setPictureInPictureParams(it) } }
+    runCatching { params(a)?.let { a.setPictureInPictureParams(it) } }
+  }
+
+  /** The call's mute state changed: redraw the window's Mute button to match. */
+  fun setMuted(on: Boolean) {
+    if (muted == on) return
+    muted = on
+    val a = activity.get() ?: return
+    if (!supported(a)) return
+    runCatching { params(a)?.let { a.setPictureInPictureParams(it) } }
   }
 
   private fun watch(a: Activity) {
@@ -79,7 +121,7 @@ object CallPip : ReactActivityLifecycleListener {
   override fun onUserLeaveHint(activity: Activity?) {
     val a = activity ?: return
     if (!ready || !supported(a) || Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) return
-    runCatching { params()?.let { a.enterPictureInPictureMode(it) } }
+    runCatching { params(a)?.let { a.enterPictureInPictureMode(it) } }
   }
 
   override fun onDestroy(activity: Activity?) {
@@ -89,4 +131,7 @@ object CallPip : ReactActivityLifecycleListener {
     }
     if (this.activity.get() === activity) this.activity = WeakReference(null)
   }
+
+  private const val REQUEST_MUTE = 71
+  private const val REQUEST_END = 72
 }

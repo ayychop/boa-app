@@ -102,7 +102,7 @@ export default function ProfileScreen({ navigation }) {
               trims any bleed, and 0.05 keeps it under the text and vibes. */}
           <LogoWatermark height={84} opacity={0.05} style={{ left: 0, right: 0, top: 84, alignItems: 'center' }} />
           <Viewfinder inset={12} size={12} />
-          <BoaLogo height={34} />
+          <BoaLogo height={34} sheen />
           <View style={styles.identity}>
             {signedIn ? (
               <Avatar uri={profile.avatar_url} name={name} size={56} />
