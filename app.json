@@ -10,7 +10,8 @@
       "supportsTablet": true,
       "infoPlist": {
         "UIBackgroundModes": [
-          "audio"
+          "audio",
+          "voip"
         ],
         "NSLocationWhenInUseUsageDescription": "BOA uses your approximate location to show local weather.",
         "NSMicrophoneUsageDescription": "BOA uses the microphone for voice notes and BOA video calls."
@@ -30,6 +31,7 @@
         "android.permission.POST_NOTIFICATIONS",
         "android.permission.USE_FULL_SCREEN_INTENT",
         "android.permission.FOREGROUND_SERVICE_PHONE_CALL",
+        "android.permission.FOREGROUND_SERVICE_MICROPHONE",
         "android.permission.MANAGE_OWN_CALLS",
         "android.permission.VIBRATE",
         "android.permission.WAKE_LOCK",

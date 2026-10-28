@@ -75,3 +75,33 @@ export async function leaveLockScreen() {
     await native?.leaveLockScreen?.();
   } catch {}
 }
+
+/** A call is on (placed or answered): an ongoing-call notification holds it, so it carries on with the screen off. */
+export async function startOngoing(name, callId) {
+  try {
+    return !!(await native?.startOngoing?.(name || 'BOA HUB member', callId || ''));
+  } catch {
+    return false;
+  }
+}
+
+/** The call is over: the ongoing-call notification goes. */
+export async function stopOngoing() {
+  try {
+    await native?.stopOngoing?.();
+  } catch {}
+}
+
+/** Calls fn() when Hang up is pressed on the ongoing-call notification; returns an unsubscribe function. */
+export function addHangUpListener(fn) {
+  if (!native) return () => {};
+  const sub = native.addListener('onHangUp', () => fn());
+  return () => sub.remove();
+}
+
+/** Calls fn(on) as the screen goes off (the power button) and on again; returns an unsubscribe function. */
+export function addScreenListener(fn) {
+  if (!native) return () => {};
+  const sub = native.addListener('onScreenChange', (e) => fn(e?.on !== false));
+  return () => sub.remove();
+}

@@ -11,6 +11,7 @@ export const join = async (_channel, { onEvent }) => onEvent({ status: 'failed',
 export const leave = () => {};
 export const setMuted = () => {};
 export const setCameraOff = () => {};
+export const setAway = () => {};
 export const setSpeaker = () => {};
 export const switchCamera = () => {};
 export const setPrivacy = () => {};

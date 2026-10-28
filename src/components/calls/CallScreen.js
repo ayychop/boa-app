@@ -18,6 +18,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { GestureDetector, GestureHandlerRootView, usePanGesture } from 'react-native-gesture-handler';
 import { LinearGradient } from 'expo-linear-gradient';
+import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import Slider from '@react-native-community/slider';
@@ -48,6 +49,7 @@ const TONE_EVERY_MS = 33;
 // From this panel width Brightness and Contrast sit side by side; narrower, one above the other.
 const TONE_SIDE_BY_SIDE = 420;
 const SHRINK_SIZE = 40;
+const KEEP_AWAKE_TAG = 'boa-call';
 // Each preset's swatch: a hint of its grade.
 const PRESET_SWATCH = {
   natural: ['#C9A27E', '#8A6A50'],
@@ -568,6 +570,19 @@ export default function CallScreen({ me }) {
     transform: [{ translateY: tuck.value * (dockH + 60) }],
   }));
   const elapsed = useElapsed(call?.phase === 'active' ? call.startedAt : null);
+  // On a call the screen never dims or locks by itself, as on FaceTime and
+  // WhatsApp. The power button still locks it: the call goes on as a voice
+  // call (CallContext: away), and the picture is back once you're back.
+  const awake = !!call && call.phase !== 'ended';
+  useEffect(() => {
+    if (!awake) return undefined;
+    activateKeepAwakeAsync(KEEP_AWAKE_TAG).catch(() => {});
+    return () => {
+      try {
+        deactivateKeepAwake(KEEP_AWAKE_TAG)?.catch?.(() => {});
+      } catch {}
+    };
+  }, [awake]);
   useEffect(() => {
     if (call) return;
     setFiltersOpen(false);

@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { AppState, Vibration } from 'react-native';
+import { AppState, Platform, Vibration } from 'react-native';
 import * as Linking from 'expo-linking';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
@@ -29,6 +29,10 @@ const BEAUTY_KEY = 'boa.call.beauty';
 const SELF_VIEW_KEY = 'boa.call.selfHidden';
 // How long a call got ready ahead of time stays usable (its token lasts an hour).
 const PRIMED_MS = 40 * 60 * 1000;
+// Leaving the app mid-call on Android passes through the background on its
+// way into picture in picture: the camera waits this long for the window
+// before it rests.
+const AWAY_MS = Platform.OS === 'android' ? 700 : 0;
 // Unknown (just started) counts as on screen; only a known background rings by notification.
 const onScreen = () => AppState.currentState !== 'background';
 
@@ -145,6 +149,41 @@ export function CallProvider({ children }) {
     BoaCall.setPipReady(onCall);
     if (!onCall) setPip(false);
   }, [onCall]);
+
+  // A call on keeps going with the screen off (Android: an ongoing-call
+  // foreground service, modules/boa-call OngoingCallService). Started as the
+  // call is placed or answered, with the app on screen, and again once it's
+  // live, when the microphone is surely allowed.
+  const live = call?.phase === 'active';
+  useEffect(() => {
+    if (!onCall) return undefined;
+    return () => {
+      BoaCall.stopOngoing();
+    };
+  }, [onCall]);
+  useEffect(() => {
+    if (onCall) BoaCall.startOngoing(callRef.current?.peer?.name, callId);
+  }, [onCall, live, callId]);
+
+  // Out of sight, your camera rests and the call carries on as a voice call
+  // (media.setAway): the power button, or leaving the app without its
+  // floating window. Back on screen, the picture comes straight back.
+  const [appState, setAppState] = useState(AppState.currentState);
+  const [screenOn, setScreenOn] = useState(true);
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', setAppState);
+    return () => sub.remove();
+  }, []);
+  useEffect(() => BoaCall.addScreenListener(setScreenOn), []);
+  const away = onCall && (!screenOn || (appState === 'background' && !pip));
+  useEffect(() => {
+    if (!away) {
+      media.setAway(false);
+      return undefined;
+    }
+    const t = setTimeout(() => media.setAway(true), AWAY_MS);
+    return () => clearTimeout(t);
+  }, [away]);
 
   const setSelfHidden = useCallback((hidden) => {
     setSelfHiddenState(hidden);
@@ -545,6 +584,9 @@ export function CallProvider({ children }) {
       }),
     [decline],
   );
+
+  // Hang up on the ongoing-call notification.
+  useEffect(() => BoaCall.addHangUpListener(() => hangUp()), [hangUp]);
 
   // The call screen's buttons give their own haptic tap.
   const toggle = useCallback((key) => {

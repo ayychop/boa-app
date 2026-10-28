@@ -38,6 +38,9 @@ let toneTimer = null;
 // Which way the camera faces: front is mirrored in your preview, back isn't.
 let facing = 'front';
 const facingListeners = new Set();
+// Out of sight (the screen off, or the app left with no floating window):
+// the camera rests to save battery, the sound carries on (setAway).
+let away = false;
 // Tokens fetched ahead of time, by channel: { pass, at }.
 const passes = new Map();
 
@@ -452,13 +455,36 @@ export function setMuted(muted) {
   engine?.muteLocalAudioStream(muted);
 }
 
+// The camera on only while you want it on and the call is in sight.
+function applyCamera() {
+  const s = session;
+  if (!engine || !s?.camera) return;
+  const on = !s.cameraOff && !away;
+  engine.enableLocalVideo(on);
+  engine.muteLocalVideoStream(!on);
+  if (on && s.joined) engine.updateChannelMediaOptions({ publishCameraTrack: true });
+  if (on) reapply();
+}
+
 /** Camera off really turns the camera off, not just the picture. */
 export function setCameraOff(off) {
-  if (!engine || !session?.camera) return;
-  engine.enableLocalVideo(!off);
-  engine.muteLocalVideoStream(off);
-  if (!off && session.joined) engine.updateChannelMediaOptions({ publishCameraTrack: true });
-  if (!off) reapply();
+  if (!session) return;
+  session.cameraOff = off;
+  applyCamera();
+}
+
+/**
+ * The call went out of sight (true: the power button, or the app left
+ * without its floating window) or came back (false). Away, your camera
+ * stops and they see your picture pause; the microphone and their sound
+ * never stop, so it carries on as a voice call. Back, the camera starts
+ * again at once, unless you'd turned it off.
+ */
+export function setAway(next) {
+  if (away === next) return;
+  away = next;
+  console.log('[call] away', { away });
+  applyCamera();
 }
 
 /**

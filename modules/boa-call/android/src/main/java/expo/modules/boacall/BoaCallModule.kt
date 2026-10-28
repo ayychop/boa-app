@@ -1,12 +1,15 @@
 package expo.modules.boacall
 
 import android.app.NotificationManager
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import expo.modules.kotlin.functions.Queues
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
@@ -49,19 +52,48 @@ class BoaCallModule : Module() {
   private val manager: NotificationManagerCompat
     get() = NotificationManagerCompat.from(context)
 
+  // The power button: the screen going off and on, for a call's camera (src/calls/media.native.js: setAway).
+  private var screen: BroadcastReceiver? = null
+
   override fun definition() = ModuleDefinition {
     Name("BoaCall")
 
-    Events("onDecline", "onPipChange")
+    Events("onDecline", "onPipChange", "onHangUp", "onScreenChange")
 
     OnCreate {
       CallDeclineReceiver.onDecline = { id -> sendEvent("onDecline", mapOf("callId" to id)) }
+      CallDeclineReceiver.onHangUp = { sendEvent("onHangUp", emptyMap<String, Any>()) }
       CallPip.onChange = { active -> sendEvent("onPipChange", mapOf("active" to active)) }
+      val receiver = object : BroadcastReceiver() {
+        override fun onReceive(c: Context, intent: Intent) {
+          sendEvent("onScreenChange", mapOf("on" to (intent.action == Intent.ACTION_SCREEN_ON)))
+        }
+      }
+      val filter = IntentFilter().apply {
+        addAction(Intent.ACTION_SCREEN_OFF)
+        addAction(Intent.ACTION_SCREEN_ON)
+      }
+      // System broadcasts still arrive not exported; nothing from other apps does.
+      appContext.reactContext?.let { c -> runCatching { ContextCompat.registerReceiver(c, receiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED) } }
+      screen = receiver
     }
 
     OnDestroy {
       CallDeclineReceiver.onDecline = null
+      CallDeclineReceiver.onHangUp = null
       CallPip.onChange = null
+      screen?.let { r -> runCatching { appContext.reactContext?.unregisterReceiver(r) } }
+      screen = null
+    }
+
+    /** A call is on (placed, or answered): hold it in the foreground so the screen can go off. */
+    AsyncFunction("startOngoing") { name: String, callId: String ->
+      OngoingCallService.start(context, name, callId)
+    }
+
+    /** The call is over. */
+    AsyncFunction("stopOngoing") {
+      OngoingCallService.stop(context)
     }
 
     /** A call is on (true) or over (false): leaving the app now floats it picture in picture. */
