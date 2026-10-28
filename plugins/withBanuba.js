@@ -5,19 +5,23 @@
 // own virtual background and none of this is built in.
 //
 // Following Banuba's React Native sample (github.com/Banuba/banuba-react-native-agora):
-//   Android: Banuba's Maven repository, banuba_sdk and agora-extension, and
-//            the effects copied into the app's assets at bnb-resources/effects.
+//   Android: Banuba's Maven repository, banuba_sdk and agora-extension, the
+//            effects copied into the app's assets at bnb-resources/effects,
+//            and Android 8.0 (minSdk 26) as the oldest the app installs on,
+//            which banuba_sdk requires.
 //   iOS:     Banuba's podspec repository, BanubaSdk and
 //            BanubaFiltersAgoraExtension, and the effects folder in the bundle.
 const fs = require('fs');
 const path = require('path');
-const { IOSConfig, withAppBuildGradle, withDangerousMod, withProjectBuildGradle, withXcodeProject } = require('expo/config-plugins');
+const { IOSConfig, withAppBuildGradle, withDangerousMod, withGradleProperties, withProjectBuildGradle, withXcodeProject } = require('expo/config-plugins');
 
 const VERSIONS = { sdk: '1.17.6', iosSdk: '1.17.7', extension: '2.6.0' };
 const MAVEN = 'https://nexus.banuba.net/repository/maven-releases';
 const PODSPECS = 'https://github.com/sdk-banuba/banuba-sdk-podspecs.git';
 const EFFECTS = path.join('assets', 'banuba', 'effects');
 const TAG = '// BOA: Banuba';
+// banuba_sdk's own minimum (its manifest): Android 8.0.
+const MIN_SDK = 26;
 
 function copyDir(from, to) {
   fs.mkdirSync(to, { recursive: true });
@@ -54,6 +58,15 @@ const withDependencies = (config) =>
         (m) => `${m}\n    ${TAG}\n    implementation 'com.banuba.sdk:banuba_sdk:${VERSIONS.sdk}'\n    implementation 'com.banuba.sdk.android:agora-extension:${VERSIONS.extension}'`,
       );
     }
+    return cfg;
+  });
+
+// Raises the app's minimum Android to Banuba's, never lowers it.
+const withMinSdk = (config) =>
+  withGradleProperties(config, (cfg) => {
+    const item = cfg.modResults.find((p) => p.type === 'property' && p.key === 'android.minSdkVersion');
+    if (!item) cfg.modResults.push({ type: 'property', key: 'android.minSdkVersion', value: String(MIN_SDK) });
+    else if (!(Number(item.value) >= MIN_SDK)) item.value = String(MIN_SDK);
     return cfg;
   });
 
@@ -103,5 +116,5 @@ const withIosEffectsInBundle = (config) =>
   });
 
 module.exports = function withBanuba(config) {
-  return [withMaven, withDependencies, withAndroidEffects, withPods, withIosEffectsInBundle].reduce((c, fn) => fn(c), config);
+  return [withMaven, withDependencies, withMinSdk, withAndroidEffects, withPods, withIosEffectsInBundle].reduce((c, fn) => fn(c), config);
 };
