@@ -126,18 +126,100 @@ describe('the camera, with Agora drawing the background', () => {
 });
 
 describe('the camera, with Banuba drawing the background', () => {
+  // A phone's documents folder, for Banuba's crash breaker: file contents by name.
+  const disk = new Map();
   const load = () => {
     let out;
     jest.isolateModules(() => {
-      jest.doMock('expo-constants', () => ({ __esModule: true, default: { expoConfig: { extra: { banubaToken: 'bnb-client-token' } } } }));
+      jest.doMock('expo-constants', () => ({ __esModule: true, default: { expoConfig: { version: '1.4.0', extra: { banubaToken: 'bnb-client-token' } } } }));
+      jest.doMock('expo-application', () => ({ nativeBuildVersion: '42' }));
       out = { media: require('../src/calls/media.native'), engine: require('react-native-agora').__engine };
     });
     return out;
   };
+  // The shared expo-file-system mock (jest.setup.js) gets this documents folder for these tests:
+  // Jest hands isolated modules the same mock instance, so it's swapped in place.
+  class DiskFile {
+    constructor(dir, name) {
+      this.name = name;
+    }
+    get exists() {
+      return disk.has(this.name);
+    }
+    create() {
+      disk.set(this.name, '');
+    }
+    write(text) {
+      disk.set(this.name, String(text));
+    }
+    textSync() {
+      return disk.get(this.name);
+    }
+    delete() {
+      disk.delete(this.name);
+    }
+  }
+  const fsMock = jest.requireMock('expo-file-system');
+  const real = { File: fsMock.File, Paths: fsMock.Paths };
+  beforeEach(() => {
+    disk.clear();
+    fsMock.File = DiskFile;
+    fsMock.Paths = { ...real.Paths, document: { uri: 'file:///docs' } };
+  });
+  afterEach(() => Object.assign(fsMock, real));
+
+  test('opening a chat warms the engine up without loading Banuba when no background is chosen', async () => {
+    const { media, engine } = load();
+    jest.clearAllMocks();
+    await media.warmUp('call-warm');
+    expect(engine.initialize).toHaveBeenCalled();
+    expect(engine.enableExtension).not.toHaveBeenCalledWith('Banuba', 'BanubaFilter', true);
+    expect(media.backgroundEngine()).toBe('agora');
+    // Choosing a background between calls lets that engine go, so the next one can start with Banuba.
+    media.setBackground({ mode: 'blur', id: 'f2.8' });
+    expect(engine.release).toHaveBeenCalled();
+    await media.warmUp('call-warm-2');
+    expect(engine.enableExtension).toHaveBeenCalledWith('Banuba', 'BanubaFilter', true);
+    media.reset();
+  });
+
+  test('if Banuba takes the app down, it stays off on that build and Agora draws backgrounds', async () => {
+    // The last start never finished: its trial marker is still on the phone.
+    disk.set('banuba-trial', '1.4.0+42');
+    const { media, engine } = load();
+    jest.clearAllMocks();
+    media.setBackground({ mode: 'studio', id: 'charcoal' });
+    await act(async () => {
+      await media.prepare('call-after-crash', { preset: 'natural', enabled: true });
+    });
+    expect(engine.enableExtension).not.toHaveBeenCalledWith('Banuba', 'BanubaFilter', true);
+    expect(disk.get('banuba-benched')).toBe('1.4.0+42');
+    expect(media.backgroundEngine()).toBe('agora');
+    expect(engine.enableVirtualBackground).toHaveBeenCalledWith(true, expect.objectContaining({ color: 0x1a1a1a }), { modelType: 1 }, 2);
+    media.reset();
+
+    // A new build of the app tries Banuba again.
+    disk.set('banuba-benched', '1.4.0+41');
+    expect(load().media.banubaBenched()).toBe(false);
+  });
+
+  test('a Banuba start that runs 10 seconds, or a call that ends cleanly, clears its trial', async () => {
+    const { media } = load();
+    media.setBackground({ mode: 'blur', id: 'f4' });
+    await act(async () => {
+      await media.prepare('call-trial', { preset: 'natural', enabled: true });
+    });
+    expect(media.backgroundEngine()).toBe('banuba');
+    expect(disk.has('banuba-trial')).toBe(true);
+    jest.advanceTimersByTime(10000);
+    expect(disk.has('banuba-trial')).toBe(false);
+    media.reset();
+  });
 
   test('switched on straight after initialize, licensed, then its effect and scripts draw the choice', async () => {
     const { media, engine } = load();
     jest.clearAllMocks();
+    media.setBackground({ mode: 'blur', id: 'f1.4' });
     await act(async () => {
       await media.prepare('call-bnb', { preset: 'natural', enabled: true });
     });
@@ -171,6 +253,7 @@ describe('the camera, with Banuba drawing the background', () => {
     const { media, engine } = load();
     jest.clearAllMocks();
     engine.setExtensionProperty.mockReturnValueOnce(-3);
+    media.setBackground({ mode: 'studio', id: 'black' });
     await act(async () => {
       await media.prepare('call-bnb-2', { preset: 'natural', enabled: true });
     });

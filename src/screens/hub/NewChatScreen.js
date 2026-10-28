@@ -717,7 +717,15 @@ function Thread({ navigation, route }) {
     ]);
   const measureComposer = (e) => setComposerH(e.nativeEvent.layout.height);
 
-  const backdrop = <ChatBackdrop vibe={vibe} motion={motion === MOTION} paused={!focused} />;
+  // If the animated backdrop ever fails to draw, the vibe's own base tone stands in: the conversation stays.
+  const backdrop = (
+    <ErrorBoundary
+      name="chat-backdrop"
+      fallback={() => <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: vibe.mesh?.[0] ?? colors.bg }]} testID="chat-backdrop-fallback" />}
+    >
+      <ChatBackdrop vibe={vibe} motion={motion === MOTION} paused={!focused} />
+    </ErrorBoundary>
+  );
   const header = (
     <Header
       name={name}

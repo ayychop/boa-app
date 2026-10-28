@@ -2,6 +2,8 @@ import { Alert, Linking, PermissionsAndroid, Platform } from 'react-native';
 import { createAgoraRtcEngine, MediaSourceType, RtcSurfaceView, RtcTextureView } from 'react-native-agora';
 import { Asset } from 'expo-asset';
 import Constants from 'expo-constants';
+import * as Application from 'expo-application';
+import { File, Paths } from 'expo-file-system';
 import { fetchToken } from './token';
 import { toAgora } from './beauty';
 import { DEFAULT_BACKGROUND, assetOf, toAgora as backgroundForAgora, toBanuba } from './backgrounds';
@@ -151,12 +153,79 @@ function setup(appId) {
   return engine;
 }
 
+// Banuba's native code runs inside Agora's, where a crash can't be caught:
+// it would close the app. So each start is a trial. A marker file is
+// written (synchronously, so it's there even if the app dies a moment
+// later) before Banuba loads, and removed once it has run for
+// BANUBA_PROVEN_MS or the call ends cleanly. A marker found still there
+// means the last start took the app down: Banuba stays off on this phone
+// until the next build of the app, and Agora draws backgrounds instead.
+const BANUBA_PROVEN_MS = 10000;
+const buildId = () => `${Constants.expoConfig?.version ?? ''}+${Application.nativeBuildVersion ?? ''}`;
+let banubaTrial = null;
+
+function trialFile(name) {
+  try {
+    return new File(Paths.document, name);
+  } catch {
+    return null;
+  }
+}
+
+function readMarker(file) {
+  try {
+    return file?.exists ? (file.textSync?.() ?? '') : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Whether Banuba took the app down before on this build (so it stays off). */
+export function banubaBenched() {
+  const benched = trialFile('banuba-benched');
+  if (readMarker(benched) === buildId()) return true;
+  // A trial that never finished: the app died with Banuba starting or running.
+  const trial = trialFile('banuba-trial');
+  if (readMarker(trial) != null) {
+    console.warn('[call] Banuba took the app down last time; using Agora backgrounds on this build');
+    try {
+      if (!benched.exists) benched.create();
+      benched.write(buildId());
+      trial.delete();
+    } catch {}
+    return true;
+  }
+  return false;
+}
+
+function beginBanubaTrial() {
+  const trial = trialFile('banuba-trial');
+  try {
+    if (!trial.exists) trial.create();
+    trial.write(buildId());
+  } catch {}
+  clearTimeout(banubaTrial);
+  banubaTrial = setTimeout(endBanubaTrial, BANUBA_PROVEN_MS);
+}
+
+function endBanubaTrial() {
+  clearTimeout(banubaTrial);
+  banubaTrial = null;
+  try {
+    trialFile('banuba-trial')?.delete();
+  } catch {}
+}
+
 /**
  * Loads Banuba's extension and hands it the licence. Only in builds with a
- * client token; any refusal leaves Agora's virtual background to do the job.
+ * client token, and only for a call with a background chosen (opening a
+ * chat warms the engine up, and shouldn't load Banuba for nothing). Any
+ * refusal, or an earlier crash (banubaBenched), leaves Agora's virtual
+ * background to do the job.
  */
 function startBanuba() {
-  if (!banubaToken) return false;
+  if (!banubaToken || background.mode === 'off' || banubaBenched()) return false;
+  beginBanubaTrial();
   try {
     if (Platform.OS === 'android') {
       engine.loadExtensionProvider?.('banuba');
@@ -167,6 +236,7 @@ function startBanuba() {
     if (on !== 0 || licensed !== 0) {
       console.warn('[call] Banuba not started, using Agora backgrounds', { on, licensed });
       if (on === 0) engine.enableExtension(BANUBA.provider, BANUBA.extension, false);
+      endBanubaTrial();
       return false;
     }
     // The front camera to start with (prepare): Banuba mirrors to match.
@@ -175,6 +245,7 @@ function startBanuba() {
     return true;
   } catch (err) {
     console.warn('[call] Banuba failed to load', err?.message ?? err);
+    endBanubaTrial();
     return false;
   }
 }
@@ -251,6 +322,14 @@ async function applyBackground() {
 /** Chooses what's behind you (src/calls/backgrounds.js); see applyBackground for the result. */
 export function setBackground(next) {
   background = next ?? DEFAULT_BACKGROUND;
+  // Banuba can only start with a new engine. Between calls, an engine warmed
+  // up without it (no background then) is let go, so the next call starts
+  // one with Banuba from the beginning.
+  if (engine && !session && !banuba && banubaToken && background.mode !== 'off' && !banubaBenched()) {
+    engine.release();
+    engine = null;
+    engineAppId = null;
+  }
   return applyBackground();
 }
 
@@ -576,6 +655,8 @@ export function leave() {
   session = null;
   if (!s) return;
   clearTimeout(s.timer);
+  // A call that ends cleanly proves Banuba didn't take the app down.
+  if (banuba) endBanubaTrial();
   if (!engine) return;
   if (s.handler) engine.unregisterEventHandler(s.handler);
   engine.stopPreview();
