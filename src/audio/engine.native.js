@@ -35,6 +35,24 @@ let gen = 0; // see engine.js: guards against stale failures
 const listeners = new Set();
 let remote = null; // { next, previous } from the player context
 
+// BOA Hi-Fi's effects (modules/boa-eq) attach to the player by its Android
+// audio session id. That id is 0 (unset) until ExoPlayer starts its audio
+// renderer at the first real playback, so reading it when the player is
+// created, as we used to, attached the equaliser to nothing and the sliders
+// did nothing however far they were pushed. Attach whenever a real, non-zero
+// id appears (and re-attach if a reconnect mints a new one).
+let eqSession = 0;
+function attachEq() {
+  if (!player) return;
+  try {
+    const id = player.audioSessionId;
+    if (id > 0 && id !== eqSession) {
+      eqSession = id;
+      eq.setSession(id);
+    }
+  } catch {}
+}
+
 // Some streams never send data and never error either; don't spin forever.
 const CONNECT_TIMEOUT_MS = 9000;
 // Playing, then buffering this long without recovering: reconnect.
@@ -78,6 +96,9 @@ function onStatus(s) {
     return emit({ status: 'ended', position: state.duration });
   }
   if (s.playing && !s.isBuffering) {
+    // Playback is live now: the player has a real audio session id, so the
+    // Hi-Fi effects can finally attach to it.
+    attachEq();
     clearTimeout(stallTimer);
     if (state.status !== 'playing') {
       clearTimeout(connectTimer);
@@ -120,9 +141,9 @@ function getPlayer() {
         player.addListener('remoteNextTrack', () => remote?.next?.());
         player.addListener('remotePreviousTrack', () => remote?.previous?.());
         // BOA Hi-Fi's bass, treble and spatial attach to this player's sound.
-        try {
-          eq.setSession(player.audioSessionId);
-        } catch {}
+        // The session id is still 0 here (no playback yet); attachEq picks it
+        // up the moment playback starts (onStatus).
+        attachEq();
         // Back in the app while waiting to reconnect: try straight away.
         AppState.addEventListener('change', (next) => {
           if (next !== 'active') return;

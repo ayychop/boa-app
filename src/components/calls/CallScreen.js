@@ -27,6 +27,7 @@ import { BLURS, SCENES, STUDIO, choiceOf, describe as describeBackground } from 
 import BoaSlider from '../BoaSlider';
 import { LocalVideo, RemoteVideo } from '../../calls/media';
 import { haptics } from '../../utils/haptics';
+import { goToTab } from '../../navigation/ref';
 import { TACTICAL, settle, usePress } from '../../utils/motion';
 import { Avatar, Toggle } from '../kit';
 import { GoldBadge } from '../ui';
@@ -639,7 +640,7 @@ const MINI_BOTTOM_ROOM = 150;
  * back to the full call. End is right on it. The call itself carries on
  * untouched: your camera and microphone keep going.
  */
-function MiniCall({ call, video, controls, status, onRestore, onEnd }) {
+function MiniCall({ call, video, controls, status, onRestore, onEnd, locked }) {
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const theirs = call.phase === 'active' && video?.remoteUid != null && video.remoteVideo;
@@ -671,8 +672,12 @@ function MiniCall({ call, video, controls, status, onRestore, onEnd }) {
   });
   const style = useAnimatedStyle(() => ({ transform: [{ translateX: x.value }, { translateY: y.value }] }));
   return (
-    // Its own gesture root, passing every touch it doesn't use through to the app underneath.
-    <GestureHandlerRootView pointerEvents="box-none" style={[StyleSheet.absoluteFill, { zIndex: 1000, elevation: 1000 }]} testID="call-mini-layer">
+    // A plain layer (the app already has a gesture root at its root, App.js):
+    // box-none lets every touch it doesn't use fall through to the app
+    // underneath, so only the floating window itself is interactive. Locked
+    // (the Hub setting), it captures those touches instead, so a tap outside
+    // the window can't reach the app by accident.
+    <View pointerEvents={locked ? 'auto' : 'box-none'} style={[StyleSheet.absoluteFill, { zIndex: 1000, elevation: 1000 }]} testID="call-mini-layer">
       <GestureDetector gesture={pan}>
         <Animated.View entering={settle(ZoomIn)} style={[styles.mini, style]} testID="call-mini">
           <Pressable onPress={onRestore} accessibilityRole="button" accessibilityLabel={`Back to your call with ${call.peer.name}`} style={styles.miniInner}>
@@ -701,7 +706,7 @@ function MiniCall({ call, video, controls, status, onRestore, onEnd }) {
           ) : null}
         </Animated.View>
       </GestureDetector>
-    </GestureHandlerRootView>
+    </View>
   );
 }
 
@@ -790,6 +795,7 @@ export default function CallScreen({ me }) {
     facing,
     selfHidden,
     setSelfHidden,
+    lockDuringPip,
     minimized,
     minimize,
     restore,
@@ -857,6 +863,14 @@ export default function CallScreen({ me }) {
     setPanel(null);
     minimize();
   };
+  // Shrink to the floating window and drop the user on the Home feed, so they
+  // can browse or check messages with the call still going.
+  const goHome = () => {
+    haptics.tap();
+    setPanel(null);
+    minimize();
+    goToTab('Home');
+  };
   if (inPip && !incoming) return <PipCall call={call} video={video} status={status} />;
   if (minimized && !incoming) {
     return (
@@ -865,6 +879,7 @@ export default function CallScreen({ me }) {
         video={video}
         controls={controls}
         status={status}
+        locked={lockDuringPip}
         onRestore={() => {
           haptics.tap();
           restore();
@@ -878,10 +893,10 @@ export default function CallScreen({ me }) {
   const pipW = Math.round(Math.min(wide ? 176 : 150, width * 0.34));
   const pip = { width: pipW, height: Math.round(pipW * 1.42) };
   const panelWidth = Math.min(width - space.lg * 2, 480);
-  // The dock: one row of eight unfolded; on the cover screen a 4 x 2 grid,
-  // so every button can be big. Never smaller than 56, never past 72.
-  const dockWidth = Math.min(width - space.lg * 2, wide ? 760 : 440);
-  const cols = wide ? 8 : 4;
+  // The dock: one row of nine unfolded; on a phone a 5 + 4 grid, so every
+  // button can be big. Never smaller than 56, never past 72.
+  const dockWidth = Math.min(width - space.lg * 2, wide ? 820 : 460);
+  const cols = wide ? 9 : 5;
   const button = Math.floor(Math.max(56, Math.min(72, (dockWidth - DOCK_PAD * 2 - DOCK_GAP * (cols - 1)) / cols)));
   // They've turned screenshots off: say so at the top, and move everything else down to make room.
   const theyrePrivate = phase === 'active' && !!video?.remotePrivacy;
@@ -1100,6 +1115,7 @@ export default function CallScreen({ me }) {
                           onPress={() => toggle('speaker')}
                           testID="call-speaker"
                         />
+                        <CallButton size={button} caption="Home" icon="home" label="Minimise to Home" onPress={goHome} testID="call-home" />
                         <CallButton size={button} caption="End" icon="call" label="End" tone={RED} glow="0px 0px 22px rgba(255,59,78,0.55)" onPress={hangUp} testID="call-end" />
                       </View>
                     </Animated.View>

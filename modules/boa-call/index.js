@@ -99,6 +99,20 @@ export function addPipListener(fn) {
   return () => sub.remove();
 }
 
+/** Keeps the floating window's Mute button in step with the real mute state. */
+export async function setPipMuted(muted) {
+  try {
+    await native?.setPipMuted?.(!!muted);
+  } catch {}
+}
+
+/** Calls fn('mute' | 'end') when a button on the floating call window is tapped; returns an unsubscribe function. */
+export function addPipActionListener(fn) {
+  if (!native) return () => {};
+  const sub = native.addListener('onPipAction', (e) => e?.action && fn(e.action));
+  return () => sub.remove();
+}
+
 /** Stops showing over the lock screen (a call opened the app there, and it's over). */
 export async function leaveLockScreen() {
   try {

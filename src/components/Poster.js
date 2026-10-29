@@ -19,7 +19,7 @@ export default function Poster({ production, width, ratio = 16 / 9, showTitle = 
   // Tall cards use the portrait poster, landscape ones the backdrop. Both
   // crop cleanly with `cover` (the baked-in title spans the width and sits
   // mid-frame), so it isn't captioned with the title a second time.
-  const art = toSource(portrait ? production.poster ?? production.backdrop ?? production.image : production.backdrop ?? production.image ?? production.poster);
+  const art = toSource(portrait ? (production.poster ?? production.backdrop ?? production.image) : (production.backdrop ?? production.image ?? production.poster));
   const titled = !!art && !!production.titleInArt;
 
   const caption = showTitle && !(titled && !portrait);
@@ -42,32 +42,21 @@ export default function Poster({ production, width, ratio = 16 / 9, showTitle = 
         )
       ) : (
         <>
-          <LinearGradient
-            colors={['rgba(226,168,75,0.30)', 'rgba(226,168,75,0.04)', 'transparent']}
-            start={{ x: 0.85, y: 0 }}
-            end={{ x: 0.1, y: 1 }}
-            style={StyleSheet.absoluteFill}
-          />
+          <LinearGradient colors={['rgba(226,168,75,0.30)', 'rgba(226,168,75,0.04)', 'transparent']} start={{ x: 0.85, y: 0 }} end={{ x: 0.1, y: 1 }} style={StyleSheet.absoluteFill} />
           <Fog opacity={0.3} />
         </>
       )}
-      {caption && (
-        <LinearGradient
-          colors={['transparent', 'rgba(5,5,6,0.55)', 'rgba(5,5,6,0.95)']}
-          locations={[0.3, 0.65, 1]}
-          style={StyleSheet.absoluteFill}
-        />
-      )}
+      {caption && <LinearGradient colors={['transparent', 'rgba(5,5,6,0.55)', 'rgba(5,5,6,0.95)']} locations={[0.3, 0.65, 1]} style={StyleSheet.absoluteFill} />}
 
       {/* Brand line and caption share one column, so however small the
           card, they stack instead of overlapping. */}
       {(brandLine || caption) && (
-        <View style={styles.content} pointerEvents="none">
+        <View style={[styles.content, soon && styles.contentSoon]} pointerEvents="none">
           {brandLine ? (
             <Slate color={colors.gold} lines={2}>
               Best of all networks
             </Slate>
-          ) : (
+          ) : soon ? null : (
             <View />
           )}
           {caption && (
@@ -103,6 +92,9 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   content: { ...StyleSheet.absoluteFill, padding: 14, justifyContent: 'space-between' },
+  // A Coming Soon card has no artwork and no caption at the foot, so its text
+  // centres rather than sitting pushed to the bottom edge: eye level.
+  contentSoon: { justifyContent: 'center' },
   title: { fontFamily: fonts.semibold, color: colors.text, letterSpacing: -0.6 },
   meta: { fontFamily: fonts.medium, fontSize: 11.5, color: colors.textMuted, marginTop: 3 },
 });

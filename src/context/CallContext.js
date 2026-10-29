@@ -29,6 +29,9 @@ const BEAUTY_KEY = 'boa.call.beauty';
 const BACKGROUND_KEY = 'boa.call.background';
 // Whether you've hidden your own picture (it's still sent; you just don't see it).
 const SELF_VIEW_KEY = 'boa.call.selfHidden';
+// Off by default: while the call floats in its window, taps elsewhere pass
+// through to the app. On, the background is locked against accidental taps.
+const LOCK_PIP_KEY = 'boa.call.lockPip';
 // How long a call got ready ahead of time stays usable (its token lasts an hour).
 const PRIMED_MS = 40 * 60 * 1000;
 // Leaving the app mid-call on Android passes through the background on its
@@ -114,6 +117,7 @@ export function CallProvider({ children }) {
   const [starting, setStarting] = useState(false);
 
   const [selfHidden, setSelfHiddenState] = useState(false);
+  const [lockDuringPip, setLockDuringPipState] = useState(false);
   // The call shrunk to a floating window, so the rest of the app is usable while it goes on.
   const [minimized, setMinimized] = useState(false);
   const minimize = useCallback(() => setMinimized(true), []);
@@ -136,6 +140,9 @@ export function CallProvider({ children }) {
       .catch(() => {});
     AsyncStorage.getItem(SELF_VIEW_KEY)
       .then((v) => v === '1' && setSelfHiddenState(true))
+      .catch(() => {});
+    AsyncStorage.getItem(LOCK_PIP_KEY)
+      .then((v) => v === '1' && setLockDuringPipState(true))
       .catch(() => {});
   }, []);
 
@@ -245,6 +252,11 @@ export function CallProvider({ children }) {
   const setSelfHidden = useCallback((hidden) => {
     setSelfHiddenState(hidden);
     AsyncStorage.setItem(SELF_VIEW_KEY, hidden ? '1' : '0').catch(() => {});
+  }, []);
+
+  const setLockDuringPip = useCallback((on) => {
+    setLockDuringPipState(!!on);
+    AsyncStorage.setItem(LOCK_PIP_KEY, on ? '1' : '0').catch(() => {});
   }, []);
 
   const clearTimers = () => {
@@ -682,6 +694,14 @@ export function CallProvider({ children }) {
 
   const flipCamera = useCallback(() => media.switchCamera(), []);
 
+  // The floating picture-in-picture window's own buttons: Mute toggles the
+  // mic, End hangs up. Nothing else reaches the call while it's in the window.
+  useEffect(() => BoaCall.addPipActionListener((action) => (action === 'mute' ? toggle('muted') : action === 'end' ? hangUp() : undefined)), [toggle, hangUp]);
+  // Keep that window's Mute button showing the call's real mute state.
+  useEffect(() => {
+    BoaCall.setPipMuted(controls.muted);
+  }, [controls.muted]);
+
   const value = useMemo(
     () => ({
       call,
@@ -698,6 +718,8 @@ export function CallProvider({ children }) {
       facing,
       selfHidden,
       setSelfHidden,
+      lockDuringPip,
+      setLockDuringPip,
       minimized,
       minimize,
       restore,
@@ -726,6 +748,8 @@ export function CallProvider({ children }) {
       facing,
       selfHidden,
       setSelfHidden,
+      lockDuringPip,
+      setLockDuringPip,
       minimized,
       minimize,
       restore,

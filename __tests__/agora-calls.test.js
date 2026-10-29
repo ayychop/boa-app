@@ -2,6 +2,8 @@ import fs from 'fs';
 import path from 'path';
 import { act, render, screen, userEvent } from '@testing-library/react-native';
 import { Text } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 jest.useFakeTimers();
 
@@ -59,11 +61,15 @@ function Dial() {
 }
 const mount = () =>
   render(
-    <PremiumProvider>
-      <CallProvider>
-        <Dial />
-      </CallProvider>
-    </PremiumProvider>,
+    // The app has a gesture root at its root (App.js); mirror it so the
+    // floating call window's drag gesture resolves in tests too.
+    <GestureHandlerRootView>
+      <PremiumProvider>
+        <CallProvider>
+          <Dial />
+        </CallProvider>
+      </PremiumProvider>
+    </GestureHandlerRootView>,
   );
 const handler = () => engine.registerEventHandler.mock.calls.at(-1)[0];
 
@@ -350,6 +356,72 @@ describe('Agora video calls', () => {
     await user.press(screen.getByTestId('call-end'));
     expect(BoaCall.setPipReady).toHaveBeenLastCalledWith(false);
     await act(async () => jest.advanceTimersByTime(2000));
+  });
+
+  test('the floating call window has native Mute and End buttons wired to the call', async () => {
+    const BoaCall = require('../modules/boa-call');
+    BoaCall.setPipMuted.mockClear();
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    await mount();
+    await user.press(screen.getByText('Call Kofi'));
+    const { callId } = signal.send.mock.calls.at(-1)[2];
+    await act(async () => mockSignal('accept', { callId }));
+    await act(async () => handler().onJoinChannelSuccess({}, 10));
+    engine.muteLocalAudioStream.mockClear();
+    // Mute on the window mutes the call, and the window's own button follows the state.
+    await act(async () => BoaCall.__pipAction('mute'));
+    expect(engine.muteLocalAudioStream).toHaveBeenLastCalledWith(true);
+    expect(BoaCall.setPipMuted).toHaveBeenLastCalledWith(true);
+    await act(async () => BoaCall.__pipAction('mute'));
+    expect(engine.muteLocalAudioStream).toHaveBeenLastCalledWith(false);
+    expect(BoaCall.setPipMuted).toHaveBeenLastCalledWith(false);
+    // End on the window ends the call.
+    signal.send.mockClear();
+    await act(async () => BoaCall.__pipAction('end'));
+    expect(signal.send).toHaveBeenCalledWith(expect.anything(), 'end', expect.objectContaining({ callId }));
+    await act(async () => jest.advanceTimersByTime(2000));
+  });
+
+  test('the Home button shrinks the call to its floating window, which lets taps fall through to the app', async () => {
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    await mount();
+    await user.press(screen.getByText('Call Kofi'));
+    const { callId } = signal.send.mock.calls.at(-1)[2];
+    await act(async () => mockSignal('accept', { callId }));
+    await act(async () => handler().onJoinChannelSuccess({}, 10));
+    await act(async () => {
+      handler().onUserJoined({}, 777, 0);
+      handler().onRemoteVideoStateChanged({}, 777, 2, 0, 0);
+    });
+    // Home shrinks the call to the floating window (and drops you on the feed).
+    await user.press(screen.getByTestId('call-home'));
+    expect(screen.queryByTestId('call-screen')).toBeNull();
+    expect(screen.getByTestId('call-mini')).toBeOnTheScreen();
+    // Off by default: the layer lets touches through to the app underneath.
+    expect(screen.getByTestId('call-mini-layer').props.pointerEvents).toBe('box-none');
+    await user.press(screen.getByTestId('call-mini-end'));
+    await act(async () => jest.advanceTimersByTime(2000));
+  });
+
+  test('Lock screen during PiP, when on, makes the floating window block taps to the app behind it', async () => {
+    await AsyncStorage.setItem('boa.call.lockPip', '1');
+    try {
+      const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+      await mount();
+      // Let the stored setting load before the call starts.
+      await act(async () => {});
+      await user.press(screen.getByText('Call Kofi'));
+      const { callId } = signal.send.mock.calls.at(-1)[2];
+      await act(async () => mockSignal('accept', { callId }));
+      await act(async () => handler().onJoinChannelSuccess({}, 10));
+      await user.press(screen.getByTestId('call-minimize'));
+      // Locked: the full-screen layer captures taps instead of passing them through.
+      expect(screen.getByTestId('call-mini-layer').props.pointerEvents).toBe('auto');
+      await user.press(screen.getByTestId('call-mini-end'));
+      await act(async () => jest.advanceTimersByTime(2000));
+    } finally {
+      await AsyncStorage.removeItem('boa.call.lockPip');
+    }
   });
 
   test('the app manifest allows picture in picture, and the activity never restarts going in or out', () => {

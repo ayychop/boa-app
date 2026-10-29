@@ -71,12 +71,14 @@ class BoaCallModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("BoaCall")
 
-    Events("onDecline", "onPipChange", "onHangUp", "onScreenChange", "onThermalChange")
+    Events("onDecline", "onPipChange", "onHangUp", "onScreenChange", "onThermalChange", "onPipAction")
 
     OnCreate {
       CallDeclineReceiver.onDecline = { id -> sendEvent("onDecline", mapOf("callId" to id)) }
       CallDeclineReceiver.onHangUp = { sendEvent("onHangUp", emptyMap<String, Any>()) }
       CallPip.onChange = { active -> sendEvent("onPipChange", mapOf("active" to active)) }
+      // Mute / End tapped on the floating call window (CallPipReceiver).
+      CallPipReceiver.onAction = { action -> sendEvent("onPipAction", mapOf("action" to action)) }
       val receiver = object : BroadcastReceiver() {
         override fun onReceive(c: Context, intent: Intent) {
           sendEvent("onScreenChange", mapOf("on" to (intent.action == Intent.ACTION_SCREEN_ON)))
@@ -105,6 +107,7 @@ class BoaCallModule : Module() {
       CallDeclineReceiver.onDecline = null
       CallDeclineReceiver.onHangUp = null
       CallPip.onChange = null
+      CallPipReceiver.onAction = null
       screen?.let { r -> runCatching { appContext.reactContext?.unregisterReceiver(r) } }
       screen = null
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -135,6 +138,11 @@ class BoaCallModule : Module() {
     Function("isPipSupported") {
       CallPip.supported(appContext.currentActivity)
     }
+
+    /** The call's mute state, so the floating window's Mute button matches it. */
+    AsyncFunction("setPipMuted") { muted: Boolean ->
+      CallPip.setMuted(muted)
+    }.runOnQueue(Queues.MAIN)
 
     /** Rings. False if it couldn't (notifications off), so JS can say so. */
     AsyncFunction("showIncoming") { call: IncomingCall ->

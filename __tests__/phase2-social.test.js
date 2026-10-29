@@ -87,6 +87,7 @@ beforeEach(() => {
   mockRpc.mockClear();
   dayOne.forgetDayOnes();
   vibes.resetChatVibe();
+  vibes.resetProfileVibe();
   mockHub = { userId: 'user-me', profile: ME, isOnline: () => false, blocked: new Set(), block: jest.fn(), unblock: jest.fn() };
 });
 
@@ -227,15 +228,17 @@ describe('the Hub profile', () => {
     expect(navigation.navigate).toHaveBeenCalledWith('HubSplits');
     await user.press(screen.getByTestId('profile-edit'));
     expect(navigation.navigate).toHaveBeenCalledWith('HubSettings');
-    expect(screen.queryByTestId('chat-vibe-sheet')).toBeNull();
-    await user.press(screen.getByTestId('profile-chat-vibe'));
-    expect(screen.getByTestId('chat-vibe-sheet')).toBeOnTheScreen();
+    expect(screen.queryByTestId('profile-vibe-sheet')).toBeNull();
+    await user.press(screen.getByTestId('profile-vibe'));
+    expect(screen.getByTestId('profile-vibe-sheet')).toBeOnTheScreen();
     await user.press(screen.getByTestId('post-tile-p2'));
     expect(navigation.navigate).toHaveBeenCalledWith('HubPost', { post: REEL });
   });
 
-  test('the header is themed to the chosen Chat Vibe, so the Hub matches the thread', async () => {
-    await vibes.setChatVibe('neon');
+  test('the header is themed to the chosen Profile Vibe, independent of the Chat Vibe', async () => {
+    // The Profile Vibe themes the header; the Chat Vibe is a separate choice
+    // that never touches it.
+    await vibes.setProfileVibe('neon');
     mockTables.posts = (calls) => (calls.some((c) => c.key === 'select' && c.args[1]?.head) ? { count: 0, error: null } : { data: [], error: null });
     await show(HubProfileScreen, { id: 'user-kofi' });
     // The vibe-themed backdrop is on screen, and the profile still reads fine.

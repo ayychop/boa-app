@@ -22,6 +22,8 @@
   <uses-permission android:name="android.permission.VIBRATE" />
   <application>
     <receiver android:name="expo.modules.boacall.CallDeclineReceiver" android:exported="false" />
+    <!-- Mute and End on the picture-in-picture call window (CallPip). -->
+    <receiver android:name="expo.modules.boacall.CallPipReceiver" android:exported="false" />
     <service
       android:name="expo.modules.boacall.IncomingCallService"
       android:exported="false"

@@ -18,12 +18,13 @@ import useProfileUpdates from '../../hooks/useProfileUpdates';
 import BlockSheet from '../../components/hub/BlockSheet';
 import ReportSheet from '../../components/hub/ReportSheet';
 import BoaCodeSheet from '../../components/hub/BoaCode';
-import ChatVibeSheet from '../../components/chat/ChatVibeSheet';
+import ProfileVibeSheet from '../../components/chat/ProfileVibeSheet';
 import { GridEmpty, PostGrid, ProfileTabs } from '../../components/profile/PostGrid';
 import Favourites from '../../components/profile/Favourites';
 import { GoldBadge, LogoWatermark, Tappable } from '../../components/ui';
-import useChatVibe, { allowedVibe } from '../../chat/vibes';
+import { allowedVibe, useProfileVibe } from '../../chat/vibes';
 import { usePremiumUnlocked } from '../../context/PremiumContext';
+import { useHeadlineFont } from '../../context/FontContext';
 import { colors, fonts, radius, space, type } from '../../theme';
 import { GridSkeleton, ProfileSkeleton } from '../../components/Skeleton';
 
@@ -94,11 +95,13 @@ function VibeHeader({ vibe, width, height, star }) {
         </>
       )}
       {/* Small, centred and barely there: a mark you notice, not one that shouts.
-          Spanning both edges and centring keeps it dead centre at any width. */}
+          Spanning both edges and centring keeps it dead centre at any width.
+          Always BOA gold, never the vibe's colour: the wordmark is the brand
+          and no theme or vibe ever recolours it. */}
       <LogoWatermark
         height={Math.round(Math.min(width, 520) * 0.16)}
-        opacity={vibe.light ? 0.08 : 0.06}
-        color={vibe.accent}
+        opacity={vibe.light ? 0.1 : 0.07}
+        color={colors.gold}
         style={{ top: Math.round(height * 0.1), left: 0, right: 0, alignItems: 'center' }}
       />
       <LinearGradient colors={['rgba(5,5,6,0)', 'rgba(5,5,6,0.5)', colors.bg]} locations={[0, 0.62, 0.96]} style={StyleSheet.absoluteFill} />
@@ -162,6 +165,7 @@ export default function HubProfileScreen({ navigation, route }) {
   const insets = useSafeAreaInsets();
   const window = useWindowDimensions();
   const width = Math.min(window.width, MAX_WIDTH);
+  const headlineFont = useHeadlineFont();
   const { userId, profile: me, isOnline, blocked, unblock } = useHub();
   const id = route.params?.id ?? userId;
   const mine = id === userId;
@@ -180,10 +184,11 @@ export default function HubProfileScreen({ navigation, route }) {
   const [codeOpen, setCodeOpen] = useState(false);
   const [vibeOpen, setVibeOpen] = useState(false);
 
-  // The chosen Chat Vibe, device-wide, so the Hub matches the thread (a
+  // The Profile Vibe: this profile's own look, separate from the Chat Vibe,
+  // so theming the profile never touches how chats look and vice versa (a
   // Premium vibe shows only while Premium is on, else Noir). The header mesh
-  // and the accents below all follow it.
-  const { vibe: savedVibe } = useChatVibe();
+  // and the accents below all follow it; the BOA wordmark never does.
+  const { vibe: savedVibe } = useProfileVibe();
   const vibe = allowedVibe(savedVibe, usePremiumUnlocked());
   const accent = chromeAccent(vibe);
   // The default Noir keeps the app's white header icons; a vibe tints them.
@@ -318,6 +323,7 @@ export default function HubProfileScreen({ navigation, route }) {
         right={
           mine ? (
             <View style={styles.headerActions}>
+              <IconButton icon="chatbubbles-outline" label="Messages" onPress={() => navigation.navigate('HubChats')} tone={iconTone} testID="profile-inbox" />
               <IconButton icon="qr-code-outline" label="Your BOA Code" onPress={() => setCodeOpen(true)} tone={iconTone} testID="profile-boa-code" />
               <IconButton icon="add" label="New post" onPress={newPost} tone={iconTone} testID="profile-new-post" />
               <IconButton icon="settings-outline" label="Hub settings" onPress={() => navigation.navigate('HubSettings')} tone={iconTone} />
@@ -348,7 +354,7 @@ export default function HubProfileScreen({ navigation, route }) {
             </View>
 
             <View style={styles.nameRow}>
-              <Text style={styles.name} numberOfLines={2}>
+              <Text style={[styles.name, { fontFamily: headlineFont }]} numberOfLines={2}>
                 {name}
               </Text>
             </View>
@@ -388,7 +394,7 @@ export default function HubProfileScreen({ navigation, route }) {
                 <>
                   <Action label="Edit profile" icon="create-outline" onPress={() => navigation.navigate('HubSettings')} testID="profile-edit" />
                   <Action label="Splits" icon="pie-chart-outline" onPress={() => navigation.navigate('HubSplits')} testID="profile-splits" />
-                  <Action label="Chat vibe" icon="color-palette-outline" onPress={() => setVibeOpen(true)} testID="profile-chat-vibe" />
+                  <Action label="Profile vibe" icon="color-palette-outline" onPress={() => setVibeOpen(true)} testID="profile-vibe" />
                 </>
               ) : isBlocked ? (
                 <Action label="Unblock" icon="lock-open-outline" onPress={() => unblock(id).catch(() => {})} />
@@ -418,14 +424,19 @@ export default function HubProfileScreen({ navigation, route }) {
           {dayOnes.length ? (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dayOnes} testID="profile-day-ones">
               {dayOnes.map((d) => (
-                <View key={`${d.kind}:${d.item_id}`} style={[styles.dayOne, { maxWidth: Math.min(280, width - space.lg * 2) }]}>
-                  <Ionicons name={d.kind === 'original' ? 'film-outline' : 'radio-outline'} size={13} color={colors.gold} />
-                  <Text style={styles.dayOneTitle} numberOfLines={1}>
-                    {d.item_label || (d.kind === 'original' ? 'BOA Original' : 'Station')}
-                  </Text>
-                  <Text style={styles.dayOneRank} numberOfLines={1}>
-                    {placeLine(d.rank)}
-                  </Text>
+                <View key={`${d.kind}:${d.item_id}`} style={[styles.dayOne, { maxWidth: Math.min(260, width - space.lg * 3) }]}>
+                  <View style={styles.dayOneIcon}>
+                    <Ionicons name={d.kind === 'original' ? 'film' : 'radio'} size={17} color={colors.gold} />
+                  </View>
+                  <View style={styles.dayOneText}>
+                    <Text style={styles.dayOneKicker}>Day One</Text>
+                    <Text style={styles.dayOneTitle} numberOfLines={1}>
+                      {d.item_label || (d.kind === 'original' ? 'BOA Original' : 'Station')}
+                    </Text>
+                    <Text style={styles.dayOneRank} numberOfLines={1}>
+                      {placeLine(d.rank)}
+                    </Text>
+                  </View>
                 </View>
               ))}
             </ScrollView>
@@ -446,7 +457,7 @@ export default function HubProfileScreen({ navigation, route }) {
         </View>
       </ScrollView>
       {mine ? <BoaCodeSheet open={codeOpen} onClose={() => setCodeOpen(false)} profile={person} /> : null}
-      {mine ? <ChatVibeSheet open={vibeOpen} onClose={() => setVibeOpen(false)} /> : null}
+      {mine ? <ProfileVibeSheet open={vibeOpen} onClose={() => setVibeOpen(false)} /> : null}
       <BlockSheet person={blocking} onClose={() => setBlocking(null)} />
       <ReportSheet target={reporting} onClose={(didBlock) => (setReporting(null), didBlock && navigation.goBack())} />
     </View>
@@ -505,20 +516,39 @@ const styles = StyleSheet.create({
   actionPrimary: { backgroundColor: colors.gold, boxShadow: '0px 6px 20px rgba(226,168,75,0.35)' },
   actionGlass: { backgroundColor: 'rgba(18,18,22,0.7)', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.borderStrong },
   actionText: { fontFamily: fonts.semibold, fontSize: 14, flexShrink: 1 },
-  // Slim glass chips, one line each: where you're a Day One and your place.
-  dayOnes: { paddingHorizontal: space.lg, gap: space.sm, paddingTop: space.md },
+  // Accolade cards: where you were a Day One, each one legible on two lines,
+  // a gold mark set off from the name and its place. Premium, not a crammed pill.
+  dayOnes: { paddingHorizontal: space.lg, gap: space.sm + 2, paddingTop: space.md },
   dayOne: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    height: 32,
-    paddingHorizontal: space.md,
-    borderRadius: radius.pill,
+    gap: space.md,
+    paddingLeft: space.sm + 2,
+    paddingRight: space.lg,
+    paddingVertical: space.md,
+    borderRadius: radius.lg,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(246,211,138,0.4)',
-    backgroundColor: 'rgba(18,18,22,0.7)',
+    borderColor: 'rgba(246,211,138,0.5)',
+    // A deeper, less transparent card so the gold text and the rank read
+    // cleanly over any vibe behind it: a premium plaque, not a faint tint.
+    backgroundColor: 'rgba(24,20,12,0.9)',
+    boxShadow: '0px 6px 20px rgba(0,0,0,0.45)',
   },
-  dayOneTitle: { flexShrink: 1, fontFamily: fonts.semibold, fontSize: 12.5, color: colors.text },
-  dayOneRank: { flexShrink: 0, fontFamily: fonts.mono, fontSize: 9.5, letterSpacing: 0.8, color: '#F6D38A' },
+  dayOneIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(226,168,75,0.2)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(246,211,138,0.6)',
+  },
+  dayOneText: { flexShrink: 1 },
+  // Legible accolade text: a brighter gold kicker, a bigger title, and a rank
+  // in warm off-white rather than a muted grey that got lost on the plaque.
+  dayOneKicker: { fontFamily: fonts.monoMedium, fontSize: 9.5, letterSpacing: 1.6, textTransform: 'uppercase', color: '#F6D38A' },
+  dayOneTitle: { fontFamily: fonts.semibold, fontSize: 15.5, lineHeight: 20, letterSpacing: -0.3, color: colors.text, marginTop: 3 },
+  dayOneRank: { fontFamily: fonts.medium, fontSize: 12.5, color: 'rgba(243,239,232,0.82)', marginTop: 2 },
   gridError: { textAlign: 'center', marginTop: space.xxl, paddingHorizontal: space.lg },
 });

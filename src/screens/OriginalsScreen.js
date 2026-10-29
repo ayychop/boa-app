@@ -1,6 +1,7 @@
 import { Image, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
+import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { featuredProduction, productions } from '../data/boaContent';
 import { useMedia } from '../context/MediaContext';
@@ -31,22 +32,21 @@ function Featured({ production, width, clear = 0 }) {
   const stacked = width < WIDE;
   const natural = wide ? Math.round(width / 2.39) + insets.top : Math.round(width * 1.68) + insets.top;
   const room = Math.max(window.height * 0.3, window.height - clear - BODY_HEIGHT);
-  const height = stacked
-    ? Math.round(Math.min((width * 16) / 9, window.height * 0.56, room))
-    : Math.round(Math.min(natural, window.height * 0.5, BACKDROP_TITLE_TOP * width - space.md, room));
+  const height = stacked ? Math.round(Math.min((width * 16) / 9, window.height * 0.56, room)) : Math.round(Math.min(natural, window.height * 0.5, BACKDROP_TITLE_TOP * width - space.md, room));
   const poster = production.poster ?? production.backdrop;
-  const { node: art, titleInFrame } = stacked && poster
-    ? {
-        titleInFrame: !!production.titleInArt,
-        node: (
-          // The whole poster, letterboxed over a blurred copy of itself.
-          <>
-            <Image source={toSource(poster)} resizeMode="cover" blurRadius={24} style={[fillFrame, { opacity: 0.5 }]} />
-            <Image source={toSource(poster)} resizeMode="contain" style={fillFrame} />
-          </>
-        ),
-      }
-    : heroArt(production, width, height);
+  const { node: art, titleInFrame } =
+    stacked && poster
+      ? {
+          titleInFrame: !!production.titleInArt,
+          node: (
+            // The whole poster, letterboxed over a blurred copy of itself.
+            <>
+              <Image source={toSource(poster)} resizeMode="cover" blurRadius={24} style={[fillFrame, { opacity: 0.5 }]} />
+              <Image source={toSource(poster)} resizeMode="contain" style={fillFrame} />
+            </>
+          ),
+        }
+      : heroArt(production, width, height);
 
   return (
     <View style={{ width }}>
@@ -54,15 +54,9 @@ function Featured({ production, width, clear = 0 }) {
         <Animated.View entering={FadeInDown.duration(600)} style={StyleSheet.absoluteFill}>
           {art}
         </Animated.View>
-        <LinearGradient
-          colors={['rgba(5,5,6,0.55)', 'rgba(5,5,6,0)', 'rgba(5,5,6,0)', colors.bg]}
-          locations={[0, 0.25, 0.8, 1]}
-          style={StyleSheet.absoluteFill}
-        />
+        <LinearGradient colors={['rgba(5,5,6,0.55)', 'rgba(5,5,6,0)', 'rgba(5,5,6,0)', colors.bg]} locations={[0, 0.25, 0.8, 1]} style={StyleSheet.absoluteFill} />
         <Viewfinder inset={16} />
-        <View
-          style={[styles.featuredTop, { top: insets.top + space.xl }]}
-        >
+        <View style={[styles.featuredTop, { top: insets.top + space.xl }]}>
           <Slate dot>02 · Productions</Slate>
           <Slate>The slate</Slate>
         </View>
@@ -81,9 +75,7 @@ function Featured({ production, width, clear = 0 }) {
           {production.logline}
         </Text>
         <View style={styles.actions}>
-          {production.episodes[0] && (
-            <Button label="Play Episode 1" icon="play" onPress={() => media.openEpisode(production)} />
-          )}
+          {production.episodes[0] && <Button label="Play Episode 1" icon="play" onPress={() => media.openEpisode(production)} />}
           <Button label="Watch Trailer" icon="film-outline" variant="ghost" onPress={() => media.openTrailer(production)} />
         </View>
       </View>
@@ -95,8 +87,17 @@ function EpisodeCard({ production, episode, width }) {
   const media = useMedia();
   return (
     <Tappable onPress={() => media.openEpisode(production, episode)} accessibilityRole="button" accessibilityLabel={`Play ${episode.title}`}>
-      {/* Edge to edge: the still fills its frame, no blurred letterbox. */}
-      <Poster production={{ ...production, backdrop: episode.image, status: 'available' }} width={width} showTitle={false} fit="cover" />
+      <View>
+        {/* Edge to edge: the still fills its frame, no blurred letterbox. */}
+        <Poster production={{ ...production, backdrop: episode.image, status: 'available' }} width={width} showTitle={false} fit="cover" />
+        {/* The gold BOA play badge, centred over the still, like a premium
+            streaming service. A pointer-through overlay: the whole card plays. */}
+        <View pointerEvents="none" style={styles.playOverlay}>
+          <View style={styles.playBadge}>
+            <Ionicons name="play" size={26} color={colors.bg} style={{ marginLeft: 3 }} />
+          </View>
+        </View>
+      </View>
       <View style={[styles.episodeCaption, { width }]}>
         <Slate>Ep 01</Slate>
         <Text style={styles.episodeTitle} numberOfLines={2}>
@@ -135,12 +136,17 @@ export default function OriginalsScreen() {
         </View>
 
         <View style={[styles.block, { width: contentWidth }]}>
-          <View style={{ overflow: 'hidden' }}>
-            <SectionHeader index="02" kicker="All productions" title="Stories worth the big screen." />
-          </View>
+          {/* No clipping wrapper here: the headline's descenders (the g and p
+              in "big screen") need the room, and a tall typeface needs more. */}
+          <SectionHeader index="02" kicker="All productions" title="Stories worth the big screen." />
           <View style={[styles.grid, { gap: GAP }]}>
             {productions.map((p, i) => (
-              <Animated.View key={p.id} entering={FadeInDown.delay(80 * i).springify().damping(18)}>
+              <Animated.View
+                key={p.id}
+                entering={FadeInDown.delay(80 * i)
+                  .springify()
+                  .damping(18)}
+              >
                 <Tappable
                   onPress={() => (p.episodes[0] ? media.openEpisode(p) : media.openTrailer(p))}
                   accessibilityRole="button"
@@ -183,6 +189,18 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: GAP, paddingHorizontal: space.xl },
   episodeCaption: { paddingTop: 10, gap: 4 },
   episodeTitle: { fontFamily: fonts.semibold, fontSize: 15, color: colors.text },
+  playOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
+  playBadge: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.gold,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,245,224,0.85)',
+    boxShadow: '0px 6px 22px rgba(226,168,75,0.55)',
+  },
   grid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: space.xl },
   casting: {
     marginTop: space.xxxl,

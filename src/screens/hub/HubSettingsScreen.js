@@ -4,13 +4,15 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useHub } from '../../context/HubContext';
+import { useAppFont } from '../../context/FontContext';
+import { useCallMaybe } from '../../context/CallContext';
 import * as hub from '../../api/hub';
 import { Avatar, Chip, Field, PageHeader, SettingRow, Toggle } from '../../components/kit';
 import { Button, Slate } from '../../components/ui';
 import { haptics } from '../../utils/haptics';
 import { QUOTE_CATEGORIES } from '../../data/quotes';
 import { CHAT_SOUNDS } from '../../chat/sounds';
-import useChatVibe from '../../chat/vibes';
+import useChatVibe, { useProfileVibe } from '../../chat/vibes';
 import VibePicker from '../../components/chat/VibePicker';
 import { ringtoneById } from '../../calls/ringtone';
 import { colors, fonts, radius, space } from '../../theme';
@@ -25,6 +27,11 @@ import { LoadingDots } from '../../components/Skeleton';
  */
 export default function HubSettingsScreen({ navigation }) {
   const insets = useSafeAreaInsets();
+  const appFont = useAppFont();
+  // Null outside a call provider (e.g. a standalone render); the row just shows off.
+  const callCtx = useCallMaybe();
+  const lockDuringPip = callCtx?.lockDuringPip ?? false;
+  const setLockDuringPip = callCtx?.setLockDuringPip ?? (() => {});
   const {
     userId,
     profile,
@@ -58,6 +65,10 @@ export default function HubSettingsScreen({ navigation }) {
     setCustomColor(hex);
     if (chatTheme) setChatTheme?.(null)?.catch?.(() => {});
   };
+  // The Profile Vibe: a separate choice that themes only the profile header.
+  const { vibe: profileVibe, setVibe: setProfileVibe, customColor: profileCustom, setCustomColor: setProfileCustom } = useProfileVibe();
+  const pickProfileVibe = (id) => setProfileVibe(id);
+  const pickProfileCustom = (hex) => setProfileCustom(hex);
   const [saving, setSaving] = useState(false);
   const [busy, setBusy] = useState(null);
   const [blockedPeople, setBlockedPeople] = useState([]);
@@ -269,7 +280,30 @@ export default function HubSettingsScreen({ navigation }) {
           </View>
 
           <Slate style={styles.section}>Chat vibe</Slate>
+          <Text style={styles.fontHint}>How your conversations look. Changes only the chat background, nothing else in the app.</Text>
           <VibePicker value={vibe.id} onChange={pickVibe} customColor={customColor} onCustomColor={pickCustom} />
+
+          <Slate style={styles.section}>Profile vibe</Slate>
+          <Text style={styles.fontHint}>The colours of your profile header. A separate choice from your chat vibe, and the BOA wordmark never changes.</Text>
+          <VibePicker value={profileVibe.id} onChange={pickProfileVibe} customColor={profileCustom} onCustomColor={pickProfileCustom} />
+
+          {/* App typeface: a curated headline face, saved as soon as it's picked. Part of the vibe section. */}
+          <Slate style={styles.section}>Typeface</Slate>
+          <View style={styles.chips}>
+            {appFont.options.map((f) => (
+              <Chip
+                key={f.id}
+                label={f.label}
+                selected={appFont.fontId === f.id}
+                onPress={() => {
+                  haptics.selection();
+                  appFont.choose(f.id);
+                }}
+                testID={`hub-font-${f.id}`}
+              />
+            ))}
+          </View>
+          <Text style={styles.fontHint}>Sets the headline face for your profile name and section titles. The BOA wordmark and slate labels stay exactly as they are.</Text>
 
           <Slate style={styles.section}>Make it yours</Slate>
           <View style={styles.group}>
@@ -277,8 +311,16 @@ export default function HubSettingsScreen({ navigation }) {
               <View style={[styles.themeDot, { backgroundColor: chatTheme?.color ?? vibe.accent }]} />
               <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
             </SettingRow>
-            <SettingRow icon="musical-notes-outline" title="Ringtone" detail={`Incoming calls play ${ringtoneById(ringtone).label}`} onPress={() => navigation.navigate('Ringtone')} last>
+            <SettingRow icon="musical-notes-outline" title="Ringtone" detail={`Incoming calls play ${ringtoneById(ringtone).label}`} onPress={() => navigation.navigate('Ringtone')}>
               <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
+            </SettingRow>
+            <SettingRow
+              icon="lock-closed-outline"
+              title="Lock screen during PiP"
+              detail="While a call floats in its small window, you can still tap the app behind it. Turn this on to block those taps so you don't hit anything by accident."
+              last
+            >
+              <Toggle value={!!lockDuringPip} onChange={setLockDuringPip} label="Lock screen during PiP" testID="hub-lock-pip" />
             </SettingRow>
           </View>
 
@@ -354,6 +396,7 @@ const styles = StyleSheet.create({
   photoRow: { flexDirection: 'row', alignItems: 'center', gap: space.lg },
   section: { marginTop: space.xl, marginBottom: space.md },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
+  fontHint: { fontFamily: fonts.regular, fontSize: 12.5, lineHeight: 18, color: colors.textMuted, marginTop: space.md },
   themeDot: { width: 18, height: 18, borderRadius: 9, borderWidth: 1, borderColor: 'rgba(255,255,255,0.4)' },
   group: { borderRadius: radius.lg, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
   credit: { fontFamily: fonts.regular, fontSize: 11, lineHeight: 16, color: colors.textFaint, marginTop: space.sm },

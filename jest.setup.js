@@ -303,6 +303,7 @@ jest.mock('./modules/boa-screen', () => {
 jest.mock('./modules/boa-call', () => {
   const declines = new Set();
   const pips = new Set();
+  const pipActions = new Set();
   const hangUps = new Set();
   const screens = new Set();
   return {
@@ -325,6 +326,11 @@ jest.mock('./modules/boa-call', () => {
       pips.add(fn);
       return () => pips.delete(fn);
     }),
+    setPipMuted: jest.fn(async () => {}),
+    addPipActionListener: jest.fn((fn) => {
+      pipActions.add(fn);
+      return () => pipActions.delete(fn);
+    }),
     startOngoing: jest.fn(async () => true),
     stopOngoing: jest.fn(async () => {}),
     addHangUpListener: jest.fn((fn) => {
@@ -342,6 +348,7 @@ jest.mock('./modules/boa-call', () => {
     }),
     __decline: (callId) => declines.forEach((fn) => fn(callId)),
     __pip: (active) => pips.forEach((fn) => fn(active)),
+    __pipAction: (action) => pipActions.forEach((fn) => fn(action)),
     __hangUp: () => hangUps.forEach((fn) => fn()),
     __screen: (on) => screens.forEach((fn) => fn(on)),
   };
