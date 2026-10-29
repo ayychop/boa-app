@@ -109,12 +109,14 @@ function EpisodeCard({ production, episode, width }) {
 
 export default function OriginalsScreen() {
   const { width } = useLayout();
+  const insets = useSafeAreaInsets();
   const media = useMedia();
   // Extra room under the casting card too, so the last of the page scrolls
   // well clear of the mini player.
   const bottom = useBottomSpace(space.xxxl);
   const contentWidth = Math.min(width, CONTENT_MAX);
-  const columns = contentWidth < 640 ? 2 : contentWidth < 1000 ? 3 : 4;
+  // Four across from an unfolded Fold up, so the slate fills one row instead of leaving a lone poster.
+  const columns = contentWidth < 640 ? 2 : contentWidth < 800 ? 3 : 4;
   const posterWidth = Math.floor((contentWidth - space.xl * 2 - GAP * (columns - 1)) / columns);
   const featured = featuredProduction;
 
@@ -162,11 +164,14 @@ export default function OriginalsScreen() {
           </Text>
         </View>
       </ScrollView>
+      {/* Titles scrolling up fade out under the clock instead of colliding with it. */}
+      <LinearGradient pointerEvents="none" colors={[colors.bg, 'rgba(5,5,6,0)']} style={[styles.scrim, { height: insets.top + space.lg }]} />
     </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
+  scrim: { position: 'absolute', top: 0, left: 0, right: 0 },
   screen: { flex: 1, backgroundColor: colors.bg },
   featuredTop: { position: 'absolute', left: space.xl + 8, right: space.xl + 8, flexDirection: 'row', justifyContent: 'space-between' },
   featuredBody: { paddingHorizontal: space.xl, paddingTop: space.lg },

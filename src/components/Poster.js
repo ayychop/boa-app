@@ -83,7 +83,7 @@ export default function Poster({ production, width, ratio = 16 / 9, showTitle = 
                 </Text>
               )}
               {!!metaLine(production) && (
-                <Text style={styles.meta} numberOfLines={1}>
+                <Text style={styles.meta} numberOfLines={2}>
                   {metaLine(production)}
                 </Text>
               )}
