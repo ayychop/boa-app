@@ -7,29 +7,12 @@ import { BottomTabBar, createBottomTabNavigator } from '@react-navigation/bottom
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import Animated, {
-  Easing,
-  FadeIn,
-  useAnimatedStyle,
-  useReducedMotion,
-  useSharedValue,
-  withSequence,
-  withSpring,
-  withTiming,
-} from 'react-native-reanimated';
+import Animated, { Easing, FadeIn, useAnimatedStyle, useReducedMotion, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { BlurView } from 'expo-blur';
 import * as SplashScreen from 'expo-splash-screen';
 import { Ionicons } from '@expo/vector-icons';
 import { useFonts } from 'expo-font';
-import {
-  Manrope_200ExtraLight,
-  Manrope_300Light,
-  Manrope_400Regular,
-  Manrope_500Medium,
-  Manrope_600SemiBold,
-  Manrope_700Bold,
-  Manrope_800ExtraBold,
-} from '@expo-google-fonts/manrope';
+import { Manrope_200ExtraLight, Manrope_300Light, Manrope_400Regular, Manrope_500Medium, Manrope_600SemiBold, Manrope_700Bold, Manrope_800ExtraBold } from '@expo-google-fonts/manrope';
 import { JetBrainsMono_400Regular, JetBrainsMono_500Medium } from '@expo-google-fonts/jetbrains-mono';
 import { InstrumentSerif_400Regular_Italic } from '@expo-google-fonts/instrument-serif';
 import { PlusJakartaSans_500Medium, PlusJakartaSans_700Bold } from '@expo-google-fonts/plus-jakarta-sans';
@@ -159,14 +142,32 @@ function TabIcon({ name, focused, color, size }) {
   const scale = useSharedValue(1);
   useEffect(() => {
     if (!focused || reduceMotion) return;
-    scale.value = withSequence(
-      withTiming(0.8, { duration: 90, easing: Easing.bezier(0.23, 1, 0.32, 1) }),
-      withSpring(1, { duration: 480, dampingRatio: 0.42 }),
-    );
+    scale.value = withSequence(withTiming(0.8, { duration: 90, easing: Easing.bezier(0.23, 1, 0.32, 1) }), withSpring(1, { duration: 480, dampingRatio: 0.42 }));
   }, [focused, reduceMotion, scale]);
   const style = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+  // BOA Originals is the premium headline: a slow gold gleam swells behind its
+  // icon and rests, so it stands out as the marquee tab. Off under Reduce
+  // Motion, and only ever on this one tab.
+  const premium = name === 'Originals';
+  const gleam = useSharedValue(0);
+  useEffect(() => {
+    if (!premium || reduceMotion) return;
+    gleam.value = withRepeat(
+      withSequence(
+        withTiming(1, { duration: 900, easing: Easing.inOut(Easing.quad) }),
+        withTiming(0, { duration: 900, easing: Easing.inOut(Easing.quad) }),
+        withDelay(2600, withTiming(0, { duration: 0 })),
+      ),
+      -1,
+      false,
+    );
+  }, [premium, reduceMotion, gleam]);
+  const gleamStyle = useAnimatedStyle(() => ({ opacity: gleam.value * 0.7 }));
   return (
     <Animated.View style={style}>
+      {premium ? (
+        <Animated.View pointerEvents="none" style={[styles.tabGleam, { width: size * 1.7, height: size * 1.7, borderRadius: size, left: -size * 0.35, top: -size * 0.35 }, gleamStyle]} />
+      ) : null}
       <Ionicons name={ICONS[name][focused ? 0 : 1]} size={size} color={color} />
     </Animated.View>
   );
@@ -246,7 +247,7 @@ export const tabSizing = (slot, phone = false) => {
 
 // "BOA Originals" can't fit a phone's tab slot at a readable size, so
 // phones say "Originals" (screen readers still hear "BOA Originals").
-export const tabLabel = (name, phone) => (name === 'Originals' && phone ? 'Originals' : TAB_TITLES[name] ?? name);
+export const tabLabel = (name, phone) => (name === 'Originals' && phone ? 'Originals' : (TAB_TITLES[name] ?? name));
 
 function Tabs() {
   const insets = useSafeAreaInsets();
@@ -256,8 +257,7 @@ function Tabs() {
   const sizing = tabSizing(width / TAB_COUNT, phone);
   // The tab bar pads itself by this, so its icons and labels always sit
   // above the system gesture bar or navigation buttons.
-  const bottomInset =
-    Platform.OS === 'android' ? Math.max(insets.bottom, ANDROID_MIN_BOTTOM_INSET) + ANDROID_BOTTOM_COMFORT : insets.bottom;
+  const bottomInset = Platform.OS === 'android' ? Math.max(insets.bottom, ANDROID_MIN_BOTTOM_INSET) + ANDROID_BOTTOM_COMFORT : insets.bottom;
   return (
     <Tab.Navigator
       initialRouteName="Home"
@@ -290,19 +290,11 @@ function Tabs() {
         // Navigation no longer builds one.
         tabBarAccessibilityLabel: `${TAB_TITLES[route.name] ?? route.name}, tab`,
         tabBarLabel: ({ color }) => (
-          <Text
-            numberOfLines={1}
-            adjustsFontSizeToFit
-            minimumFontScale={0.65}
-            allowFontScaling={false}
-            style={[styles.tabLabel, { color, fontSize: sizing.label }]}
-          >
+          <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.65} allowFontScaling={false} style={[styles.tabLabel, { color, fontSize: sizing.label }]}>
             {tabLabel(route.name, phone)}
           </Text>
         ),
-        tabBarIcon: ({ focused, color }) => (
-          <TabIcon name={route.name} focused={focused} color={color} size={sizing.icon} />
-        ),
+        tabBarIcon: ({ focused, color }) => <TabIcon name={route.name} focused={focused} color={color} size={sizing.icon} />,
       })}
       screenListeners={{ tabPress: () => haptics.selection() }}
     >
@@ -396,11 +388,7 @@ function MainTabs({ freshInstall = false }) {
         <Stack.Screen name="Tabs">{() => <Tabs />}</Stack.Screen>
         <Stack.Screen name="Forecast" component={ForecastScreen} />
         <Stack.Screen name="AlarmSettings" component={AlarmSettingsScreen} />
-        <Stack.Screen
-          name="AlarmRinging"
-          component={AlarmRingingScreen}
-          options={{ presentation: 'fullScreenModal', animation: 'fade', gestureEnabled: false }}
-        />
+        <Stack.Screen name="AlarmRinging" component={AlarmRingingScreen} options={{ presentation: 'fullScreenModal', animation: 'fade', gestureEnabled: false }} />
         <Stack.Screen name="HubWelcome" component={HubWelcomeScreen} options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
         <Stack.Screen name="HubDirectory" component={HubDirectoryScreen} />
         <Stack.Screen name="HubProfile" component={HubProfileScreen} />
@@ -529,31 +517,29 @@ function Root() {
       <SafeAreaProvider>
         <SafeBottomFloor>
           <FontProvider>
-          <UserProvider>
-            <PlayerProvider>
-              <SleepTimerProvider>
-                <ZenProvider>
-                  <MediaProvider>
-                    <WeatherProvider>
-                      <AlarmProvider>
-                        <HubProvider>
-                          <PremiumProvider>
-                            <CarActions />
-                            <CallWakeUpPrompt />
-                            <CallProvider>
-                              <FormsProvider>
-                                {booted ? <Gate /> : <Intro onDone={finishBoot} />}
-                              </FormsProvider>
-                            </CallProvider>
-                          </PremiumProvider>
-                        </HubProvider>
-                      </AlarmProvider>
-                    </WeatherProvider>
-                  </MediaProvider>
-                </ZenProvider>
-              </SleepTimerProvider>
-            </PlayerProvider>
-          </UserProvider>
+            <UserProvider>
+              <PlayerProvider>
+                <SleepTimerProvider>
+                  <ZenProvider>
+                    <MediaProvider>
+                      <WeatherProvider>
+                        <AlarmProvider>
+                          <HubProvider>
+                            <PremiumProvider>
+                              <CarActions />
+                              <CallWakeUpPrompt />
+                              <CallProvider>
+                                <FormsProvider>{booted ? <Gate /> : <Intro onDone={finishBoot} />}</FormsProvider>
+                              </CallProvider>
+                            </PremiumProvider>
+                          </HubProvider>
+                        </AlarmProvider>
+                      </WeatherProvider>
+                    </MediaProvider>
+                  </ZenProvider>
+                </SleepTimerProvider>
+              </PlayerProvider>
+            </UserProvider>
           </FontProvider>
         </SafeBottomFloor>
       </SafeAreaProvider>
@@ -564,6 +550,8 @@ function Root() {
 const styles = StyleSheet.create({
   tabBarWrap: { position: 'absolute', left: 0, right: 0, bottom: 0 },
   tabLabel: { fontFamily: fonts.semibold, letterSpacing: -0.1, textAlign: 'center', maxWidth: '100%', paddingHorizontal: 1, marginTop: 3 },
+  // The gold gleam behind the BOA Originals tab icon: a soft radial glow.
+  tabGleam: { position: 'absolute', backgroundColor: 'rgba(226,168,75,0.5)', boxShadow: '0px 0px 14px rgba(226,168,75,0.85)' },
   crash: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 12, backgroundColor: colors.bg },
   crashTitle: { fontSize: 20, fontWeight: '600', color: colors.text, textAlign: 'center' },
   crashBody: { fontSize: 13, color: colors.textMuted, textAlign: 'center' },

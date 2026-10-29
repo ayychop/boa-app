@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import BoaSlider from '../BoaSlider';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -20,6 +20,9 @@ const PAST = { bass: 12, treble: 6 };
 const BELOW = 15;
 const STEPS = 30;
 const snap = (v) => Math.round(v * STEPS) / STEPS;
+// The slider reaches the hardware at most this often while it moves (about
+// 30 a second): instant to the ear, without a native call on every pixel.
+const APPLY_EVERY_MS = 33;
 export const readout = (v, kind) => {
   if (v <= -1) return 'Flat';
   const n = Math.round(v * (v > 0 ? PAST[kind] : BELOW));
@@ -32,10 +35,41 @@ function useEq() {
   return s;
 }
 
-function Band({ label, kind, value, onChange, locked, testID }) {
+/**
+ * One slider (Bass or Treble). It runs on its own while your finger is on it
+ * (the thumb never waits on the store), sends each move straight to the
+ * hardware about 30 times a second through onPreview, and saves where you
+ * let go through onCommit. A change from elsewhere (a preset, a saved value)
+ * moves it too, unless you're holding it.
+ */
+function Band({ label, kind, value, onPreview, onCommit, locked, testID }) {
+  const [shown, setShown] = useState(value);
+  const dragging = useRef(false);
+  const last = useRef(0);
+  useEffect(() => {
+    if (!dragging.current) setShown(value);
+  }, [value]);
+  const move = (v) => {
+    const s = snap(v);
+    dragging.current = true;
+    setShown(s);
+    const now = Date.now();
+    if (now - last.current >= APPLY_EVERY_MS) {
+      last.current = now;
+      onPreview(s);
+    }
+  };
+  const done = (v) => {
+    const s = snap(v);
+    dragging.current = false;
+    last.current = 0;
+    setShown(s);
+    onCommit(s);
+    haptics.selection();
+  };
   // Past Signature, past what the phone's own Equalizer can do: the card lights gold.
-  const past = value > 0;
-  const shown = readout(value, kind);
+  const past = shown > 0;
+  const text = readout(shown, kind);
   return (
     <View style={[styles.band, past && styles.bandPast]} testID={`${testID}-card`}>
       {past ? <LinearGradient colors={['rgba(226,168,75,0.16)', 'rgba(226,168,75,0)']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={StyleSheet.absoluteFill} /> : null}
@@ -46,8 +80,8 @@ function Band({ label, kind, value, onChange, locked, testID }) {
             <Text style={styles.pastText}>PAST STOCK</Text>
           </View>
         ) : null}
-        <Text style={[styles.bandValue, value <= -1 && { color: colors.textMuted }]} testID={`${testID}-value`}>
-          {shown}
+        <Text style={[styles.bandValue, shown <= -1 && { color: colors.textMuted }]} testID={`${testID}-value`}>
+          {text}
         </Text>
       </View>
       <BoaSlider
@@ -55,13 +89,13 @@ function Band({ label, kind, value, onChange, locked, testID }) {
         minimumValue={-1}
         maximumValue={1}
         step={1 / STEPS}
-        value={value}
+        value={shown}
         disabled={locked}
-        onValueChange={(v) => onChange(snap(v))}
-        onSlidingComplete={() => haptics.selection()}
+        onValueChange={move}
+        onSlidingComplete={done}
         minimumTrackTintColor={colors.gold}
         maximumTrackTintColor="rgba(243,239,232,0.18)"
-        accessibilityLabel={`${label}, ${shown}`}
+        accessibilityLabel={`${label}, ${text}`}
         testID={testID}
       />
       <View style={styles.scale}>
@@ -127,8 +161,8 @@ export default function EqualizerSheet({ open, onClose }) {
             })}
           </View>
 
-          <Band label="Bass" kind="bass" value={settings.bass} onChange={(v) => eq.setSettings({ bass: v })} locked={locked} testID="eq-bass" />
-          <Band label="Treble" kind="treble" value={settings.treble} onChange={(v) => eq.setSettings({ treble: v })} locked={locked} testID="eq-treble" />
+          <Band label="Bass" kind="bass" value={settings.bass} onPreview={(v) => eq.preview({ bass: v })} onCommit={(v) => eq.setSettings({ bass: v })} locked={locked} testID="eq-bass" />
+          <Band label="Treble" kind="treble" value={settings.treble} onPreview={(v) => eq.preview({ treble: v })} onCommit={(v) => eq.setSettings({ treble: v })} locked={locked} testID="eq-treble" />
 
           <View style={styles.spatial}>
             <View style={styles.spatialIcon}>

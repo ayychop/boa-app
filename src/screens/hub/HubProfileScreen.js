@@ -18,11 +18,11 @@ import useProfileUpdates from '../../hooks/useProfileUpdates';
 import BlockSheet from '../../components/hub/BlockSheet';
 import ReportSheet from '../../components/hub/ReportSheet';
 import BoaCodeSheet from '../../components/hub/BoaCode';
-import ChatVibeSheet from '../../components/chat/ChatVibeSheet';
+import ProfileVibeSheet from '../../components/chat/ProfileVibeSheet';
 import { GridEmpty, PostGrid, ProfileTabs } from '../../components/profile/PostGrid';
 import Favourites from '../../components/profile/Favourites';
 import { GoldBadge, LogoWatermark, Tappable } from '../../components/ui';
-import useChatVibe, { allowedVibe } from '../../chat/vibes';
+import { allowedVibe, useProfileVibe } from '../../chat/vibes';
 import { usePremiumUnlocked } from '../../context/PremiumContext';
 import { useHeadlineFont } from '../../context/FontContext';
 import { colors, fonts, radius, space, type } from '../../theme';
@@ -95,11 +95,13 @@ function VibeHeader({ vibe, width, height, star }) {
         </>
       )}
       {/* Small, centred and barely there: a mark you notice, not one that shouts.
-          Spanning both edges and centring keeps it dead centre at any width. */}
+          Spanning both edges and centring keeps it dead centre at any width.
+          Always BOA gold, never the vibe's colour: the wordmark is the brand
+          and no theme or vibe ever recolours it. */}
       <LogoWatermark
         height={Math.round(Math.min(width, 520) * 0.16)}
-        opacity={vibe.light ? 0.08 : 0.06}
-        color={vibe.accent}
+        opacity={vibe.light ? 0.1 : 0.07}
+        color={colors.gold}
         style={{ top: Math.round(height * 0.1), left: 0, right: 0, alignItems: 'center' }}
       />
       <LinearGradient colors={['rgba(5,5,6,0)', 'rgba(5,5,6,0.5)', colors.bg]} locations={[0, 0.62, 0.96]} style={StyleSheet.absoluteFill} />
@@ -182,10 +184,11 @@ export default function HubProfileScreen({ navigation, route }) {
   const [codeOpen, setCodeOpen] = useState(false);
   const [vibeOpen, setVibeOpen] = useState(false);
 
-  // The chosen Chat Vibe, device-wide, so the Hub matches the thread (a
+  // The Profile Vibe: this profile's own look, separate from the Chat Vibe,
+  // so theming the profile never touches how chats look and vice versa (a
   // Premium vibe shows only while Premium is on, else Noir). The header mesh
-  // and the accents below all follow it.
-  const { vibe: savedVibe } = useChatVibe();
+  // and the accents below all follow it; the BOA wordmark never does.
+  const { vibe: savedVibe } = useProfileVibe();
   const vibe = allowedVibe(savedVibe, usePremiumUnlocked());
   const accent = chromeAccent(vibe);
   // The default Noir keeps the app's white header icons; a vibe tints them.
@@ -320,6 +323,7 @@ export default function HubProfileScreen({ navigation, route }) {
         right={
           mine ? (
             <View style={styles.headerActions}>
+              <IconButton icon="chatbubbles-outline" label="Messages" onPress={() => navigation.navigate('HubChats')} tone={iconTone} testID="profile-inbox" />
               <IconButton icon="qr-code-outline" label="Your BOA Code" onPress={() => setCodeOpen(true)} tone={iconTone} testID="profile-boa-code" />
               <IconButton icon="add" label="New post" onPress={newPost} tone={iconTone} testID="profile-new-post" />
               <IconButton icon="settings-outline" label="Hub settings" onPress={() => navigation.navigate('HubSettings')} tone={iconTone} />
@@ -390,7 +394,7 @@ export default function HubProfileScreen({ navigation, route }) {
                 <>
                   <Action label="Edit profile" icon="create-outline" onPress={() => navigation.navigate('HubSettings')} testID="profile-edit" />
                   <Action label="Splits" icon="pie-chart-outline" onPress={() => navigation.navigate('HubSplits')} testID="profile-splits" />
-                  <Action label="Chat vibe" icon="color-palette-outline" onPress={() => setVibeOpen(true)} testID="profile-chat-vibe" />
+                  <Action label="Profile vibe" icon="color-palette-outline" onPress={() => setVibeOpen(true)} testID="profile-vibe" />
                 </>
               ) : isBlocked ? (
                 <Action label="Unblock" icon="lock-open-outline" onPress={() => unblock(id).catch(() => {})} />
@@ -453,7 +457,7 @@ export default function HubProfileScreen({ navigation, route }) {
         </View>
       </ScrollView>
       {mine ? <BoaCodeSheet open={codeOpen} onClose={() => setCodeOpen(false)} profile={person} /> : null}
-      {mine ? <ChatVibeSheet open={vibeOpen} onClose={() => setVibeOpen(false)} /> : null}
+      {mine ? <ProfileVibeSheet open={vibeOpen} onClose={() => setVibeOpen(false)} /> : null}
       <BlockSheet person={blocking} onClose={() => setBlocking(null)} />
       <ReportSheet target={reporting} onClose={(didBlock) => (setReporting(null), didBlock && navigation.goBack())} />
     </View>
@@ -521,26 +525,30 @@ const styles = StyleSheet.create({
     gap: space.md,
     paddingLeft: space.sm + 2,
     paddingRight: space.lg,
-    paddingVertical: space.sm + 2,
+    paddingVertical: space.md,
     borderRadius: radius.lg,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(246,211,138,0.45)',
-    backgroundColor: 'rgba(28,24,16,0.72)',
-    boxShadow: '0px 4px 16px rgba(0,0,0,0.35)',
+    borderColor: 'rgba(246,211,138,0.5)',
+    // A deeper, less transparent card so the gold text and the rank read
+    // cleanly over any vibe behind it: a premium plaque, not a faint tint.
+    backgroundColor: 'rgba(24,20,12,0.9)',
+    boxShadow: '0px 6px 20px rgba(0,0,0,0.45)',
   },
   dayOneIcon: {
-    width: 38,
-    height: 38,
+    width: 40,
+    height: 40,
     borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.goldSoft,
+    backgroundColor: 'rgba(226,168,75,0.2)',
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(246,211,138,0.5)',
+    borderColor: 'rgba(246,211,138,0.6)',
   },
   dayOneText: { flexShrink: 1 },
-  dayOneKicker: { fontFamily: fonts.mono, fontSize: 8.5, letterSpacing: 1.6, textTransform: 'uppercase', color: colors.gold },
-  dayOneTitle: { fontFamily: fonts.semibold, fontSize: 14.5, lineHeight: 19, letterSpacing: -0.3, color: colors.text, marginTop: 2 },
-  dayOneRank: { fontFamily: fonts.medium, fontSize: 11.5, color: colors.textMuted, marginTop: 1 },
+  // Legible accolade text: a brighter gold kicker, a bigger title, and a rank
+  // in warm off-white rather than a muted grey that got lost on the plaque.
+  dayOneKicker: { fontFamily: fonts.monoMedium, fontSize: 9.5, letterSpacing: 1.6, textTransform: 'uppercase', color: '#F6D38A' },
+  dayOneTitle: { fontFamily: fonts.semibold, fontSize: 15.5, lineHeight: 20, letterSpacing: -0.3, color: colors.text, marginTop: 3 },
+  dayOneRank: { fontFamily: fonts.medium, fontSize: 12.5, color: 'rgba(243,239,232,0.82)', marginTop: 2 },
   gridError: { textAlign: 'center', marginTop: space.xxl, paddingHorizontal: space.lg },
 });

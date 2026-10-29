@@ -43,6 +43,7 @@ import TypingIndicator, { TypingDots } from '../../components/chat/TypingIndicat
 import ChatVibeSheet from '../../components/chat/ChatVibeSheet';
 import useChatVibe, { allowedVibe, MOTION, vibeById } from '../../chat/vibes';
 import { usePremiumUnlocked } from '../../context/PremiumContext';
+import { useHeadlineFont } from '../../context/FontContext';
 import { withChatTheme } from '../../chat/bubbleTheme';
 import { MediaTile, MediaViewer, VoiceNote } from '../../components/chat/media';
 import { SendMediaSheet, ViewOnceTile, ViewOnceViewer } from '../../components/chat/ViewOnce';
@@ -243,6 +244,9 @@ function Smoke({ vibe }) {
 function Header({ name, person, online, badge, status, vibe, motion, onBack, onProfile, onVibe, onCall, callState, onLayout }) {
   const insets = useSafeAreaInsets();
   const starting = callState === 'starting';
+  // The chat header name wears the member's chosen headline typeface, so the
+  // font picker shows in the chat too, not only on the profile.
+  const headlineFont = useHeadlineFont();
   return (
     <View style={[styles.header, { paddingTop: insets.top + space.sm }]} onLayout={onLayout} testID="thread-header">
       <Smoke vibe={vibe} />
@@ -260,7 +264,7 @@ function Header({ name, person, online, badge, status, vibe, motion, onBack, onP
           {person ? <Avatar uri={person.avatar_url} name={name} size={AVATAR} online={online} /> : <View style={{ width: AVATAR, height: AVATAR }} />}
           <View style={styles.whoText}>
             <View style={styles.nameRow}>
-              <Text style={[styles.name, { color: vibe.ink }]} numberOfLines={1} accessibilityRole="header">
+              <Text style={[styles.name, { color: vibe.ink, fontFamily: headlineFont }]} numberOfLines={1} accessibilityRole="header">
                 {name}
               </Text>
               {badge}

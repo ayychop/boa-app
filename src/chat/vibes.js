@@ -490,3 +490,62 @@ export function resetChatVibe() {
   current = { id: WELCOME_VIBE, custom: DEFAULT_CUSTOM_COLOR, motion: MOTION };
   loaded = null;
 }
+
+// The Profile Vibe: a second, separate choice that themes only the Hub
+// profile header (its mesh, its lights, its accents), independent of the
+// Chat Vibe. Picking one never changes the other, and neither ever touches
+// the app's own BOA gold-and-black chrome or the wordmark. It starts on
+// Noir, the brand look, so a fresh profile opens in BOA's own colours.
+const PROFILE_KEY = 'boa:profile-vibe:v1';
+const PROFILE_CUSTOM_KEY = 'boa:profile-vibe-custom:v1';
+let profile = { id: DEFAULT_VIBE, custom: DEFAULT_CUSTOM_COLOR };
+let profileLoaded = null;
+const profileListeners = new Set();
+const publishProfile = (next) => {
+  profile = next;
+  profileListeners.forEach((fn) => fn(next));
+};
+
+function loadProfile() {
+  profileLoaded ??= Promise.all([AsyncStorage.getItem(PROFILE_KEY), AsyncStorage.getItem(PROFILE_CUSTOM_KEY)])
+    .then(([id, custom]) => {
+      const next = {
+        id: id && known(id) ? id : profile.id,
+        custom: custom && /^#[0-9a-f]{6}$/i.test(custom) ? custom : profile.custom,
+      };
+      if (next.id !== profile.id || next.custom !== profile.custom) publishProfile(next);
+    })
+    .catch(() => {});
+  return profileLoaded;
+}
+
+export function setProfileVibe(id) {
+  const next = known(id) ? id : DEFAULT_VIBE;
+  publishProfile({ ...profile, id: next });
+  return AsyncStorage.setItem(PROFILE_KEY, next).catch(() => {});
+}
+
+export function setProfileCustomColor(hex) {
+  if (!/^#[0-9a-f]{6}$/i.test(hex)) return Promise.resolve();
+  const color = hex.toUpperCase();
+  publishProfile({ id: CUSTOM_ID, custom: color });
+  return Promise.all([AsyncStorage.setItem(PROFILE_KEY, CUSTOM_ID), AsyncStorage.setItem(PROFILE_CUSTOM_KEY, color)]).catch(() => {});
+}
+
+/** The profile's own vibe, its custom colour, and setters that save them. Separate from the chat vibe. */
+export function useProfileVibe() {
+  const [state, setState] = useState(profile);
+  useEffect(() => {
+    profileListeners.add(setState);
+    setState(profile);
+    loadProfile();
+    return () => profileListeners.delete(setState);
+  }, []);
+  return { vibe: vibeById(state.id, state.custom), customColor: state.custom, setVibe: setProfileVibe, setCustomColor: setProfileCustomColor };
+}
+
+/** For tests: forget the in-memory profile choice so the next read comes from storage. */
+export function resetProfileVibe() {
+  profile = { id: DEFAULT_VIBE, custom: DEFAULT_CUSTOM_COLOR };
+  profileLoaded = null;
+}

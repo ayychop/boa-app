@@ -79,9 +79,23 @@ export function setAllowed(yes) {
   apply();
 }
 
-export function setSettings(patch) {
+function take(patch) {
   const next = { ...settings, ...patch };
   settings = { bass: clamp(next.bass), treble: clamp(next.treble), spatial: !!next.spatial, boost: !!next.boost };
+}
+
+/**
+ * Live while a slider is moving: shapes the sound on the hardware at once
+ * (no AsyncStorage write, no round trip), so there's no lag between the
+ * thumb and the audio. The settings are saved on release (setSettings).
+ */
+export function preview(patch) {
+  take(patch);
+  apply();
+}
+
+export function setSettings(patch) {
+  take(patch);
   AsyncStorage.setItem(KEY, JSON.stringify(settings)).catch(() => {});
   apply();
 }

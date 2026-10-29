@@ -12,7 +12,7 @@ import { Button, Slate } from '../../components/ui';
 import { haptics } from '../../utils/haptics';
 import { QUOTE_CATEGORIES } from '../../data/quotes';
 import { CHAT_SOUNDS } from '../../chat/sounds';
-import useChatVibe from '../../chat/vibes';
+import useChatVibe, { useProfileVibe } from '../../chat/vibes';
 import VibePicker from '../../components/chat/VibePicker';
 import { ringtoneById } from '../../calls/ringtone';
 import { colors, fonts, radius, space } from '../../theme';
@@ -65,6 +65,10 @@ export default function HubSettingsScreen({ navigation }) {
     setCustomColor(hex);
     if (chatTheme) setChatTheme?.(null)?.catch?.(() => {});
   };
+  // The Profile Vibe: a separate choice that themes only the profile header.
+  const { vibe: profileVibe, setVibe: setProfileVibe, customColor: profileCustom, setCustomColor: setProfileCustom } = useProfileVibe();
+  const pickProfileVibe = (id) => setProfileVibe(id);
+  const pickProfileCustom = (hex) => setProfileCustom(hex);
   const [saving, setSaving] = useState(false);
   const [busy, setBusy] = useState(null);
   const [blockedPeople, setBlockedPeople] = useState([]);
@@ -244,24 +248,6 @@ export default function HubSettingsScreen({ navigation }) {
             ))}
           </View>
 
-          {/* App typeface: a curated headline face, saved as soon as it's picked. */}
-          <Slate style={styles.section}>Typeface</Slate>
-          <View style={styles.chips}>
-            {appFont.options.map((f) => (
-              <Chip
-                key={f.id}
-                label={f.label}
-                selected={appFont.fontId === f.id}
-                onPress={() => {
-                  haptics.selection();
-                  appFont.choose(f.id);
-                }}
-                testID={`hub-font-${f.id}`}
-              />
-            ))}
-          </View>
-          <Text style={styles.fontHint}>Sets the headline face for your profile name and section titles. The BOA wordmark and slate labels stay exactly as they are.</Text>
-
           <Slate style={styles.section}>Presence</Slate>
           <View style={styles.group}>
             <SettingRow icon="eye-outline" title="Visible on Hub" detail="Show up in Find talent and appear online. Off: only people you already talk to can see you.">
@@ -294,7 +280,30 @@ export default function HubSettingsScreen({ navigation }) {
           </View>
 
           <Slate style={styles.section}>Chat vibe</Slate>
+          <Text style={styles.fontHint}>How your conversations look. Changes only the chat background, nothing else in the app.</Text>
           <VibePicker value={vibe.id} onChange={pickVibe} customColor={customColor} onCustomColor={pickCustom} />
+
+          <Slate style={styles.section}>Profile vibe</Slate>
+          <Text style={styles.fontHint}>The colours of your profile header. A separate choice from your chat vibe, and the BOA wordmark never changes.</Text>
+          <VibePicker value={profileVibe.id} onChange={pickProfileVibe} customColor={profileCustom} onCustomColor={pickProfileCustom} />
+
+          {/* App typeface: a curated headline face, saved as soon as it's picked. Part of the vibe section. */}
+          <Slate style={styles.section}>Typeface</Slate>
+          <View style={styles.chips}>
+            {appFont.options.map((f) => (
+              <Chip
+                key={f.id}
+                label={f.label}
+                selected={appFont.fontId === f.id}
+                onPress={() => {
+                  haptics.selection();
+                  appFont.choose(f.id);
+                }}
+                testID={`hub-font-${f.id}`}
+              />
+            ))}
+          </View>
+          <Text style={styles.fontHint}>Sets the headline face for your profile name and section titles. The BOA wordmark and slate labels stay exactly as they are.</Text>
 
           <Slate style={styles.section}>Make it yours</Slate>
           <View style={styles.group}>
