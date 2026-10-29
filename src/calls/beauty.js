@@ -116,7 +116,9 @@ export const BEAUTY_VERSION = 2;
 // slider says: beyond these, faces start to look plastic, ashy or washed out.
 export const MAX_SMOOTHNESS = 0.5;
 export const MAX_REDNESS = 0.3;
-export const MAX_LIGHTENING = 0.5;
+// Lightening stacks on face-priority auto exposure and low-light enhancement,
+// which already brighten a face; past 0.35 skin and colour start to wash out.
+export const MAX_LIGHTENING = 0.35;
 export const MAX_SHARPNESS = 0.8;
 export const MAX_SATURATION = 0.7;
 // Exposure at the slider's ends, in Agora's units (Android takes -20..20,

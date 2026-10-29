@@ -143,6 +143,23 @@ describe('BOA Originals polish', () => {
     expect(src).toMatch(/name="play"/);
   });
 
+  test('the Mind States UK hero carries a tappable gold play badge that starts Episode 1', () => {
+    const src = read('src/screens/OriginalsScreen.js');
+    const hero = src.slice(src.indexOf('function Featured'), src.indexOf('function GoldSheen'));
+    expect(hero).toMatch(/testID="originals-hero-play"/);
+    expect(hero).toMatch(/styles\.playBadge, styles\.heroPlay/);
+    expect(hero).toMatch(/media\.openEpisode\(production\)/);
+  });
+
+  test('episode thumbnails get a gold sheen that stays still under Reduce Motion', () => {
+    const src = read('src/screens/OriginalsScreen.js');
+    const sheen = src.slice(src.indexOf('function GoldSheen'), src.indexOf('function EpisodeCard'));
+    expect(sheen).toMatch(/useReducedMotion\(\)/);
+    expect(sheen).toMatch(/if \(reduce\) return null/);
+    const card = src.slice(src.indexOf('function EpisodeCard'), src.indexOf('export default function OriginalsScreen'));
+    expect(card).toMatch(/<GoldSheen width=\{width\} \/>/);
+  });
+
   test('Coming Soon cards centre their text rather than pushing it to the floor', () => {
     const src = read('src/components/Poster.js');
     expect(src).toMatch(/contentSoon: \{ justifyContent: 'center' \}/);

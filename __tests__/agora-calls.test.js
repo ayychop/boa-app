@@ -131,7 +131,7 @@ describe('Agora video calls', () => {
     // The filters' extension is switched on before any filter, then Natural is applied to the camera (source 2).
     expect(engine.enableExtension).toHaveBeenCalledWith('agora_video_filters_clear_vision', 'clear_vision', true, 2);
     expect(engine.enableExtension.mock.invocationCallOrder[0]).toBeLessThan(engine.setBeautyEffectOptions.mock.invocationCallOrder[0]);
-    expect(engine.setBeautyEffectOptions).toHaveBeenCalledWith(true, expect.objectContaining({ lighteningContrastLevel: 1, lighteningLevel: 0.2, smoothnessLevel: 0.15, sharpnessLevel: 0.28 }), 2);
+    expect(engine.setBeautyEffectOptions).toHaveBeenCalledWith(true, expect.objectContaining({ lighteningContrastLevel: 1, lighteningLevel: 0.14, smoothnessLevel: 0.15, sharpnessLevel: 0.28 }), 2);
     expect(engine.setColorEnhanceOptions).toHaveBeenCalledWith(true, expect.objectContaining({ skinProtectLevel: 1 }), 2);
     expect(engine.setFilterEffectOptions).toHaveBeenCalledWith(false, expect.anything(), 2);
     // Echo cancellation, noise suppression and gain control; one stream; 1v1 tuning.
@@ -779,14 +779,14 @@ describe('the call presets', () => {
     const noExposure = toAgora({ preset: 'natural', brightness: 1 }, { exposure: false });
     expect(noExposure.exposure.factor).toBe(0);
     expect(noExposure.beauty.lighteningLevel).toBeGreaterThan(toAgora({ preset: 'natural', brightness: 1 }).beauty.lighteningLevel);
-    expect(noExposure.beauty.lighteningLevel).toBeLessThanOrEqual(0.5);
+    expect(noExposure.beauty.lighteningLevel).toBeLessThanOrEqual(0.35);
     const off = toAgora({ preset: 'cinematic', brightness: 1, enabled: false });
     expect(off.beauty.enabled).toBe(false);
     expect(off.filter.enabled).toBe(false);
     // Filters off leaves Brightness where you left it.
     expect(off.exposure.factor).toBe(toAgora({ preset: 'cinematic', brightness: 1 }).exposure.factor);
     const offNoExposure = toAgora({ preset: 'cinematic', brightness: 1, enabled: false }, { exposure: false });
-    expect(offNoExposure.beauty).toEqual(expect.objectContaining({ enabled: true, smoothnessLevel: 0, lighteningLevel: 0.5 }));
+    expect(offNoExposure.beauty).toEqual(expect.objectContaining({ enabled: true, smoothnessLevel: 0, lighteningLevel: 0.35 }));
     expect(offNoExposure.filter.enabled).toBe(false);
   });
 

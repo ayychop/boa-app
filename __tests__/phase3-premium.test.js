@@ -235,7 +235,7 @@ describe('beauty filters', () => {
       expect(beauty.smoothnessLevel).toBeLessThanOrEqual(0.5);
       expect(beauty.rednessLevel).toBeLessThanOrEqual(0.3);
       expect(beauty.sharpnessLevel).toBeLessThanOrEqual(0.8);
-      expect(beauty.lighteningLevel).toBeLessThanOrEqual(0.5);
+      expect(beauty.lighteningLevel).toBeLessThanOrEqual(0.35);
       expect(colorEnhance.strengthLevel).toBeLessThanOrEqual(0.7);
       expect(colorEnhance.skinProtectLevel).toBe(1);
     }

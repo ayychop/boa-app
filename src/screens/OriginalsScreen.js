@@ -1,6 +1,7 @@
+import { useEffect } from 'react';
 import { Image, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
+import Animated, { Easing, FadeIn, FadeInDown, useAnimatedStyle, useReducedMotion, useSharedValue, withDelay, withRepeat, withTiming } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { featuredProduction, productions } from '../data/boaContent';
@@ -10,7 +11,7 @@ import { BACKDROP_TITLE_TOP, fillFrame, heroArt, toSource } from '../components/
 import { Button, Fog, SectionHeader, Slate, Tappable, Viewfinder } from '../components/ui';
 import useBottomSpace from '../hooks/useBottomSpace';
 import useLayout, { WIDE } from '../hooks/useLayout';
-import { colors, fonts, space, type } from '../theme';
+import { colors, fonts, radius, space, type } from '../theme';
 
 const GAP = 14;
 const CONTENT_MAX = 1200;
@@ -56,6 +57,19 @@ function Featured({ production, width, clear = 0 }) {
         </Animated.View>
         <LinearGradient colors={['rgba(5,5,6,0.55)', 'rgba(5,5,6,0)', 'rgba(5,5,6,0)', colors.bg]} locations={[0, 0.25, 0.8, 1]} style={StyleSheet.absoluteFill} />
         <Viewfinder inset={16} />
+        {/* The gold BOA play badge on the hero: tap it to start the show. */}
+        <View pointerEvents="box-none" style={styles.playOverlay}>
+          <Tappable
+            onPress={() => (production.episodes[0] ? media.openEpisode(production) : media.openTrailer(production))}
+            accessibilityRole="button"
+            accessibilityLabel={production.episodes[0] ? `Play ${production.title} Episode 1` : `Watch the ${production.title} trailer`}
+            testID="originals-hero-play"
+          >
+            <View style={[styles.playBadge, styles.heroPlay]}>
+              <Ionicons name="play" size={34} color={colors.bg} style={{ marginLeft: 4 }} />
+            </View>
+          </Tappable>
+        </View>
         <View style={[styles.featuredTop, { top: insets.top + space.xl }]}>
           <Slate dot>02 · Productions</Slate>
           <Slate>The slate</Slate>
@@ -83,6 +97,31 @@ function Featured({ production, width, clear = 0 }) {
   );
 }
 
+/** A band of gold light that sweeps across a still now and then. Off under Reduce Motion. */
+function GoldSheen({ width, radius: r = radius.md }) {
+  const reduce = useReducedMotion();
+  const x = useSharedValue(0);
+  useEffect(() => {
+    if (reduce) return;
+    x.value = withRepeat(withDelay(2400, withTiming(1, { duration: 1400, easing: Easing.inOut(Easing.cubic) })), -1, false);
+  }, [reduce, x]);
+  const band = width * 0.45;
+  const sweep = useAnimatedStyle(() => ({ transform: [{ translateX: -band + x.value * (width + band * 2) }, { skewX: '-20deg' }] }));
+  if (reduce) return null;
+  return (
+    <View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderRadius: r, overflow: 'hidden' }]}>
+      <Animated.View style={[styles.sheen, { width: band }, sweep]}>
+        <LinearGradient
+          colors={['rgba(226,168,75,0)', 'rgba(255,226,160,0.32)', 'rgba(226,168,75,0)']}
+          start={{ x: 0, y: 0.5 }}
+          end={{ x: 1, y: 0.5 }}
+          style={StyleSheet.absoluteFill}
+        />
+      </Animated.View>
+    </View>
+  );
+}
+
 function EpisodeCard({ production, episode, width }) {
   const media = useMedia();
   return (
@@ -92,6 +131,7 @@ function EpisodeCard({ production, episode, width }) {
         <Poster production={{ ...production, backdrop: episode.image, status: 'available' }} width={width} showTitle={false} fit="cover" />
         {/* The gold BOA play badge, centred over the still, like a premium
             streaming service. A pointer-through overlay: the whole card plays. */}
+        <GoldSheen width={width} />
         <View pointerEvents="none" style={styles.playOverlay}>
           <View style={styles.playBadge}>
             <Ionicons name="play" size={26} color={colors.bg} style={{ marginLeft: 3 }} />
@@ -201,6 +241,8 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,245,224,0.85)',
     boxShadow: '0px 6px 22px rgba(226,168,75,0.55)',
   },
+  heroPlay: { width: 76, height: 76, borderRadius: 38, borderWidth: 2, boxShadow: '0px 8px 32px rgba(226,168,75,0.6)' },
+  sheen: { position: 'absolute', top: '-20%', bottom: '-20%', left: 0 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: space.xl },
   casting: {
     marginTop: space.xxxl,

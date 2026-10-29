@@ -212,7 +212,9 @@ function TabBarBackground() {
   return (
     <View style={StyleSheet.absoluteFill}>
       <BlurView intensity={70} tint="dark" experimentalBlurMethod="dimezisBlurView" style={StyleSheet.absoluteFill} />
-      <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(5,5,6,0.62)' }]} />
+      {/* Dense enough that round artwork scrolling under the bar (station logos)
+          never reads as dark discs behind the icons where the blur is weak. */}
+      <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(5,5,6,0.86)' }]} />
     </View>
   );
 }
