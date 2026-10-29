@@ -9,7 +9,8 @@ import { toAgora } from './beauty';
 import { DEFAULT_BACKGROUND, assetOf, toAgora as backgroundForAgora, toBanuba } from './backgrounds';
 import { lutPath, toneLutPath } from './luts';
 import { decodeMessage, encodePrivacy } from './privacy';
-import { AINS_BALANCED, AUDIO, AUDIO_PROCESSING, CAPTURE, DENOISER, ENCODER, LOW_LIGHT, MIRROR_OFF, MIRROR_ON, PREVIEW, STABILIZATION_OFF, VIDEO_SCENARIO } from './quality';
+import { AINS_BALANCED, AUDIO, AUDIO_PROCESSING, CAPTURE, DENOISER, encoderForThermal, LOW_LIGHT, MIRROR_OFF, MIRROR_ON, PREVIEW, STABILIZATION_OFF, VIDEO_SCENARIO } from './quality';
+import * as thermal from './thermal';
 
 // The picture and sound of a BOA video call, over Agora. Ringing stays on
 // Supabase Realtime (src/calls/signaling.js); once both phones agree, each
@@ -59,6 +60,8 @@ const facingListeners = new Set();
 let away = false;
 // Tokens fetched ahead of time, by channel: { pass, at }.
 const passes = new Map();
+// Stop listening to thermal state when the engine is gone.
+let thermalOff = null;
 
 /** How long a join may take before it's torn down and retried. */
 export const JOIN_TIMEOUT_MS = 15000;
@@ -276,22 +279,58 @@ async function imagePath(bg) {
   }
 }
 
+// Whether Agora's virtual background is switched on in this engine. Switching
+// from one backdrop straight to another without turning it off first left
+// the segmentation pipeline stuck on the first choice on some phones.
+let virtualOn = false;
+const VIRTUAL_OFF = [{ background_source_type: 1, color: 0 }, { modelType: 1 }];
+
+/** Turns Agora's virtual background off, so the next choice starts from a clean pipeline. */
+function resetBackgroundPipeline() {
+  if (!engine || !virtualOn) return;
+  try {
+    engine.enableVirtualBackground(false, ...VIRTUAL_OFF, PRIMARY_CAMERA);
+  } catch {}
+  virtualOn = false;
+}
+
+/** Drops the backdrop and goes back to the plain camera feed, so a failure never freezes the picture. */
+function fallbackCameraFeed() {
+  if (!engine) return;
+  try {
+    engine.enableVirtualBackground(false, ...VIRTUAL_OFF, PRIMARY_CAMERA);
+  } catch {}
+  virtualOn = false;
+  try {
+    if (banuba) {
+      banubaProperty('unload_effect', BANUBA.effect);
+      engine.enableExtension(BANUBA.provider, BANUBA.extension, false);
+    }
+  } catch {}
+  banuba = false;
+}
+
 function agoraBackground(bg, path) {
   const { enabled, source, segmentation } = backgroundForAgora(bg, path);
   if (enabled && engine.isFeatureAvailableOnDevice?.(VIRTUAL_BACKGROUND_FEATURE) === false) return 'unsupported';
+  if (enabled) resetBackgroundPipeline();
   const code = engine.enableVirtualBackground(enabled, source, segmentation, PRIMARY_CAMERA);
   if (code === -4) return 'unsupported';
   if (code !== 0) {
     console.warn('[call] background refused', bg, code);
+    fallbackCameraFeed();
     return 'failed';
   }
+  virtualOn = enabled;
   return 'ok';
 }
 
 function banubaBackground(bg, path) {
   const scripts = toBanuba(bg, path);
-  if (!scripts.length) return banubaProperty('unload_effect', BANUBA.effect) === 0 ? 'ok' : 'failed';
-  // Loading the effect again clears whatever was behind you before.
+  try {
+    banubaProperty('unload_effect', BANUBA.effect);
+  } catch {}
+  if (!scripts.length) return 'ok';
   if (banubaProperty('load_effect', BANUBA.effect) !== 0) return 'failed';
   return scripts.every((js) => banubaProperty('eval_js', js) === 0) ? 'ok' : 'failed';
 }
@@ -300,23 +339,32 @@ function banubaBackground(bg, path) {
  * Puts what's behind you on the camera: Banuba where it's running, else
  * Agora's own. Resolves 'ok', 'unsupported' (this phone can't separate you
  * from the room fast enough), 'failed', or 'later' (no camera yet: it goes
- * on as the call starts).
+ * on as the call starts). A thrown extension never freezes the camera:
+ * the ordinary feed comes back.
  */
 async function applyBackground() {
   const bg = background;
   if (!engine) return 'later';
-  const path = await imagePath(bg);
-  // Something else was chosen, or the call ended, while the image was found.
-  if (bg !== background || !engine) return 'later';
-  if (banuba) {
-    const result = banubaBackground(bg, path);
-    if (result === 'ok') return result;
-    // Banuba wouldn't draw it: Agora does, from here on.
-    console.warn('[call] Banuba background failed, switching to Agora');
-    banuba = false;
-    engine.enableExtension(BANUBA.provider, BANUBA.extension, false);
+  try {
+    const path = await imagePath(bg);
+    // Something else was chosen, or the call ended, while the image was found.
+    if (bg !== background || !engine) return 'later';
+    if (banuba) {
+      const result = banubaBackground(bg, path);
+      if (result === 'ok') return result;
+      // Banuba wouldn't draw it: Agora does, from here on.
+      console.warn('[call] Banuba background failed, switching to Agora');
+      try {
+        engine.enableExtension(BANUBA.provider, BANUBA.extension, false);
+      } catch {}
+      banuba = false;
+    }
+    return agoraBackground(bg, path);
+  } catch (err) {
+    console.warn('[call] background failed, default camera', err?.message ?? err);
+    fallbackCameraFeed();
+    return 'failed';
   }
-  return agoraBackground(bg, path);
 }
 
 /** Chooses what's behind you (src/calls/backgrounds.js); see applyBackground for the result. */
@@ -329,6 +377,7 @@ export function setBackground(next) {
     engine.release();
     engine = null;
     engineAppId = null;
+    virtualOn = false;
   }
   return applyBackground();
 }
@@ -465,6 +514,27 @@ function setFacing(next) {
   facingListeners.forEach((fn) => fn(next));
 }
 
+/** The live encoder for the phone's heat: 1080p30, or 720p60 when it's hot. */
+function applyEncoder() {
+  if (!engine || !session) return;
+  const cfg = session.live ? encoderForThermal(thermal.current()) : PREVIEW;
+  engine.setVideoEncoderConfiguration(cfg);
+}
+
+function watchThermal() {
+  if (thermalOff) return;
+  thermal.start();
+  thermalOff = thermal.subscribe(() => {
+    applyEncoder();
+  });
+}
+
+function unwatchThermal() {
+  thermalOff?.();
+  thermalOff = null;
+  thermal.stop();
+}
+
 /** The call's token: the one fetched ahead if it's still fresh, else a new one. */
 async function passFor(channel) {
   const kept = passes.get(channel);
@@ -510,10 +580,11 @@ export async function prepare(channel, beauty) {
     setup(pass.appId);
     setFacing('front');
     setBeauty(beauty);
+    watchThermal();
     // What's behind you, from the first frame they see.
     if (background.mode !== 'off') applyBackground();
-    // Small and fast while it rings; join success steps it up to HD.
-    engine.setVideoEncoderConfiguration(PREVIEW);
+    // Small and fast while it rings; join success steps it up to HD (or 720p60 if the phone is already hot).
+    applyEncoder();
     if (s.camera) engine.startPreview();
     return true;
   })();
@@ -556,8 +627,8 @@ export async function join(channel, opts, attempt = 0) {
       if (session !== s) return;
       clearTimeout(s.timer);
       s.live = true;
-      engine.setVideoEncoderConfiguration(ENCODER);
-      // The camera reopens at 1080p: put the look back on it.
+      applyEncoder();
+      // The camera reopens at the live size: put the look back on it.
       reapply();
       // One small, reliable data stream for call messages (Privacy Mode).
       s.streamId = engine.createDataStream({ syncWithAudio: false, ordered: true });
@@ -657,26 +728,54 @@ export function leave() {
   clearTimeout(s.timer);
   // A call that ends cleanly proves Banuba didn't take the app down.
   if (banuba) endBanubaTrial();
+  destroyCamera();
   if (!engine) return;
   if (s.handler) engine.unregisterEventHandler(s.handler);
-  engine.stopPreview();
   if (s.joined) engine.leaveChannel();
 }
 
 /**
- * After a failure: leaves the channel and destroys the engine, so the next
- * attempt starts fresh, with a new engine and a new token.
+ * After a failure or a hang-up: leaves the channel and destroys the engine,
+ * so the next attempt starts fresh, with a new engine and a new token.
  */
 export function reset() {
   const channel = session?.channel;
   leave();
+  unwatchThermal();
   if (channel) passes.delete(channel);
   if (!engine) return;
-  if (banuba) engine.enableExtension(BANUBA.provider, BANUBA.extension, false);
+  resetBackgroundPipeline();
+  if (banuba) {
+    try {
+      banubaProperty('unload_effect', BANUBA.effect);
+      engine.enableExtension(BANUBA.provider, BANUBA.extension, false);
+    } catch {}
+  }
   banuba = false;
+  virtualOn = false;
   engine.release();
   engine = null;
   engineAppId = null;
+}
+
+/** The app went to the background with no call: an engine warmed up ahead is let go, camera and all. */
+export function releaseIdle() {
+  if (session || !engine) return;
+  reset();
+}
+
+/** Stops capturing: preview off and local video off, which lets go of the camera hardware. */
+function destroyCamera() {
+  if (!engine) return;
+  try {
+    engine.stopPreview();
+  } catch {}
+  try {
+    engine.enableLocalVideo(false);
+  } catch {}
+  try {
+    engine.muteLocalVideoStream(true);
+  } catch {}
 }
 
 /** Mute: the microphone keeps running (no click on unmute) but nothing is sent. */
@@ -685,14 +784,23 @@ export function setMuted(muted) {
 }
 
 // The camera on only while you want it on and the call is in sight.
+// Away (screen off, or the app backgrounded) fully destroys the capturer;
+// coming back opens it again.
 function applyCamera() {
   const s = session;
   if (!engine || !s?.camera) return;
   const on = !s.cameraOff && !away;
-  engine.enableLocalVideo(on);
-  engine.muteLocalVideoStream(!on);
-  if (on && s.joined) engine.updateChannelMediaOptions({ publishCameraTrack: true });
-  if (on) reapply();
+  if (!on) {
+    destroyCamera();
+    return;
+  }
+  engine.enableLocalVideo(true);
+  engine.muteLocalVideoStream(false);
+  if (s.joined) engine.updateChannelMediaOptions({ publishCameraTrack: true });
+  try {
+    engine.startPreview();
+  } catch {}
+  reapply();
 }
 
 /** Camera off really turns the camera off, not just the picture. */

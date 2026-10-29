@@ -112,6 +112,64 @@ describe('the camera, with Agora drawing the background', () => {
     await media.setBackground({ mode: 'off', id: null });
   });
 
+  test('pressing backdrops again and again: each one draws, from a clean pipeline every time', async () => {
+    await act(async () => {
+      await media.prepare('call-bg-repeat', { preset: 'natural', enabled: true });
+    });
+    const presses = [
+      { mode: 'studio', id: 'charcoal' },
+      { mode: 'studio', id: 'black' },
+      { mode: 'blur', id: 'f2.8' },
+      { mode: 'studio', id: 'charcoal' },
+      { mode: 'studio', id: 'charcoal' },
+      { mode: 'blur', id: 'f1.4' },
+    ];
+    for (const [i, choice] of presses.entries()) {
+      engine.enableVirtualBackground.mockClear();
+      expect(await media.setBackground(choice)).toBe('ok');
+      const calls = engine.enableVirtualBackground.mock.calls;
+      // From the second press on, the one before is switched off first, then the new one goes on.
+      if (i > 0) expect(calls[0][0]).toBe(false);
+      expect(calls.at(-1)[0]).toBe(true);
+      expect(calls.at(-1)[1]).toEqual(bg.toAgora(choice, calls.at(-1)[1].source).source);
+    }
+    expect(await media.setBackground({ mode: 'off', id: null })).toBe('ok');
+  });
+
+  test('presses fired back to back without waiting: the last one wins', async () => {
+    await act(async () => {
+      await media.prepare('call-bg-burst', { preset: 'natural', enabled: true });
+    });
+    const results = await Promise.all([
+      media.setBackground({ mode: 'studio', id: 'black' }),
+      media.setBackground({ mode: 'studio', id: 'warm-grey' }),
+      media.setBackground({ mode: 'blur', id: 'f4' }),
+    ]);
+    expect(results.at(-1)).toBe('ok');
+    expect(engine.enableVirtualBackground).toHaveBeenLastCalledWith(true, { background_source_type: 3, blur_degree: 1 }, { modelType: 1 }, 2);
+    await media.setBackground({ mode: 'off', id: null });
+  });
+
+  test('a backdrop that throws or is refused falls back to the plain camera instead of freezing', async () => {
+    await act(async () => {
+      await media.prepare('call-bg-throw', { preset: 'natural', enabled: true });
+    });
+    engine.enableVirtualBackground.mockImplementationOnce(() => {
+      throw new Error('segmentation crashed');
+    });
+    expect(await media.setBackground({ mode: 'studio', id: 'charcoal' })).toBe('failed');
+    expect(engine.enableVirtualBackground.mock.calls.at(-1)[0]).toBe(false);
+
+    engine.enableVirtualBackground.mockReturnValueOnce(-1);
+    expect(await media.setBackground({ mode: 'blur', id: 'f2.8' })).toBe('failed');
+    expect(engine.enableVirtualBackground.mock.calls.at(-1)[0]).toBe(false);
+
+    // And the next press still works.
+    expect(await media.setBackground({ mode: 'studio', id: 'black' })).toBe('ok');
+    expect(engine.enableVirtualBackground.mock.calls.at(-1)[0]).toBe(true);
+    await media.setBackground({ mode: 'off', id: null });
+  });
+
   test('tap to focus: focus and exposure at the tap, turned back for the mirrored front camera', async () => {
     await act(async () => {
       await media.prepare('call-focus', { preset: 'natural', enabled: true });
@@ -320,5 +378,53 @@ describe('the Background sheet on the call screen', () => {
     await user.press(screen.getByTestId('call-filters-button'));
     expect(screen.queryByTestId('call-background')).toBeNull();
     expect(screen.getByTestId('call-filters')).toBeOnTheScreen();
+  });
+
+  test('the Backdrop button pressed many times in a row keeps working, and a crash falls back to the plain camera', async () => {
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    await render(
+      <PremiumProvider>
+        <CallProvider>
+          <Dial />
+        </CallProvider>
+      </PremiumProvider>,
+    );
+    await user.press(screen.getByText('Call Kofi'));
+    await act(async () => {});
+
+    // Open and close the sheet, picking a different backdrop each time.
+    const order = ['charcoal', 'black', 'warm-grey', 'charcoal', 'black'];
+    for (const id of order) {
+      await user.press(screen.getByTestId('call-background-button'));
+      expect(screen.getByTestId('call-background')).toBeOnTheScreen();
+      await user.press(screen.getByTestId(`call-backdrop-${id}`));
+      await act(async () => {});
+      const [on, source] = engine.enableVirtualBackground.mock.calls.at(-1);
+      expect(on).toBe(true);
+      expect(source.color).toBe(bg.hexToInt(bg.STUDIO.find((s) => s.id === id).hex));
+      expect(screen.getByTestId('call-background-now')).toHaveTextContent(`Studio · ${bg.STUDIO.find((s) => s.id === id).label}`);
+      expect(screen.queryByTestId('call-background-failed')).toBeNull();
+      await user.press(screen.getByTestId('call-background-button'));
+    }
+
+    // The extension throws: the plain camera comes back, and the sheet says so.
+    await user.press(screen.getByTestId('call-background-button'));
+    engine.enableVirtualBackground.mockImplementationOnce(() => 0).mockImplementationOnce(() => {
+      throw new Error('extension died');
+    });
+    await user.press(screen.getByTestId('call-backdrop-warm-grey'));
+    await act(async () => {});
+    expect(engine.enableVirtualBackground.mock.calls.at(-1)[0]).toBe(false);
+    expect(screen.getByTestId('call-background-failed')).toBeOnTheScreen();
+    expect(screen.getByTestId('call-background-now')).toHaveTextContent('Off');
+
+    // And it recovers on the very next press.
+    await user.press(screen.getByTestId('call-backdrop-charcoal'));
+    await act(async () => {});
+    expect(engine.enableVirtualBackground).toHaveBeenLastCalledWith(true, expect.objectContaining({ color: 0x1a1a1a }), { modelType: 1 }, 2);
+    expect(screen.queryByTestId('call-background-failed')).toBeNull();
+
+    await user.press(screen.getByTestId('call-end'));
+    await act(async () => jest.advanceTimersByTime(2000));
   });
 });

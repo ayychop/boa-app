@@ -12,6 +12,9 @@
 /** 1080p at 30 fps for the live call. */
 export const HD = Object.freeze({ width: 1920, height: 1080, fps: 30 });
 
+/** 720p at 60 fps when the phone is hot: less work per frame, motion stays smooth. */
+export const COOL = Object.freeze({ width: 1280, height: 720, fps: 60 });
+
 /** setVideoEncoderConfiguration while it rings: 360p at 15 fps opens the camera fast. */
 export const PREVIEW = Object.freeze({
   dimensions: { width: 640, height: 360 },
@@ -41,6 +44,27 @@ export const ENCODER = Object.freeze({
   // (LocalVideo's canvas).
   mirrorMode: 2,
 });
+
+/**
+ * Live encoder when thermal state is WARNING or CRITICAL. Keep 60 fps so
+ * the picture doesn't look choppy; drop resolution instead of frames.
+ * MaintainFramerate + PreferFrameRate: on a weak network, keep the rate.
+ */
+export const COOL_ENCODER = Object.freeze({
+  dimensions: { width: COOL.width, height: COOL.height },
+  frameRate: COOL.fps,
+  bitrate: 2200, // Kbps: Agora's figure for clean 720p60
+  minBitrate: -1,
+  orientationMode: 0,
+  degradationPreference: 1, // MaintainFramerate
+  advanceOptions: { compressionPreference: 0 }, // PreferFrameRate
+  mirrorMode: 2,
+});
+
+/** The live encoder for this thermal state. Hot phones use COOL_ENCODER. */
+export function encoderForThermal(state) {
+  return state === 'WARNING' || state === 'CRITICAL' ? COOL_ENCODER : ENCODER;
+}
 
 /** The preview's mirror (VideoCanvas.mirrorMode): mirrored for the front camera, true to life for the back. */
 export const MIRROR_ON = 1; // VideoMirrorModeEnabled

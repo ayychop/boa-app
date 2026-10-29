@@ -135,3 +135,22 @@ export function addScreenListener(fn) {
   const sub = native.addListener('onScreenChange', (e) => fn(e?.on !== false));
   return () => sub.remove();
 }
+
+/** The phone's thermal state: NOMINAL, FAIR, WARNING or CRITICAL. */
+export function thermalState() {
+  try {
+    return native?.thermalState?.() || 'NOMINAL';
+  } catch {
+    return 'NOMINAL';
+  }
+}
+
+/** Calls fn(status) as the phone heats or cools; returns an unsubscribe function. */
+export function addThermalListener(fn) {
+  if (!native) return () => {};
+  try {
+    fn(thermalState());
+  } catch {}
+  const sub = native.addListener('onThermalChange', (e) => fn(e?.status || 'NOMINAL'));
+  return () => sub.remove();
+}

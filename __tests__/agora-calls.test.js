@@ -376,15 +376,16 @@ describe('Agora video calls', () => {
     fetchToken.mockRejectedValue(new Error('Video calls are not set up yet.'));
     engine.joinChannel.mockClear();
     engine.release.mockClear();
+    engine.initialize.mockClear();
     await mount();
     await act(async () => mockSignal('ring', { callId: 'a7c3e1f0-0000-4000-8000-000000000001', from: { id: 'user-kofi', name: 'Kofi Boateng' } }));
     await user.press(screen.getByTestId('call-accept'));
     await act(async () => {});
     expect(engine.joinChannel).not.toHaveBeenCalled();
     expect(screen.getByTestId('call-video-note')).toHaveTextContent("Video couldn't connect: Video calls are not set up yet.");
-    // Fetched while it rang, on answer, and once more from scratch, then the engine is let go.
+    // Fetched while it rang, on answer, and once more from scratch; no engine is left running.
     expect(fetchToken).toHaveBeenCalledTimes(3);
-    expect(engine.release).toHaveBeenCalled();
+    expect(engine.release.mock.calls.length).toBe(engine.initialize.mock.calls.length);
     fetchToken.mockResolvedValue({ appId: 'boa-app-id', token: 'tok-1', uid: 4242 });
     await user.press(screen.getByTestId('call-end'));
     await act(async () => jest.advanceTimersByTime(2000));

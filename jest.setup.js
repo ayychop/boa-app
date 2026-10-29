@@ -335,6 +335,11 @@ jest.mock('./modules/boa-call', () => {
       screens.add(fn);
       return () => screens.delete(fn);
     }),
+    thermalState: jest.fn(() => 'NOMINAL'),
+    addThermalListener: jest.fn((fn) => {
+      fn('NOMINAL');
+      return () => {};
+    }),
     __decline: (callId) => declines.forEach((fn) => fn(callId)),
     __pip: (active) => pips.forEach((fn) => fn(active)),
     __hangUp: () => hangUps.forEach((fn) => fn()),

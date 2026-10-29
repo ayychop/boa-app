@@ -149,12 +149,34 @@ export function CallProvider({ children }) {
   }, []);
 
   // Saved at once and sent to the camera; a phone that can't do it says so.
+  // Only the latest press counts: an earlier one finishing late can't
+  // overwrite it. A failure goes back to the plain camera, never a frozen one.
+  const backgroundSeq = useRef(0);
   const setBackground = useCallback((next) => {
+    const seq = ++backgroundSeq.current;
     setBackgroundState(next);
     AsyncStorage.setItem(BACKGROUND_KEY, JSON.stringify(next)).catch(() => {});
-    Promise.resolve(media.setBackground(next))
-      .then((status) => setBackgroundStatus(status ?? 'ok'))
-      .catch(() => setBackgroundStatus('failed'));
+    const fallBack = () => {
+      if (seq !== backgroundSeq.current) return;
+      setBackgroundStatus('failed');
+      setBackgroundState(DEFAULT_BACKGROUND);
+      AsyncStorage.setItem(BACKGROUND_KEY, JSON.stringify(DEFAULT_BACKGROUND)).catch(() => {});
+    };
+    let pending;
+    try {
+      pending = Promise.resolve(media.setBackground(next));
+    } catch (err) {
+      console.warn('[call] backdrop threw', err?.message ?? err);
+      fallBack();
+      return;
+    }
+    pending
+      .then((status) => {
+        if (seq !== backgroundSeq.current) return;
+        if (status === 'failed') fallBack();
+        else setBackgroundStatus(status ?? 'ok');
+      })
+      .catch(fallBack);
   }, []);
 
   // Tap to focus, from the self view.
@@ -200,7 +222,11 @@ export function CallProvider({ children }) {
   const [appState, setAppState] = useState(AppState.currentState);
   const [screenOn, setScreenOn] = useState(true);
   useEffect(() => {
-    const sub = AppState.addEventListener('change', setAppState);
+    const sub = AppState.addEventListener('change', (state) => {
+      setAppState(state);
+      // No call on: nothing should hold the camera while the app is away.
+      if (state === 'background' && !callRef.current) media.releaseIdle();
+    });
     return () => sub.remove();
   }, []);
   useEffect(() => BoaCall.addScreenListener(setScreenOn), []);
@@ -231,10 +257,8 @@ export function CallProvider({ children }) {
   // A call ends: say why for a moment, then close the screen.
   const finish = useCallback((reason = 'ended') => {
     clearTimers();
-    // A call that never connected (no answer, or nobody to ring) leaves
-    // nothing behind: the engine goes too, so the next call starts fresh.
-    if (reason === 'missed' || reason === 'unreachable') media.reset();
-    else media.leave();
+    // Every hang-up destroys the camera engine so the next call starts fresh.
+    media.reset();
     if (callRef.current) media.forget(callRef.current.id);
     // Screenshots come back the moment the call ends, not when the screen closes.
     if (controlsRef.current.privacy) blockScreenshots(false);
@@ -497,7 +521,7 @@ export function CallProvider({ children }) {
   useEffect(
     () => () => {
       clearTimers();
-      media.leave();
+      media.reset();
       if (controlsRef.current.privacy) blockScreenshots(false);
     },
     [],

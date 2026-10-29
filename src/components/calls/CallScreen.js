@@ -301,6 +301,7 @@ const BACKGROUND_TABS = [
   { id: 'blur', label: 'Blur', icon: 'aperture' },
 ];
 const UNSUPPORTED_NOTE = "This phone can't cut you out of the room smoothly enough for a backdrop. Your call is unchanged.";
+const FAILED_NOTE = "That backdrop didn't load, so you're on your normal camera. Try it again, or pick another.";
 
 /** One choice in the sheet: a framed tile, gold when it's on. */
 function BackdropTile({ on, label, detail, onPress, width, height, children, testID }) {
@@ -410,6 +411,10 @@ function BackgroundPanel({ background, setBackground, status, beauty, setBeauty,
       {status === 'unsupported' ? (
         <Text style={styles.bgWarn} testID="call-background-unsupported">
           {UNSUPPORTED_NOTE}
+        </Text>
+      ) : status === 'failed' ? (
+        <Text style={styles.bgWarn} testID="call-background-failed" accessibilityLiveRegion="polite">
+          {FAILED_NOTE}
         </Text>
       ) : null}
       <ScrollView style={{ maxHeight }} showsVerticalScrollIndicator={false}>

@@ -724,7 +724,7 @@ function Thread({ navigation, route }) {
       name="chat-backdrop"
       fallback={() => <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: vibe.mesh?.[0] ?? colors.bg }]} testID="chat-backdrop-fallback" />}
     >
-      <ChatBackdrop vibe={vibe} motion={motion === MOTION} paused={!focused} />
+      <ChatBackdrop vibe={vibe} motion={motion === MOTION} paused={!focused || !!(calls?.call && calls.call.phase !== 'ended')} />
     </ErrorBoundary>
   );
   const header = (

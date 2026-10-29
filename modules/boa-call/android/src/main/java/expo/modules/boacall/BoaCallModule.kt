@@ -7,6 +7,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.net.Uri
 import android.os.Build
+import android.os.PowerManager
 import android.provider.Settings
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
@@ -64,11 +65,13 @@ class BoaCallModule : Module() {
 
   // The power button: the screen going off and on, for a call's camera (src/calls/media.native.js: setAway).
   private var screen: BroadcastReceiver? = null
+  // The phone heating up: drop the call camera to 720p60 (src/calls/thermal.js).
+  private var thermal: PowerManager.OnThermalStatusChangedListener? = null
 
   override fun definition() = ModuleDefinition {
     Name("BoaCall")
 
-    Events("onDecline", "onPipChange", "onHangUp", "onScreenChange")
+    Events("onDecline", "onPipChange", "onHangUp", "onScreenChange", "onThermalChange")
 
     OnCreate {
       CallDeclineReceiver.onDecline = { id -> sendEvent("onDecline", mapOf("callId" to id)) }
@@ -86,6 +89,16 @@ class BoaCallModule : Module() {
       // System broadcasts still arrive not exported; nothing from other apps does.
       appContext.reactContext?.let { c -> runCatching { ContextCompat.registerReceiver(c, receiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED) } }
       screen = receiver
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        val pm = appContext.reactContext?.getSystemService(Context.POWER_SERVICE) as? PowerManager
+        if (pm != null) {
+          val listener = PowerManager.OnThermalStatusChangedListener { status ->
+            sendEvent("onThermalChange", mapOf("status" to thermalName(status)))
+          }
+          runCatching { pm.addThermalStatusListener(listener) }
+          thermal = listener
+        }
+      }
     }
 
     OnDestroy {
@@ -94,6 +107,13 @@ class BoaCallModule : Module() {
       CallPip.onChange = null
       screen?.let { r -> runCatching { appContext.reactContext?.unregisterReceiver(r) } }
       screen = null
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        thermal?.let { listener ->
+          val pm = appContext.reactContext?.getSystemService(Context.POWER_SERVICE) as? PowerManager
+          runCatching { pm?.removeThermalStatusListener(listener) }
+        }
+      }
+      thermal = null
     }
 
     /** A call is on (placed, or answered): hold it in the foreground so the screen can go off. */
@@ -185,5 +205,19 @@ class BoaCallModule : Module() {
     AsyncFunction("leaveLockScreen") {
       CallLockScreen.leave()
     }.runOnQueue(Queues.MAIN)
+
+    /** NOMINAL, FAIR, WARNING or CRITICAL — WARNING+ cools the camera to 720p60. */
+    Function("thermalState") {
+      if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return@Function "NOMINAL"
+      val pm = context.getSystemService(Context.POWER_SERVICE) as? PowerManager ?: return@Function "NOMINAL"
+      thermalName(pm.currentThermalStatus)
+    }
   }
+}
+
+private fun thermalName(status: Int): String = when (status) {
+  PowerManager.THERMAL_STATUS_NONE -> "NOMINAL"
+  PowerManager.THERMAL_STATUS_LIGHT, PowerManager.THERMAL_STATUS_MODERATE -> "FAIR"
+  PowerManager.THERMAL_STATUS_SEVERE -> "WARNING"
+  else -> "CRITICAL"
 }
