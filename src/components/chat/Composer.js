@@ -11,6 +11,7 @@ import { PulseDot } from '../ui';
 import { clock, downsample, level, Waveform } from './media';
 import { TYPING_EVERY_MS } from '../../chat/typing';
 import { vibeById } from '../../chat/vibes';
+import { READING } from '../../hooks/useLayout';
 import { colors, fonts, radius, space } from '../../theme';
 
 const MAX_LENGTH = 2000;
@@ -54,9 +55,15 @@ function GlowRing({ children, size = 42, testID, vibe }) {
  * (Android's blur needs a blur target view, and that view painted opaque
  * over the backdrop, which left the thread flat black).
  */
-export default function Composer({ onSend, onAttach, onVoice, onTyping, bottomInset = 0, onFocus, vibe = vibeById(), onLayout, style }) {
+export default function Composer({ onSend, onAttach, onVoice, onTyping, onStickers, replyTo, onCancelReply, bottomInset = 0, onFocus, vibe = vibeById(), onLayout, style }) {
   const [draft, setDraft] = useState('');
   const lastPing = useRef(0);
+  const input = useRef(null);
+  // Choosing Reply puts you straight into the field.
+  const replyId = replyTo?.message?.id;
+  useEffect(() => {
+    if (replyId) input.current?.focus?.();
+  }, [replyId]);
   const change = (text) => {
     setDraft(text);
     if (!onTyping) return;
@@ -146,6 +153,23 @@ export default function Composer({ onSend, onAttach, onVoice, onTyping, bottomIn
         end={{ x: 1, y: 0.5 }}
         style={styles.edgeLight}
       />
+      <View style={styles.inner}>
+      {replyTo && !recording ? (
+        <Animated.View entering={FadeIn.duration(160)} exiting={FadeOut.duration(120)} style={[styles.reply, { borderLeftColor: vibe.accent }]} testID="composer-reply">
+          <Ionicons name="arrow-undo" size={14} color={vibe.accent} />
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={[styles.replyWho, { color: vibe.accent }]} numberOfLines={1}>
+              Replying to {replyTo.who}
+            </Text>
+            <Text style={[styles.replyText, { color: vibe.light ? 'rgba(17,17,19,0.7)' : colors.textMuted }]} numberOfLines={1}>
+              {replyTo.text}
+            </Text>
+          </View>
+          <Pressable onPress={onCancelReply} accessibilityRole="button" accessibilityLabel="Cancel reply" hitSlop={10} testID="composer-reply-cancel">
+            <Ionicons name="close-circle" size={20} color={vibe.light ? 'rgba(17,17,19,0.45)' : colors.textFaint} />
+          </Pressable>
+        </Animated.View>
+      ) : null}
       {recording ? (
         <Animated.View entering={FadeIn.duration(160)} exiting={FadeOut.duration(120)} style={styles.row} testID="voice-recording">
           <Pressable onPress={() => finish(false)} accessibilityRole="button" accessibilityLabel="Discard voice note" hitSlop={10} style={styles.side}>
@@ -176,6 +200,7 @@ export default function Composer({ onSend, onAttach, onVoice, onTyping, bottomIn
             <Ionicons name="add" size={24} color={vibe.accent} />
           </Pressable>
           <TextInput
+            ref={input}
             value={draft}
             onChangeText={change}
             onFocus={onFocus}
@@ -190,6 +215,18 @@ export default function Composer({ onSend, onAttach, onVoice, onTyping, bottomIn
             accessibilityLabel="Message"
             testID="hub-composer"
           />
+          {onStickers && !typing ? (
+            <Pressable
+              onPress={onStickers}
+              accessibilityRole="button"
+              accessibilityLabel="Send an animated emoji"
+              hitSlop={6}
+              style={({ pressed }) => [styles.sticker, pressed && styles.pressed]}
+              testID="hub-stickers"
+            >
+              <Ionicons name="happy-outline" size={24} color={vibe.accent} />
+            </Pressable>
+          ) : null}
           {typing ? (
             <GlowRing testID="hub-send-glow" vibe={vibe}>
               <Pressable onPress={submit} accessibilityRole="button" accessibilityLabel="Send" hitSlop={6} style={({ pressed }) => [styles.send, pressed && styles.pressed]} testID="hub-send">
@@ -213,12 +250,15 @@ export default function Composer({ onSend, onAttach, onVoice, onTyping, bottomIn
           )}
         </View>
       )}
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   edgeLight: { position: 'absolute', top: 0, left: 0, right: 0, height: 1 },
+  // The glass spans the screen; the field and buttons sit in the thread's centred column.
+  inner: { width: '100%', maxWidth: READING, alignSelf: 'center' },
   wrap: {
     overflow: 'hidden',
     paddingHorizontal: space.md,
@@ -249,6 +289,20 @@ const styles = StyleSheet.create({
   },
   send: { width: 42, height: 42, borderRadius: 21, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
   mic: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' },
+  sticker: { width: 34, height: 42, alignItems: 'center', justifyContent: 'center' },
+  reply: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    marginBottom: space.sm,
+    paddingVertical: 6,
+    paddingHorizontal: space.md,
+    borderLeftWidth: 3,
+    borderRadius: radius.md,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+  },
+  replyWho: { fontFamily: fonts.chatBold, fontSize: 12.5 },
+  replyText: { fontFamily: fonts.chat, fontSize: 13, marginTop: 1 },
   recording: {
     flex: 1,
     height: 42,

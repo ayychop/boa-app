@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { interpolateColor, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { haptics } from '../utils/haptics';
+import { READING } from '../hooks/useLayout';
 import { colors, fonts, radius, space } from '../theme';
 
 // Building blocks for the full-screen pages over the tabs (alarms, the
@@ -344,7 +345,8 @@ export function Avatar({ uri, name = '?', size = 48, online = false, ring = fals
 }
 
 const styles = StyleSheet.create({
-  header: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingHorizontal: space.lg, paddingBottom: space.md },
+  // Lines up with the centred column under it on an unfolded screen.
+  header: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingHorizontal: space.lg, paddingBottom: space.md, width: '100%', maxWidth: READING, alignSelf: 'center' },
   headerLight: { position: 'absolute', left: space.lg, right: space.lg, bottom: 0, height: StyleSheet.hairlineWidth * 2 },
   inputSheen: { position: 'absolute', top: 0, left: space.md, right: space.md, height: 1 },
   round: {

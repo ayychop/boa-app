@@ -554,7 +554,7 @@ export default function HubWelcomeScreen({ navigation, route }) {
     <View style={styles.screen} testID="hub-welcome">
       <PageHeader kicker="Creative Hub" title={stage === 'needsProfile' ? 'Your profile' : 'BOA HUB'} backIcon="close" onBack={() => navigation.goBack()} />
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-        <ScrollView contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + space.xxl }]} keyboardShouldPersistTaps="handled">
+        <ScrollView contentContainerStyle={[styles.body, styles.form, { paddingBottom: insets.bottom + space.xxl }]} keyboardShouldPersistTaps="handled">
           <HubGate stage={stage} />
         </ScrollView>
       </KeyboardAvoidingView>
@@ -565,6 +565,8 @@ export default function HubWelcomeScreen({ navigation, route }) {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   body: { padding: space.xl, paddingTop: space.sm },
+  // Sign-in and sign-up fields at a form's width, centred, on an unfolded screen.
+  form: { width: '100%', maxWidth: 560, alignSelf: 'center' },
   hero: {
     padding: space.xl,
     borderRadius: 20,

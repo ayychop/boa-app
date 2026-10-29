@@ -11,6 +11,7 @@ import NowPlaying from '../../components/hub/NowPlaying';
 import { GoldBadge } from '../../components/ui';
 import { colors, fonts, radius, space, type } from '../../theme';
 import { ListSkeleton, LoadingDots } from '../../components/Skeleton';
+import { column } from '../../hooks/useLayout';
 
 function PersonRow({ person, online, onPress, index }) {
   const status = statusLine(person);
@@ -108,7 +109,7 @@ export default function HubDirectoryScreen({ navigation }) {
         onEndReached={() => {
           if (more && state === 'ready') load(page + 1);
         }}
-        contentContainerStyle={{ paddingBottom: insets.bottom + space.xxl }}
+        contentContainerStyle={[column, { paddingBottom: insets.bottom + space.xxl }]}
         keyboardShouldPersistTaps="handled"
         ListHeaderComponent={
           <View style={styles.filters}>

@@ -25,6 +25,7 @@ import ZenButton from '../components/display/ZenButton';
 import EqualizerSheet from '../components/radio/EqualizerSheet';
 import { IconButton } from '../components/kit';
 import Reactions from '../components/Reactions';
+import { likeStation } from '../audio/liked';
 import { GoldBadge, PulseDot } from '../components/ui';
 import { genreForVibes, useUser } from '../context/UserContext';
 import { usePremium } from '../context/PremiumContext';
@@ -479,7 +480,9 @@ export default function RadioScreen({ route, navigation }) {
             {info}
           </Animated.View>
         )}
-        {isFocused && player.current?.kind === 'radio' && player.status === 'playing' && <Reactions style={[{ right: space.lg }, { bottom: bottomPad - space.xs }]} />}
+        {isFocused && player.current?.kind === 'radio' && player.status === 'playing' && (
+          <Reactions style={[{ right: space.lg }, { bottom: bottomPad - space.xs }]} onReact={(kind) => likeStation(player.current, kind)} />
+        )}
         {data.status === 'ready' && !player.current && stations.length > 0 && (
           <Text
             style={[

@@ -18,6 +18,7 @@ import { CardRowSkeleton, ThreadSkeleton } from '../../components/Skeleton';
 import { haptics } from '../../utils/haptics';
 import { placeLine } from '../../api/dayOne';
 import { askForCallWakeUp } from '../../calls/wakeUp';
+import { column } from '../../hooks/useLayout';
 import { colors, fonts, radius, space, type } from '../../theme';
 
 const roleLabel = (id) => hub.ROLES.find((r) => r.id === id)?.label ?? null;
@@ -296,7 +297,7 @@ export default function ChatHome({ navigation, bottomPadding }) {
       >
         <View style={[styles.hero, { paddingTop: insets.top + space.lg }]}>
           <HeroGlow />
-          <View style={styles.heroRow}>
+          <View style={[styles.heroRow, column]}>
             <Pressable onPress={() => navigation.navigate('HubProfile')} accessibilityRole="button" accessibilityLabel="Your Hub profile">
               <Avatar uri={profile?.avatar_url} name={profile ? nameOf(profile) : '?'} size={72} ring />
             </Pressable>
@@ -338,6 +339,8 @@ export default function ChatHome({ navigation, bottomPadding }) {
           </View>
         </View>
 
+        {/* The light runs edge to edge; everything under it sits in a centred column. */}
+        <View style={column}>
         {/* Your conversations first: what you open the tab for. */}
         <SectionTitle kicker="Your inbox" title="Conversations" />
         <InboxFilters value={filter} onChange={setFilter} counts={counts} />
@@ -440,6 +443,7 @@ export default function ChatHome({ navigation, bottomPadding }) {
           </>
         )}
         {!pulse.ready && <CardRowSkeleton />}
+        </View>
       </ScrollView>
     </View>
   );

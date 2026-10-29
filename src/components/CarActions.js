@@ -4,6 +4,7 @@ import { usePremium } from '../context/PremiumContext';
 import { useHub } from '../context/HubContext';
 import { hypeStation, myRecentHype } from '../api/hype';
 import * as car from '../audio/car';
+import { likeStation } from '../audio/liked';
 
 /**
  * The heart and the fire on the car's now playing screen. The heart is
@@ -17,7 +18,15 @@ export default function CarActions() {
   const { userId } = useHub();
   // isSaved is new with every change to your saved stations, so the car's
   // heart follows a save or unsave made on the phone too.
-  useEffect(() => (hasPremium ? car.attachFavourites({ isSaved, toggle: toggleSaved }) : undefined), [hasPremium, isSaved, toggleSaved]);
+  // Hearting a station in the car makes it your last loved one too (Profile).
+  const toggle = useCallback(
+    (item) => {
+      if (!isSaved(item.id)) likeStation(item, 'heart');
+      return toggleSaved(item);
+    },
+    [isSaved, toggleSaved],
+  );
+  useEffect(() => (hasPremium ? car.attachFavourites({ isSaved, toggle }) : undefined), [hasPremium, isSaved, toggle]);
 
   // The stations you've fired today, so the car's fire shows as done.
   const [fired, setFired] = useState(() => new Set());
@@ -33,6 +42,7 @@ export default function CarActions() {
   const fire = useCallback((item) => {
     setFired((s) => new Set(s).add(item.id));
     hypeStation(item.id);
+    likeStation(item, 'fire', { hype: false });
   }, []);
   useEffect(() => (userId ? car.attachHype({ hyped, fire }) : undefined), [userId, hyped, fire]);
   return null;

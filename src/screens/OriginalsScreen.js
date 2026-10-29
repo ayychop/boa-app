@@ -12,6 +12,7 @@ import useLayout, { WIDE } from '../hooks/useLayout';
 import { colors, fonts, space, type } from '../theme';
 
 const GAP = 14;
+const CONTENT_MAX = 1200;
 // About how tall the copy under the art is (the slate line, title, logline
 // and buttons): the art leaves this much room above the tab bar and mini
 // player, so Play and Watch Trailer are in view before you scroll.
@@ -66,7 +67,8 @@ function Featured({ production, width, clear = 0 }) {
           <Slate>The slate</Slate>
         </View>
       </View>
-      <View style={styles.featuredBody}>
+      {/* The copy lines up with the centred sections below at any width. */}
+      <View style={[styles.featuredBody, { width: Math.min(width, CONTENT_MAX), alignSelf: 'center' }]}>
         <Slate color={colors.gold} lines={2}>
           Featured · {metaLine(production)}
         </Slate>
@@ -95,9 +97,11 @@ function EpisodeCard({ production, episode, width }) {
     <Tappable onPress={() => media.openEpisode(production, episode)} accessibilityRole="button" accessibilityLabel={`Play ${episode.title}`}>
       {/* Edge to edge: the still fills its frame, no blurred letterbox. */}
       <Poster production={{ ...production, backdrop: episode.image, status: 'available' }} width={width} showTitle={false} fit="cover" />
-      <View style={styles.episodeCaption}>
+      <View style={[styles.episodeCaption, { width }]}>
         <Slate>Ep 01</Slate>
-        <Text style={styles.episodeTitle}>{episode.title}</Text>
+        <Text style={styles.episodeTitle} numberOfLines={2}>
+          {episode.title}
+        </Text>
       </View>
     </Tappable>
   );
@@ -109,7 +113,7 @@ export default function OriginalsScreen() {
   // Extra room under the casting card too, so the last of the page scrolls
   // well clear of the mini player.
   const bottom = useBottomSpace(space.xxxl);
-  const contentWidth = Math.min(width, 1200);
+  const contentWidth = Math.min(width, CONTENT_MAX);
   const columns = contentWidth < 640 ? 2 : contentWidth < 1000 ? 3 : 4;
   const posterWidth = Math.floor((contentWidth - space.xl * 2 - GAP * (columns - 1)) / columns);
   const featured = featuredProduction;
@@ -153,7 +157,7 @@ export default function OriginalsScreen() {
           <Text style={[type.h1, { marginTop: space.md }]}>
             There is a role with <Text style={type.serif}>your name</Text> on it.
           </Text>
-          <Text style={[type.bodyMuted, { marginTop: space.sm }]}>
+          <Text style={[type.bodyMuted, { marginTop: space.sm, maxWidth: 560 }]}>
             Every production on this slate is casting, or will be. Get on our radar before the call goes out.
           </Text>
         </View>
@@ -165,13 +169,13 @@ export default function OriginalsScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   featuredTop: { position: 'absolute', left: space.xl + 8, right: space.xl + 8, flexDirection: 'row', justifyContent: 'space-between' },
-  featuredBody: { paddingHorizontal: space.xl, paddingTop: space.lg, maxWidth: 680 + space.xl * 2 },
+  featuredBody: { paddingHorizontal: space.xl, paddingTop: space.lg },
   srOnly: { position: 'absolute', width: 1, height: 1, opacity: 0, overflow: 'hidden' },
   featuredTitle: { fontSize: 48, lineHeight: 50, marginTop: space.md },
-  logline: { marginTop: space.md },
+  logline: { marginTop: space.md, maxWidth: 680 },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: space.md, marginTop: space.xl },
   block: { alignSelf: 'center', marginTop: space.xxl },
-  row: { flexDirection: 'row', gap: GAP, paddingHorizontal: space.xl },
+  row: { flexDirection: 'row', flexWrap: 'wrap', gap: GAP, paddingHorizontal: space.xl },
   episodeCaption: { paddingTop: 10, gap: 4 },
   episodeTitle: { fontFamily: fonts.semibold, fontSize: 15, color: colors.text },
   grid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: space.xl },

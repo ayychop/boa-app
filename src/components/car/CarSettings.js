@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -91,7 +91,7 @@ export default function CarSettings({ open, onClose }) {
 
   return (
     <BottomSheet open={open} onClose={onClose} dragAnywhere={false}>
-      <View style={styles.body} testID="car-settings">
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.body} showsVerticalScrollIndicator={false} testID="car-settings">
         <Slate dot>Car Settings</Slate>
         <Text style={[type.h1, { marginTop: space.sm }]}>
           Your car, <Text style={type.serif}>your stage.</Text>
@@ -134,13 +134,15 @@ export default function CarSettings({ open, onClose }) {
           })}
         </View>
         <Text style={styles.note}>Connected to the car now? It changes on the screen straight away.</Text>
-      </View>
+      </ScrollView>
     </BottomSheet>
   );
 }
 
 const styles = StyleSheet.create({
-  body: { paddingHorizontal: space.xl },
+  // Shrinks to the sheet so every theme scrolls into reach, even on a short or unfolded screen.
+  scroll: { flexShrink: 1 },
+  body: { paddingHorizontal: space.xl, paddingBottom: space.md },
   intro: { fontFamily: fonts.medium, fontSize: 13.5, lineHeight: 20, color: colors.textMuted, marginTop: space.sm, marginBottom: space.lg },
   section: { marginTop: space.xl, marginBottom: space.md },
   stage: { overflow: 'hidden', backgroundColor: '#050506' },
@@ -154,8 +156,9 @@ const styles = StyleSheet.create({
   dashSub: { fontFamily: fonts.medium, fontSize: 12, color: 'rgba(255,255,255,0.7)', marginTop: 2 },
   dashControls: { flexDirection: 'row', alignItems: 'center', gap: space.lg, marginTop: space.md },
   dashPlay: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: space.md },
-  tile: { width: '47%', flexGrow: 1, padding: space.sm, borderRadius: radius.lg, backgroundColor: 'rgba(18,18,22,0.6)', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
+  // Two fixed columns: an odd last theme keeps its tile size instead of stretching across.
+  grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: space.md },
+  tile: { width: '48%', padding: space.sm, borderRadius: radius.lg, backgroundColor: 'rgba(18,18,22,0.6)', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
   tileOn: { borderColor: colors.gold, borderWidth: 1.5, boxShadow: '0px 0px 18px rgba(226,168,75,0.3)' },
   tileArt: { aspectRatio: 1.6, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
   ringSmall: { width: 30, height: 30, borderRadius: 15, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },

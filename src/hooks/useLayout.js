@@ -8,6 +8,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 export const WIDE = 600;
 // Phones in landscape: the tab bar and mini player slim down below this.
 export const SHORT = 500;
+// Lists, forms and conversations stop growing here and sit centred, like
+// the Hub profile, so an unfolded Fold reads as a column, not a banner.
+export const READING = 760;
+export const column = { width: '100%', maxWidth: READING, alignSelf: 'center' };
 
 /**
  * Screen size for responsive layouts. Tab screens are padded by `side` on

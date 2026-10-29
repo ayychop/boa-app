@@ -531,10 +531,55 @@ export async function listMessages(conversationId, before = null, limit = 40) {
   return (check(await q) ?? []).filter((m) => m && !isExpired(m));
 }
 
-export async function sendMessage(conversationId, body) {
-  const res = await need().from('messages').insert({ conversation_id: conversationId, body: body.trim() }).select('*').single();
+// reply_to is only sent when there is one, so plain messages still send to
+// a database that doesn't have the column yet.
+const replyField = (replyTo) => (replyTo ? { reply_to: replyTo } : {});
+
+export async function sendMessage(conversationId, body, { replyTo = null } = {}) {
+  const res = await need()
+    .from('messages')
+    .insert({ conversation_id: conversationId, body: body.trim(), ...replyField(replyTo) })
+    .select('*')
+    .single();
   if (res.error) throw sendError(res.error);
   return res.data;
+}
+
+/** An animated emoji (src/chat/stickers.js); the body is the emoji itself. */
+export async function sendSticker(conversationId, emoji, { replyTo = null } = {}) {
+  const res = await need()
+    .from('messages')
+    .insert({ conversation_id: conversationId, kind: 'sticker', body: emoji, ...replyField(replyTo) })
+    .select('*')
+    .single();
+  if (res.error && /messages_(kind|body)_check/.test(res.error.message || '')) throw new Error("Animated emoji aren't switched on yet.");
+  if (res.error) throw sendError(res.error);
+  return res.data;
+}
+
+// ------------------------------------------------------------- reactions
+
+/**
+ * Reactions on these messages: [{ message_id, user_id, emoji }]. Empty if
+ * the database doesn't have reactions yet, so the thread still opens.
+ */
+export async function listReactions(messageIds) {
+  const ids = messageIds.filter((id) => id && !String(id).startsWith('pending-'));
+  if (!ids.length) return [];
+  const { data, error } = await need().from('message_reactions').select('message_id, user_id, emoji').in('message_id', ids);
+  return error ? [] : (data ?? []);
+}
+
+/** Your reaction on a message: set, or changed to another emoji. */
+export async function react(messageId, emoji) {
+  const { error } = await need().from('message_reactions').upsert({ message_id: messageId, emoji }, { onConflict: 'message_id,user_id' });
+  if (error) throw new Error(/message_reactions|schema cache|42P01/i.test(error.message) ? "Reactions aren't switched on yet." : error.message);
+}
+
+/** Takes your reaction off a message. */
+export async function unreact(messageId, userId) {
+  const { error } = await need().from('message_reactions').delete().eq('message_id', messageId).eq('user_id', userId);
+  if (error) throw new Error(error.message);
 }
 
 /** Removes one of your own messages, for both people (and its file, if it had one). */

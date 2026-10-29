@@ -12,6 +12,7 @@ import NowPlaying from '../../components/hub/NowPlaying';
 import { colors, fonts, radius, space, type } from '../../theme';
 import { haptics } from '../../utils/haptics';
 import { ThreadSkeleton } from '../../components/Skeleton';
+import { column } from '../../hooks/useLayout';
 
 /** "14:05" today, "Mon" this week, "12 Oct" before that. */
 export function chatTime(iso, now = new Date()) {
@@ -108,7 +109,7 @@ export default function HubChatsScreen({ navigation, inTab = false, bottomPaddin
           <ThreadRow conv={item} index={index} myId={userId} online={isOnline(item.otherId)} dayOne={dayOnes.has(item.otherId)} onPress={() => navigation.navigate('HubThread', { id: item.id })} />
         )}
         refreshControl={<RefreshControl refreshing={state === 'refreshing'} onRefresh={() => load(true)} tintColor={colors.gold} />}
-        contentContainerStyle={{ paddingBottom: bottomPadding ?? insets.bottom + space.xxl, flexGrow: 1 }}
+        contentContainerStyle={[column, { paddingBottom: bottomPadding ?? insets.bottom + space.xxl, flexGrow: 1 }]}
         ListEmptyComponent={
           state === 'loading' ? (
             <ThreadSkeleton rows={5} />

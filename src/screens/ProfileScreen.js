@@ -25,6 +25,7 @@ import { useHub } from '../context/HubContext';
 import { Avatar, BoaStarBadge } from '../components/kit';
 import DailySpark from '../components/DailySpark';
 import { replayTour } from '../api/onboarding';
+import { useLastLiked } from '../audio/liked';
 
 // Until you sign in, the profile card has a placeholder name.
 const LISTENER_NAME = 'BOA Listener';
@@ -32,6 +33,15 @@ const LISTENER_NAME = 'BOA Listener';
 const GRID_GAP = 12;
 
 const KIND_LABEL = { getSeen: 'Talent application', contact: 'Message to BOA' };
+
+/** "just now", "12m ago", "3h ago", "2d ago". */
+export function ago(iso, now = Date.now()) {
+  const m = Math.max(0, Math.round((now - new Date(iso).getTime()) / 60000));
+  if (m < 1) return 'just now';
+  if (m < 60) return `${m}m ago`;
+  const h = Math.round(m / 60);
+  return h < 24 ? `${h}h ago` : `${Math.round(h / 24)}d ago`;
+}
 
 function when(iso) {
   return new Date(iso).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
@@ -64,6 +74,7 @@ export default function ProfileScreen({ navigation }) {
   const [widgetOpen, setWidgetOpen] = useState(false);
   const [creditsOpen, setCreditsOpen] = useState(false);
   const [carOpen, setCarOpen] = useState(false);
+  const lastLoved = useLastLiked();
   const inner = Math.min(width, 1100) - space.xl * 2;
   const columns = inner >= 960 ? 3 : 2;
   const tileWidth = Math.floor((inner - GRID_GAP * (columns - 1)) / columns);
@@ -190,6 +201,47 @@ export default function ProfileScreen({ navigation }) {
             <Ionicons name="arrow-forward" size={20} color={colors.bg} />
           </Tappable>
         )}
+
+        {lastLoved ? (
+          <>
+            <Slate style={{ marginTop: space.xxl, marginBottom: space.md }}>Last loved</Slate>
+            <Tappable
+              onPress={() => {
+                player.play(lastLoved.station);
+                navigation.navigate('Radio', { station: lastLoved.station });
+              }}
+              scaleTo={0.98}
+              accessibilityRole="button"
+              accessibilityLabel={`Play ${lastLoved.station.name}, the station you last loved`}
+              testID="profile-last-loved"
+              style={styles.loved}
+            >
+              <LinearGradient colors={['#1D1710', '#0B0B0D']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+              <View>
+                <StationLogo station={lastLoved.station} size={56} rounded={16} fit="cover" />
+                <View style={styles.lovedEmoji}>
+                  <Text style={{ fontSize: 15 }}>{lastLoved.emoji}</Text>
+                </View>
+              </View>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={styles.lovedKicker}>YOU {lastLoved.emoji === '🔥' ? 'FIRED' : 'LOVED'} THIS · {ago(lastLoved.at).toUpperCase()}</Text>
+                <Text style={styles.lovedName} numberOfLines={1}>
+                  {lastLoved.station.name}
+                </Text>
+                <Text style={styles.linkDetail} numberOfLines={1}>
+                  {[lastLoved.station.country, lastLoved.station.bitrate ? `${lastLoved.station.bitrate} kbps` : null].filter(Boolean).join(' · ') || 'Live radio'}
+                </Text>
+              </View>
+              {player.current?.id === lastLoved.station.id && player.isPlaying ? (
+                <Ionicons name="pulse" size={20} color={colors.gold} />
+              ) : (
+                <View style={styles.lovedPlay}>
+                  <Ionicons name="play" size={15} color={colors.bg} style={{ marginLeft: 2 }} />
+                </View>
+              )}
+            </Tappable>
+          </>
+        ) : null}
 
         <Slate style={{ marginTop: space.xxl, marginBottom: space.md }}>My Library</Slate>
         {user.saved.length ? (
@@ -402,6 +454,32 @@ const styles = StyleSheet.create({
   },
   linkText: { fontFamily: fonts.semibold, fontSize: 15, color: colors.text },
   linkDetail: { fontFamily: fonts.medium, fontSize: 12, color: colors.textFaint, marginTop: 2 },
+  loved: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    padding: space.lg,
+    borderRadius: radius.lg,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(226,168,75,0.35)',
+  },
+  lovedEmoji: {
+    position: 'absolute',
+    right: -6,
+    bottom: -6,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.bgElevated,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+  },
+  lovedKicker: { fontFamily: fonts.monoMedium, fontSize: 9.5, letterSpacing: 1.4, color: colors.gold },
+  lovedName: { fontFamily: fonts.semibold, fontSize: 17, letterSpacing: -0.3, color: colors.text, marginTop: 3 },
+  lovedPlay: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.gold, boxShadow: '0px 4px 14px rgba(226,168,75,0.5)' },
   quote: { marginTop: space.lg, paddingLeft: space.lg, borderLeftWidth: 2, borderLeftColor: colors.gold },
   quoteText: { fontFamily: fonts.serif, fontSize: 24, lineHeight: 30, color: colors.text },
 });

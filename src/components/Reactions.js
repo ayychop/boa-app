@@ -71,10 +71,10 @@ function ReactionButton({ reaction, onReact }) {
   const style = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
   const press = () => {
     scale.value = withSequence(withTiming(0.8, { duration: 70 }), withSpring(1, { duration: 420, dampingRatio: 0.4 }));
-    onReact(reaction.emoji);
+    onReact(reaction);
   };
   return (
-    <Pressable onPress={press} accessibilityRole="button" accessibilityLabel={reaction.label} hitSlop={6}>
+    <Pressable onPress={press} accessibilityRole="button" accessibilityLabel={reaction.label} hitSlop={6} testID={`radio-react-${reaction.id}`}>
       <Animated.View style={[styles.button, style]}>
         <Text style={styles.buttonEmoji}>{reaction.emoji}</Text>
       </Animated.View>
@@ -84,22 +84,26 @@ function ReactionButton({ reaction, onReact }) {
 
 /**
  * Live reactions for what's playing: a floating glass bar of 🔥 / ❤️ that
- * sends a burst of floating emoji on each tap. Position it with `style`.
+ * sends a burst of floating emoji on each tap. onReact('fire' | 'heart')
+ * hears each one. Position it with `style`.
  */
-export default function Reactions({ style }) {
+export default function Reactions({ style, onReact }) {
   const reduceMotion = useReducedMotion();
   const [bursts, setBursts] = useState([]);
   const timers = useRef([]);
+  const heard = useRef(onReact);
+  heard.current = onReact;
 
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
 
   const react = useCallback(
-    (emoji) => {
+    ({ id: kind, emoji }) => {
       haptics.tap();
       const id = `${Date.now()}-${Math.random()}`;
       setBursts((b) => [...b, { id, emoji }]);
       // Each burst cleans itself up once its particles have faded.
       timers.current.push(setTimeout(() => setBursts((b) => b.filter((x) => x.id !== id)), LIFETIME_MS + 400));
+      heard.current?.(kind);
     },
     [],
   );

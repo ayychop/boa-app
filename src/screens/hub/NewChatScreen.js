@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, FlatList, Keyboard, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, FlatList, Keyboard, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { READING } from '../../hooks/useLayout';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { setStatusBarStyle } from 'expo-status-bar';
@@ -7,7 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import * as ImagePicker from 'expo-image-picker';
-import Animated, { withSpring, withTiming } from 'react-native-reanimated';
+import Animated, { FadeOut, withSpring, withTiming, ZoomIn } from 'react-native-reanimated';
 import { useHub } from '../../context/HubContext';
 import { useCallMaybe } from '../../context/CallContext';
 import { supabase } from '../../lib/supabase';
@@ -19,16 +20,24 @@ import {
   getConversation,
   isExpired,
   listMessages,
+  listReactions,
   markRead,
   acceptConversation,
   MEDIA_QUALITY,
   mediaKind,
   mediaProblem,
   openViewOnce,
+  react,
   sendMedia,
   sendMessage,
+  sendSticker,
+  unreact,
   uploadChatMedia,
 } from '../../api/hub';
+import MessageActions, { describeMessage } from '../../components/chat/MessageActions';
+import { ReactionChips, ReplyQuote } from '../../components/chat/MessageExtras';
+import StickerPicker from '../../components/chat/StickerPicker';
+import Sticker from '../../components/chat/Sticker';
 import { setOpenThread } from '../../chat/notifications';
 import { openTyping, TYPING_HOLD_MS } from '../../chat/typing';
 import { Avatar, BoaStarBadge, DayOneBadge } from '../../components/kit';
@@ -69,6 +78,7 @@ import { colors, fonts, radius, space, type } from '../../theme';
  */
 
 const PAGE = 40;
+const BUBBLE_MAX = 540;
 // Disappearing messages are swept from the screen this often.
 const EXPIRY_SWEEP_MS = 30000;
 const AVATAR = 40;
@@ -125,26 +135,90 @@ const discarded = new Set();
 
 // ------------------------------------------------------------ layer 2
 
-/** One message: tinted glass over the backdrop, yours in the vibe's gradient, theirs in smoke. */
-function Bubble({ message, mine, seen, fresh, vibe, onLongPress, onOpenMedia, onOpenOnce, opening }) {
+// Two taps this close together are a double tap (a ❤️).
+const DOUBLE_TAP_MS = 280;
+
+/** A ❤️ that swells up out of a double-tapped bubble and fades. */
+function HeartPop() {
+  return (
+    <Animated.View pointerEvents="none" entering={ZoomIn.springify().damping(9).stiffness(200)} exiting={FadeOut.duration(220)} style={styles.heartPop}>
+      <Sticker emoji="❤️" size={64} />
+    </Animated.View>
+  );
+}
+
+/**
+ * One message: tinted glass over the backdrop, yours in the vibe's
+ * gradient, theirs in smoke. A reply carries a quote of what it answers;
+ * reactions hang off its lower edge. Hold it for reactions and Reply;
+ * double tap it for a ❤️. An animated emoji sticker has no bubble at all.
+ */
+function Bubble({ message, mine, seen, fresh, vibe, reactions, myId, quoted, quotedWho, flash, maxWidth, onLongPress, onReact, onQuote, onOpenMedia, onOpenOnce, opening }) {
   const once = !!message.view_once && (message.kind === 'image' || message.kind === 'video');
   const media = !once && (message.kind === 'image' || message.kind === 'video');
   const voice = message.kind === 'voice';
+  const sticker = message.kind === 'sticker';
   const caption = message.body?.trim();
   const status = message.failed ? 'Not sent · hold to retry' : message.pending ? 'Sending…' : chatTime(message.created_at);
   const left = message.expires_at ? timeLeft(message.expires_at) : null;
   const max = vibe.light ? 1 : mine ? MINE_MAX : THEIRS_MAX;
   const fill = mine ? vibe.mine.map((c) => seeThrough(c, max)) : vibe.theirs.map((c) => seeThrough(c, max));
+  const lastTap = useRef(0);
+  const [hearted, setHearted] = useState(0);
+  useEffect(() => {
+    if (!hearted) return undefined;
+    const t = setTimeout(() => setHearted(0), 750);
+    return () => clearTimeout(t);
+  }, [hearted]);
+  const tap = () => {
+    if (message.pending || message.failed) return;
+    const now = Date.now();
+    if (now - lastTap.current < DOUBLE_TAP_MS) {
+      lastTap.current = 0;
+      haptics.tap();
+      setHearted(now);
+      onReact?.('❤️', true);
+    } else lastTap.current = now;
+  };
+  const meta = (
+    <Text style={[styles.meta, mine ? { color: vibe.mineMeta } : vibe.light && { color: vibe.inkMuted }, (media || sticker) && { paddingHorizontal: space.xs }, sticker && !vibe.light && { color: colors.textMuted }]}>
+      {left ? (
+        <>
+          <Ionicons name="timer-outline" size={9} /> {left} ·{' '}
+        </>
+      ) : null}
+      {status}
+      {seen ? ' · Seen' : ''}
+    </Text>
+  );
+  const quote = message.reply_to ? <ReplyQuote quoted={quoted} who={quotedWho} mine={mine && !sticker} vibe={vibe} onPress={onQuote} /> : null;
   return (
     <Animated.View
       entering={fresh ? (mine ? riseMine : riseTheirs) : undefined}
       style={[styles.bubbleRow, mine && { justifyContent: 'flex-end' }]}
       testID={fresh ? `hub-message-fresh-${message.id}` : undefined}
     >
+      <View style={[styles.bubbleCol, maxWidth ? { maxWidth } : null, { alignItems: mine ? 'flex-end' : 'flex-start' }]}>
+      {sticker ? (
+        <Pressable
+          onPress={tap}
+          onLongPress={onLongPress}
+          delayLongPress={350}
+          accessibilityHint="Hold for reactions and reply"
+          style={[styles.stickerMsg, message.pending && { opacity: 0.6 }, flash && { backgroundColor: vibe.accentSoft }]}
+          testID={`hub-message-${message.id}`}
+        >
+          {quote}
+          <Sticker emoji={message.body} size={128} />
+          {meta}
+          {hearted ? <HeartPop key={hearted} /> : null}
+        </Pressable>
+      ) : (
       <Pressable
+        onPress={tap}
         onLongPress={onLongPress}
         delayLongPress={350}
-        accessibilityHint={mine ? 'Hold to delete' : 'Hold to report'}
+        accessibilityHint="Hold for reactions and reply. Double tap to love it."
         style={[
           styles.bubble,
           mine
@@ -153,12 +227,14 @@ function Bubble({ message, mine, seen, fresh, vibe, onLongPress, onOpenMedia, on
           vibe.radius && { borderRadius: vibe.radius },
           media && styles.mediaBubble,
           message.pending && !media && { opacity: 0.6 },
+          flash && { borderColor: vibe.accent, borderWidth: 1.5 },
         ]}
         testID={`hub-message-${message.id}`}
       >
         <LinearGradient colors={fill} start={{ x: 0, y: 0 }} end={{ x: 0.5, y: 1 }} style={StyleSheet.absoluteFill} />
         {/* The glass's top edge catching the light. */}
         <View pointerEvents="none" style={[styles.sheen, mine && { backgroundColor: 'rgba(255,255,255,0.28)' }]} />
+        {quote}
         {media ? <MediaTile message={message} onOpen={onOpenMedia} /> : null}
         {once ? (
           <ViewOnceTile message={message} mine={mine} onOpen={onOpenOnce} opening={opening} accent={mine ? vibe.mineText : vibe.accent} textColor={mine ? vibe.mineText : vibe.theirsText} />
@@ -176,16 +252,12 @@ function Bubble({ message, mine, seen, fresh, vibe, onLongPress, onOpenMedia, on
             {message.body}
           </Text>
         ) : null}
-        <Text style={[styles.meta, mine ? { color: vibe.mineMeta } : vibe.light && { color: vibe.inkMuted }, media && { paddingHorizontal: space.xs }]}>
-          {left ? (
-            <>
-              <Ionicons name="timer-outline" size={9} /> {left} ·{' '}
-            </>
-          ) : null}
-          {status}
-          {seen ? ' · Seen' : ''}
-        </Text>
+        {meta}
+        {hearted ? <HeartPop key={hearted} /> : null}
       </Pressable>
+      )}
+      <ReactionChips reactions={reactions} myId={myId} mine={mine} vibe={vibe} onToggle={(emoji) => onReact?.(emoji)} />
+      </View>
     </Animated.View>
   );
 }
@@ -311,6 +383,11 @@ function Header({ name, person, online, badge, status, vibe, motion, onBack, onP
 
 function Thread({ navigation, route }) {
   const insets = useSafeAreaInsets();
+  // Unfolded, the conversation is a centred column and a bubble stops at a
+  // comfortable line length instead of 80% of the whole screen.
+  const { width: windowWidth } = useWindowDimensions();
+  const gutter = Math.max(space.lg, (windowWidth - READING) / 2);
+  const bubbleMax = Math.min((windowWidth - gutter * 2) * 0.8, BUBBLE_MAX);
   const id = route.params?.id;
   const { userId, isOnline, blocked, block, unblock, chatTheme } = useHub();
   // A message request (they wrote, you've never answered): no "Seen" goes
@@ -324,6 +401,15 @@ function Thread({ navigation, route }) {
   const [older, setOlder] = useState('idle'); // idle | loading | done
   const [reporting, setReporting] = useState(null);
   const [viewing, setViewing] = useState(null);
+  // Reactions by message id: [{ user_id, emoji }].
+  const [reactions, setReactions] = useState({});
+  // The held message (its reactions and actions), the one being replied
+  // to, the sticker picker ({ purpose, message }), and a quoted message
+  // lit up after jumping to it.
+  const [holding, setHolding] = useState(null);
+  const [replyTo, setReplyTo] = useState(null);
+  const [stickers, setStickers] = useState(null);
+  const [flashId, setFlashId] = useState(null);
   // A picked photo or video waiting on the send sheet, and its View once switch.
   const [picked, setPicked] = useState(null);
   const [viewOnce, setViewOnce] = useState(false);
@@ -362,6 +448,24 @@ function Thread({ navigation, route }) {
   // Messages already on screen; anything new gets the entrance.
   const known = useRef(new Set());
   const know = (rows) => rows.forEach((m) => m?.id && known.current.add(m.id));
+  // Reactions for a page of messages, fetched beside it.
+  const loadReactions = useCallback((rows) => {
+    listReactions(rows.map((m) => m.id))
+      .then((list) => {
+        if (!alive.current || !list.length) return;
+        setReactions((all) => {
+          const next = { ...all };
+          for (const r of list) next[r.message_id] = [...(next[r.message_id] ?? []).filter((x) => x.user_id !== r.user_id), { user_id: r.user_id, emoji: r.emoji }];
+          return next;
+        });
+      })
+      .catch(() => {});
+  }, []);
+  const putReaction = (messageId, who, emoji) =>
+    setReactions((all) => {
+      const rest = (all[messageId] ?? []).filter((r) => r.user_id !== who);
+      return { ...all, [messageId]: emoji ? [...rest, { user_id: who, emoji }] : rest };
+    });
 
   useEffect(() => {
     alive.current = true;
@@ -413,6 +517,7 @@ function Thread({ navigation, route }) {
       requestRef.current = !!c?.request;
       know(page);
       setMessages(page);
+      loadReactions(page);
       setOlder(page.length < PAGE ? 'done' : 'idle');
       setState('ready');
       if (!c?.request) markRead(id).catch(() => {});
@@ -421,7 +526,7 @@ function Thread({ navigation, route }) {
       setError(err.message);
       setState('error');
     }
-  }, [id, userId]);
+  }, [id, userId, loadReactions]);
 
   useEffect(() => {
     if (id && userId) load();
@@ -451,6 +556,7 @@ function Thread({ navigation, route }) {
       if (!alive.current) return;
       know(page);
       setMessages((m) => merge(m, page));
+      loadReactions(page);
       setOlder(page.length < PAGE ? 'done' : 'idle');
     } catch {
       if (alive.current) setOlder('idle');
@@ -477,6 +583,17 @@ function Thread({ navigation, route }) {
       // Deletes can't be filtered by thread; only the id comes through.
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'messages' }, ({ old }) => {
         if (old?.id) setMessages((l) => l.filter((m) => m.id !== old.id));
+      })
+      // Reactions, theirs and yours from another phone.
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'message_reactions', filter: `conversation_id=eq.${id}` }, ({ new: r }) => {
+        if (r?.message_id) putReaction(r.message_id, r.user_id, r.emoji);
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'message_reactions', filter: `conversation_id=eq.${id}` }, ({ new: r }) => {
+        if (r?.message_id) putReaction(r.message_id, r.user_id, r.emoji);
+      })
+      // Deletes can't be filtered; the whole old row comes through (replica identity full).
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'message_reactions' }, ({ old: r }) => {
+        if (r?.message_id && r.conversation_id === id) putReaction(r.message_id, r.user_id, null);
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'conversations', filter: `id=eq.${id}` }, ({ new: c }) => {
         setConv((prev) => (prev ? { ...prev, ...c, theirReadAt: c[prev.user_a === userId ? 'b_last_read_at' : 'a_last_read_at'] } : prev));
@@ -530,18 +647,64 @@ function Thread({ navigation, route }) {
     Alert.alert(title, err.message);
   };
 
-  const send = async (text, retryId = null) => {
+  // The message being answered goes with the next send, then the reply bar closes.
+  const takeReply = (given) => {
+    if (given !== undefined) return given;
+    const r = replyTo?.id ?? null;
+    setReplyTo(null);
+    return r;
+  };
+
+  const send = async (text, retryId = null, retryReply) => {
     const body = (text ?? '').trim();
     if (!body) return;
+    const reply = takeReply(retryReply);
     const tempId = retryId ?? `pending-${Date.now()}`;
-    optimistic(tempId, { body });
+    optimistic(tempId, { body, reply_to: reply });
     haptics.tap();
     toNewest();
     try {
-      settle(tempId, await sendMessage(id, body));
+      settle(tempId, await (reply ? sendMessage(id, body, { replyTo: reply }) : sendMessage(id, body)));
     } catch (err) {
       fail(tempId, 'Message not sent', err);
     }
+  };
+
+  // An animated emoji, sent on its own.
+  const sendStickerMessage = async (emoji, retryId = null, retryReply) => {
+    const reply = takeReply(retryReply);
+    const tempId = retryId ?? `pending-${Date.now()}`;
+    optimistic(tempId, { kind: 'sticker', body: emoji, reply_to: reply });
+    toNewest();
+    try {
+      settle(tempId, await sendSticker(id, emoji, { replyTo: reply }));
+    } catch (err) {
+      fail(tempId, 'Sticker not sent', err);
+    }
+  };
+
+  // Your reaction on a message: set, swapped or (null) taken back. It shows
+  // at once and goes back if the database refuses it.
+  const setMyReaction = async (message, emoji) => {
+    if (!message?.id || message.pending || message.failed) return;
+    const before = (reactions[message.id] ?? []).find((r) => r.user_id === userId)?.emoji ?? null;
+    if (before === emoji) return;
+    if (emoji) haptics.tap();
+    putReaction(message.id, userId, emoji);
+    try {
+      if (emoji) await react(message.id, emoji);
+      else await unreact(message.id, userId);
+    } catch (err) {
+      if (!alive.current) return;
+      putReaction(message.id, userId, before);
+      Alert.alert("Couldn't react", err.message);
+    }
+  };
+  // A double tap loves it (and leaves an existing ❤️ alone); a chip tap toggles.
+  const reactFromBubble = (message) => (emoji, doubleTap) => {
+    const mineNow = (reactions[message.id] ?? []).find((r) => r.user_id === userId)?.emoji;
+    if (doubleTap && mineNow === emoji) return;
+    setMyReaction(message, emoji);
   };
 
   // Photos, videos and voice notes: uploaded to chat-media, then saved.
@@ -650,22 +813,29 @@ function Thread({ navigation, route }) {
     }
   };
 
-  const retry = (message) => (message.upload ? sendFile(message.upload, message.id) : send(message.body, message.id));
+  const retry = (message) =>
+    message.upload
+      ? sendFile(message.upload, message.id)
+      : message.kind === 'sticker'
+        ? sendStickerMessage(message.body, message.id, message.reply_to ?? null)
+        : send(message.body, message.id, message.reply_to ?? null);
 
+  // Holding a message lifts it out with its reactions and actions.
   const onLongPress = (message) => {
     if (message.pending) return;
     haptics.selection();
-    if (message.sender_id === userId) {
-      const options = [{ text: 'Cancel', style: 'cancel' }];
-      if (message.failed) options.push({ text: 'Try again', onPress: () => retry(message) });
-      options.push({ text: 'Delete', style: 'destructive', onPress: () => remove(message) });
-      Alert.alert(message.failed ? 'Not sent' : 'Delete this message?', message.failed ? undefined : 'It will be removed for both of you.', options);
-    } else {
-      Alert.alert('Message', undefined, [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Report', style: 'destructive', onPress: () => setReporting({ message, user: conv?.other ?? { id: message.sender_id } }) },
-      ]);
-    }
+    Keyboard.dismiss();
+    setHolding(message);
+  };
+
+  const byId = useMemo(() => new Map(messages.map((m) => [m.id, m])), [messages]);
+  // Tapping a quote scrolls to the message it quotes and lights it up.
+  const jumpTo = (messageId) => {
+    const index = messages.findIndex((m) => m.id === messageId);
+    if (index < 0) return;
+    list.current?.scrollToIndex?.({ index, viewPosition: 0.5, animated: true });
+    setFlashId(messageId);
+    setTimeout(() => alive.current && setFlashId((f) => (f === messageId ? null : f)), 1400);
   };
 
   const other = conv?.other;
@@ -693,6 +863,8 @@ function Thread({ navigation, route }) {
   const seenId = lastMine && conv?.theirReadAt && new Date(conv.theirReadAt) >= new Date(lastMine.created_at) ? lastMine.id : null;
   const bottom = keyboard ? 0 : insets.bottom;
   const isRequest = !!conv?.request;
+  // Reply needs the composer: not on a request, a block or closed messages.
+  const canReply = !isRequest && !isBlocked && !closed;
   const accept = async () => {
     try {
       await acceptConversation(id);
@@ -787,23 +959,36 @@ function Thread({ navigation, route }) {
             inverted
             data={messages}
             keyExtractor={(m, i) => String(m?.id ?? i)}
-            renderItem={({ item }) => (
-              <Bubble
-                message={item}
-                mine={item.sender_id === userId}
-                seen={item.id === seenId}
-                fresh={!known.current.has(item.id)}
-                vibe={vibe}
-                onLongPress={() => onLongPress(item)}
-                onOpenMedia={setViewing}
-                onOpenOnce={openOnce}
-                opening={openingId === item.id}
-              />
-            )}
+            extraData={[reactions, flashId, seenId, openingId]}
+            renderItem={({ item }) => {
+              const quoted = item.reply_to ? byId.get(item.reply_to) : undefined;
+              return (
+                <Bubble
+                  message={item}
+                  mine={item.sender_id === userId}
+                  seen={item.id === seenId}
+                  fresh={!known.current.has(item.id)}
+                  vibe={vibe}
+                  reactions={reactions[item.id]}
+                  myId={userId}
+                  quoted={quoted}
+                  quotedWho={quoted ? (quoted.sender_id === userId ? 'You' : name) : 'Reply'}
+                  flash={flashId === item.id}
+                  maxWidth={bubbleMax}
+                  onLongPress={() => onLongPress(item)}
+                  onReact={reactFromBubble(item)}
+                  onQuote={() => jumpTo(item.reply_to)}
+                  onOpenMedia={setViewing}
+                  onOpenOnce={openOnce}
+                  opening={openingId === item.id}
+                />
+              );
+            }}
+            onScrollToIndexFailed={({ index }) => list.current?.scrollToOffset?.({ offset: index * 80, animated: true })}
             onEndReachedThreshold={0.4}
             onEndReached={loadOlder}
             // Inverted: the top padding sits at the bottom of the screen.
-            contentContainerStyle={{ paddingHorizontal: space.lg, paddingTop: composerH + space.md, paddingBottom: headerH + space.md, flexGrow: 1 }}
+            contentContainerStyle={{ paddingHorizontal: gutter, paddingTop: composerH + space.md, paddingBottom: headerH + space.md, flexGrow: 1 }}
             scrollIndicatorInsets={{ top: composerH, bottom: headerH }}
             style={styles.layer}
             keyboardShouldPersistTaps="handled"
@@ -846,6 +1031,9 @@ function Thread({ navigation, route }) {
               onSend={(text) => send(text)}
               onAttach={attach}
               onVoice={sendVoice}
+              onStickers={() => setStickers({ purpose: 'send' })}
+              replyTo={replyTo ? { message: replyTo, who: replyTo.sender_id === userId ? 'yourself' : name, text: describeMessage(replyTo) } : null}
+              onCancelReply={() => setReplyTo(null)}
               onTyping={(on) => (on ? typing.current?.ping() : typing.current?.stop())}
               bottomInset={bottom}
               onFocus={toNewest}
@@ -861,6 +1049,25 @@ function Thread({ navigation, route }) {
       <ReportSheet target={reporting} onClose={(didBlock) => (setReporting(null), didBlock && navigation.goBack())} />
       {sheet}
       <ViewOnceViewer item={once} onClose={closeOnce} />
+      <MessageActions
+        message={holding}
+        mine={holding?.sender_id === userId}
+        current={holding ? ((reactions[holding.id] ?? []).find((r) => r.user_id === userId)?.emoji ?? null) : null}
+        vibe={vibe}
+        onReact={(emoji) => setMyReaction(holding, emoji)}
+        onMore={() => setStickers({ purpose: 'react', message: holding })}
+        onReply={canReply ? () => setReplyTo(holding) : null}
+        onRetry={() => retry(holding)}
+        onDelete={() => remove(holding)}
+        onReport={() => setReporting({ message: holding, user: conv?.other ?? { id: holding.sender_id } })}
+        onClose={() => setHolding(null)}
+      />
+      <StickerPicker
+        open={!!stickers}
+        purpose={stickers?.purpose}
+        onPick={(emoji) => (stickers?.purpose === 'react' ? setMyReaction(stickers.message, emoji) : sendStickerMessage(emoji))}
+        onClose={() => setStickers(null)}
+      />
     </View>
   );
 }
@@ -908,7 +1115,10 @@ const styles = StyleSheet.create({
   layer: { ...StyleSheet.absoluteFill, zIndex: 1, backgroundColor: 'transparent' },
   floating: { position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 2 },
   bubbleRow: { flexDirection: 'row', marginVertical: 3 },
-  bubble: { maxWidth: '80%', paddingHorizontal: space.md, paddingVertical: space.sm, borderRadius: radius.lg, overflow: 'hidden', borderWidth: 1 },
+  bubbleCol: { maxWidth: '80%' },
+  bubble: { maxWidth: '100%', paddingHorizontal: space.md, paddingVertical: space.sm, borderRadius: radius.lg, overflow: 'hidden', borderWidth: 1 },
+  stickerMsg: { alignItems: 'flex-end', padding: space.xs, borderRadius: radius.lg },
+  heartPop: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center' },
   mediaBubble: { padding: 4, paddingBottom: space.xs },
   // No drop shadows: the glass is lit by its edge and sheen. A few vibes give yours a glow of its own (vibe.mineGlow).
   mine: { borderBottomRightRadius: radius.sm },
@@ -918,7 +1128,7 @@ const styles = StyleSheet.create({
   // Times and receipts in spaced capitals.
   meta: { fontFamily: fonts.stamp, fontSize: 9.5, letterSpacing: 1.3, textTransform: 'uppercase', color: colors.textMuted, marginTop: 4, alignSelf: 'flex-end' },
   header: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 2, overflow: 'hidden', paddingBottom: space.sm + 2 },
-  headerRow: { flexDirection: 'row', alignItems: 'center', paddingLeft: space.xs, paddingRight: space.md, gap: space.sm },
+  headerRow: { flexDirection: 'row', alignItems: 'center', paddingLeft: space.xs, paddingRight: space.md, gap: space.sm, width: '100%', maxWidth: READING, alignSelf: 'center' },
   back: { width: 36, height: 44, alignItems: 'center', justifyContent: 'center' },
   pressed: { opacity: 0.6, transform: [{ scale: 0.94 }] },
   who: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: space.md },
