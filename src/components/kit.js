@@ -398,7 +398,7 @@ const styles = StyleSheet.create({
   rowTitle: { fontFamily: fonts.semibold, fontSize: 15, color: colors.text },
   rowDetail: { fontFamily: fonts.medium, fontSize: 12, color: colors.textFaint, marginTop: 2 },
   chip: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 13, height: 34, borderRadius: radius.pill, borderWidth: 1 },
-  chipText: { fontFamily: fonts.semibold, fontSize: 13, color: colors.text },
+  chipText: { fontFamily: fonts.semibold, fontSize: 13, lineHeight: 18, color: colors.text },
   segmented: {
     flexDirection: 'row',
     padding: 4,

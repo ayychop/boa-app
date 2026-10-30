@@ -13,6 +13,7 @@ import { haptics } from '../../utils/haptics';
 import { QUOTE_CATEGORIES } from '../../data/quotes';
 import { colors, fonts, radius, space, type } from '../../theme';
 import { LoadingDots } from '../../components/Skeleton';
+import Panel from '../../components/Panel';
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
@@ -27,7 +28,7 @@ const TERMS = [
 
 function Hero({ children }) {
   return (
-    <View style={styles.hero}>
+    <Panel style={styles.hero}>
       <Fog opacity={0.3} />
       <Viewfinder inset={12} size={12} />
       <BoaLogo height={30} />
@@ -35,7 +36,7 @@ function Hero({ children }) {
         BOA HUB · Creative network
       </Slate>
       {children}
-    </View>
+    </Panel>
   );
 }
 

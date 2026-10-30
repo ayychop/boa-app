@@ -1,6 +1,7 @@
 import { useEffect, useId } from 'react';
 import Svg, { ClipPath, Defs, G, LinearGradient as SvgGradient, Path, Rect, Stop } from 'react-native-svg';
-import Animated, { Easing, useAnimatedProps, useReducedMotion, useSharedValue, withDelay, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
+import Animated, { Easing, useAnimatedProps, useSharedValue, withDelay, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
+import useReducedMotion from '../hooks/useReducedMotion';
 import { colors } from '../theme';
 
 // BOA Network wordmark (city skyline in the O), traced from boanetworks.com.

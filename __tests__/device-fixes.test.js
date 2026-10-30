@@ -110,7 +110,7 @@ describe('layout clearances', () => {
   test('the tab bar clears the system bar; the composer sits higher', () => {
     const app = read('App.js');
     expect(app).toMatch(/ANDROID_BOTTOM_COMFORT = 20/);
-    expect(app).toMatch(/lineHeight: Math\.round\(sizing\.label \* 1\.4\)/);
+    expect(app).toMatch(/lineHeight: Math\.round\(sizing\.label \* 1\.5\)/);
     expect(read('src/components/chat/Composer.js')).toMatch(/bottomInset \+ space\.sm \+ BAR_LIFT/);
   });
 });

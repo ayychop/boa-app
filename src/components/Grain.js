@@ -3,9 +3,9 @@ import { Image, Platform, StyleSheet, View } from 'react-native';
 import Animated, {
   Easing,
   useAnimatedStyle,
-  useReducedMotion,
   useSharedValue,
 } from 'react-native-reanimated';
+import useReducedMotion from '../hooks/useReducedMotion';
 import { startLoop } from '../utils/loop';
 import { Asset } from 'expo-asset';
 

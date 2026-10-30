@@ -2,7 +2,8 @@ import { memo, useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useIsFocused } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Animated, { Easing, FadeIn, useAnimatedStyle, useReducedMotion, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
+import Animated, { Easing, FadeIn, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
+import useReducedMotion from '../hooks/useReducedMotion';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { featuredProduction, productions, talent } from '../data/boaContent';
@@ -28,6 +29,7 @@ import WeatherPill from '../components/weather/WeatherPill';
 import { openPage } from '../navigation/ref';
 import { colors, fonts, space, type } from '../theme';
 import { LoadingDots } from '../components/Skeleton';
+import Panel from '../components/Panel';
 
 // The Radio tab's own genre filters, so the two never disagree. The first
 // four keep the slate on one line.
@@ -282,7 +284,7 @@ export default function HomeScreen({ navigation }) {
         </Row>
       </View>
 
-      <View style={styles.mission}>
+      <Panel style={styles.mission}>
         <Fog opacity={0.28} />
         <Viewfinder inset={12} size={12} />
         <Slate dot>05 · The mission</Slate>
@@ -299,7 +301,7 @@ export default function HomeScreen({ navigation }) {
           ))}
         </View>
         <Button label="Get seen" icon="arrow-forward" onPress={forms.openGetSeen} style={{ alignSelf: 'flex-start', marginTop: space.xl }} />
-      </View>
+      </Panel>
     </>
   );
 

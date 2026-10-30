@@ -16,7 +16,6 @@ import Animated, {
   FadeInDown,
   FadeOut,
   useAnimatedStyle,
-  useReducedMotion,
   useSharedValue,
   withDelay,
   withSpring,
@@ -24,6 +23,7 @@ import Animated, {
   withSequence,
   withTiming,
 } from 'react-native-reanimated';
+import useReducedMotion from '../hooks/useReducedMotion';
 import { usePlayer } from '../context/PlayerContext';
 import { formatRemaining, useSleepRemaining, useSleepTimer } from '../context/SleepTimerContext';
 import { useZen } from '../context/ZenContext';
@@ -45,6 +45,9 @@ import { PulseDot, Slate } from '../components/ui';
 import { colors, fonts, radius, space } from '../theme';
 import BoaLogo from '../components/BoaLogo';
 import { LoadingDots } from '../components/Skeleton';
+import Panel, { panelEntering } from '../components/Panel';
+import { SaverBackdrop, ScreensaverPicker, Vignette } from '../components/zen/Screensavers';
+import { useScreensaver } from '../data/screensavers';
 
 // Fades: slow and soft, like a room's lights dimming.
 const DIM = Easing.bezier(0.33, 0, 0.2, 1);
@@ -292,7 +295,7 @@ function SceneVideo({ scene, running }) {
  * that, drifting smoke, film grain, and a deep shade so text reads and the
  * screen stays dim enough to sleep by.
  */
-function Atmosphere({ sceneId, width, height, running, withVideo = true }) {
+function Atmosphere({ sceneId, width, height, running, withVideo = true, ambient = false }) {
   const scene = SCENES[sceneId] ?? SCENES.night;
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
@@ -303,7 +306,14 @@ function Atmosphere({ sceneId, width, height, running, withVideo = true }) {
       </Animated.View>
       <DriftingFog width={width} height={height} opacity={0.45} running={running} />
       <Grain width={width} height={height} opacity={0.05} running={running} />
-      <LinearGradient colors={['rgba(5,5,6,0.62)', 'rgba(5,5,6,0.36)', 'rgba(5,5,6,0.46)', 'rgba(5,5,6,0.9)']} locations={[0, 0.32, 0.6, 1]} style={StyleSheet.absoluteFill} />
+      {/* The controls need a deep shade at the foot for the panel to read on.
+          The screensaver has no panel and no bar: an even, symmetric vignette,
+          so nothing dark sits under the clock and the BOA mark. */}
+      {ambient ? (
+        <Vignette />
+      ) : (
+        <LinearGradient colors={['rgba(5,5,6,0.62)', 'rgba(5,5,6,0.36)', 'rgba(5,5,6,0.46)', 'rgba(5,5,6,0.9)']} locations={[0, 0.32, 0.6, 1]} style={StyleSheet.absoluteFill} />
+      )}
     </View>
   );
 }
@@ -432,7 +442,7 @@ function NowLine({ sound, withRadio = true, onOpenSound }) {
           accessibilityRole="button"
           accessibilityLabel={`${kind.label}, ${scape.label}. Open Zen`}
           testID="zen-screensaver-sound"
-          style={({ pressed }) => [styles.soundChip, pressed && { transform: [{ scale: 0.96 }], opacity: 0.85 }]}
+          style={({ pressed }) => [styles.soundChip, styles.soundChipBare, pressed && { transform: [{ scale: 0.96 }], opacity: 0.85 }]}
         >
           <Ionicons name={kind.icon} size={16} color={colors.text} />
           <Text style={styles.nowText} numberOfLines={1}>
@@ -475,7 +485,8 @@ function GlassButton({ icon, label, onPress, size = 48, primary, children }) {
 // chosen there, else its first); tap again to pause. While one of its
 // sounds is on, the card names that sound. It glows up into its colour
 // when it's on, on the UI thread.
-function KindCard({ kind, state }) {
+function KindCard({ kind, state, index = 0 }) {
+  const calm = useReducedMotion();
   const current = state.id ? soundscapeById(state.id) : null;
   const mine = current?.category === kind.id ? current : null;
   const on = !!mine && (state.status === 'playing' || state.status === 'loading');
@@ -515,7 +526,7 @@ function KindCard({ kind, state }) {
       accessibilityState={{ selected: on }}
       testID={`soundscape-${kind.id}`}
     >
-      <Animated.View style={[styles.card, frame]}>
+      <Animated.View entering={panelEntering(index, calm)} style={[styles.card, frame]}>
         <View style={styles.cardTop}>
           <Ionicons name={kind.icon} size={20} color={on ? '#FFFFFF' : tone} />
           {loading ? <LoadingDots color="#FFFFFF" size={5} /> : on ? <Equalizer color="#FFFFFF" /> : null}
@@ -629,14 +640,14 @@ function Transport() {
  * The screensaver's radio, while it plays: the station, what's on, and its
  * controls, so the radio can be paused or changed without waking Zen.
  */
-function RadioCard() {
+function RadioCard({ bare = false }) {
   const { current, trackTitle } = usePlayer();
   const nowPlaying = useNowPlaying(current, current?.kind === 'radio');
   const podcast = current?.kind === 'podcast' ? podcastById(current.podcastId) : null;
   const title = podcast ? podcast.title : current.name;
   const detail = podcast ? current.name : trackTitle || nowPlaying || 'Live on BOA Radio';
   return (
-    <View style={styles.radioCard} testID="zen-radio-info">
+    <View style={[styles.radioCard, bare && styles.radioCardBare]} testID="zen-radio-info">
       {current.kind === 'radio' ? <StationLogo station={current} size={44} rounded={22} fit="cover" /> : null}
       <View style={styles.radioText} accessible accessibilityLabel={`${title}, ${detail}`}>
         <Text style={styles.radioTitle} numberOfLines={1}>
@@ -669,6 +680,7 @@ function ZenRoom() {
   const focused = useIsFocused();
   const { ambient, returnTab, wake } = useZen();
   const sound = useAmbientAudio();
+  const saver = useScreensaver();
   const active = useActiveAudio();
   const { current, isPlaying } = usePlayer();
   const bottomSpace = useBottomSpace(space.md);
@@ -735,7 +747,8 @@ function ZenRoom() {
   // The room only moves while you're here and the radio is off: when the
   // radio takes over, every layer (mesh, photo, video, smoke, grain)
   // freezes where it is, and carries on from there once the radio stops.
-  const roomMoving = focused && !isPlaying;
+  // (And it holds still when the phone runs warm: reduceMotion includes that.)
+  const roomMoving = focused && !isPlaying && !reduceMotion;
   const short = height < 500;
   const top = Math.max(insets.top, space.lg);
   // Controls sit above the tab bar (and mini player); the screensaver has
@@ -747,10 +760,12 @@ function ZenRoom() {
   const backTo = returnTab ? (TAB_TITLES[returnTab] ?? returnTab) : null;
   // Tall enough for the soundscapes, the timer and the radio's controls
   // without scrolling.
-  const panelHeight = short ? 0 : sound.id ? 372 : 312;
+  const panelHeight = short ? 0 : sound.id ? 460 : 400;
   const clockArea = {
     top: top + (ambient ? 0 : 56),
-    bottom: ambient ? bottom + 40 + (radioCard ? RADIO_CARD + space.md : 0) : panelBeside ? bottom : bottom + panelHeight + space.md,
+    // The screensaver centres the clock and the mark on the screen itself:
+    // the same room above and below (the radio line floats over the foot).
+    bottom: ambient ? Math.max(top, short && radioCard ? bottom + RADIO_CARD : 0) : panelBeside ? bottom : bottom + panelHeight + space.md,
     left: 0,
     right: panelBeside ? width / 2 : 0,
   };
@@ -762,7 +777,11 @@ function ZenRoom() {
       {/* With the radio on, the room is a still photograph: no video
           player exists at all, so opening Zen can never take the audio
           focus from the radio (Android pauses whatever loses it). */}
-      <Atmosphere sceneId={sceneId} width={width} height={height} running={roomMoving} withVideo={!isPlaying} />
+      {ambient && saver !== 'room' ? (
+        <SaverBackdrop id={saver} width={width} height={height} running={roomMoving} />
+      ) : (
+        <Atmosphere sceneId={sceneId} width={width} height={height} running={roomMoving} withVideo={!isPlaying} ambient={ambient} />
+      )}
       {ambient && (
         <Pressable
           style={StyleSheet.absoluteFill}
@@ -788,7 +807,7 @@ function ZenRoom() {
               Sleep & Meditation
             </Slate>
           </View>
-          <View
+          <Panel
             pointerEvents="box-none"
             testID="zen-panel"
             style={[styles.panel, panelBeside ? { top: top + 48, bottom, right: space.lg, width: width / 2 - space.xl } : { left: space.lg, right: space.lg, bottom, maxHeight: panelHeight }]}
@@ -802,14 +821,18 @@ function ZenRoom() {
                 {active.kind === 'radio' && <Transport />}
               </View>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.cards}>
-                {ZEN_CATEGORIES.map((k) => (
-                  <KindCard key={k.id} kind={k} state={sound} />
+                {ZEN_CATEGORIES.map((k, i) => (
+                  <KindCard key={k.id} kind={k} state={sound} index={i + 1} />
                 ))}
               </ScrollView>
               <SoundChoices state={sound} />
               <TimerRow />
+              <View>
+                <Slate>Screensaver</Slate>
+                <ScreensaverPicker />
+              </View>
             </ScrollView>
-          </View>
+          </Panel>
         </Animated.View>
       )}
 
@@ -821,7 +844,7 @@ function ZenRoom() {
           pointerEvents="box-none"
           style={[styles.radioRow, edge, { bottom: bottom + (short ? 0 : 40) }]}
         >
-          <RadioCard />
+          <RadioCard bare />
         </Animated.View>
       )}
 
@@ -922,6 +945,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.16)',
   },
+  // On the screensaver the sound button is just its words and icon: no dark
+  // pill behind it (that read as a black bar across the screen).
+  soundChipBare: { backgroundColor: 'transparent', borderWidth: 0 },
   nowRow: { flexDirection: 'row', alignItems: 'center', gap: 8, maxWidth: 560 },
   nowText: { fontFamily: fonts.semibold, fontSize: 15, color: colors.text, letterSpacing: -0.2, flexShrink: 1 },
   fadeText: { fontFamily: fonts.mono, fontSize: 11, letterSpacing: 1.6, textTransform: 'uppercase', color: colors.gold },
@@ -962,7 +988,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(243,239,232,0.12)',
   },
   chipOn: { backgroundColor: colors.gold, borderColor: colors.gold },
-  chipText: { fontFamily: fonts.semibold, fontSize: 13, color: colors.text },
+  chipText: { fontFamily: fonts.semibold, fontSize: 13, lineHeight: 18, color: colors.text },
   chipTextOn: { color: colors.bg },
   transport: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   glass: {
@@ -988,6 +1014,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.12)',
   },
+  // No plate on the screensaver: the station sits straight on the room.
+  radioCardBare: { backgroundColor: 'transparent', borderWidth: 0 },
   radioText: { flex: 1, gap: 2 },
   radioTitle: { fontFamily: fonts.semibold, fontSize: 15, color: colors.text, letterSpacing: -0.2 },
   radioDetail: { fontFamily: fonts.medium, fontSize: 12.5, color: colors.textMuted },

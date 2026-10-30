@@ -191,9 +191,10 @@ const styles = StyleSheet.create({
   search: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingHorizontal: space.md, height: 40, borderRadius: radius.pill, backgroundColor: 'rgba(255,255,255,0.07)', borderWidth: 1, borderColor: colors.border },
   searchInput: { flex: 1, fontFamily: fonts.chat, fontSize: 14, color: colors.text, paddingVertical: 0 },
   shelves: { gap: 6, paddingVertical: space.md },
-  shelf: { flexDirection: 'row', alignItems: 'center', gap: 5, height: 32, paddingHorizontal: space.md, borderRadius: radius.pill, backgroundColor: 'rgba(255,255,255,0.06)' },
+  shelf: { flexDirection: 'row', alignItems: 'center', gap: 5, height: 34, paddingHorizontal: space.md, borderRadius: radius.pill, backgroundColor: 'rgba(255,255,255,0.06)' },
   shelfOn: { backgroundColor: colors.gold },
-  shelfText: { fontFamily: fonts.chat, fontSize: 12.5, color: colors.textMuted },
+  // A line tall enough for the g in Trending: a fixed-height chip clipped it.
+  shelfText: { fontFamily: fonts.chat, fontSize: 12.5, lineHeight: 18, paddingBottom: 1, color: colors.textMuted },
   cell: { borderRadius: radius.md, overflow: 'hidden', backgroundColor: 'rgba(255,255,255,0.06)' },
   note: { alignItems: 'center', gap: space.sm, marginTop: space.xl, paddingHorizontal: space.lg },
   noteTitle: { fontFamily: fonts.chatBold, fontSize: 14, color: colors.text, textAlign: 'center' },

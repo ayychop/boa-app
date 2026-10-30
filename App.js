@@ -7,7 +7,9 @@ import { BottomTabBar, createBottomTabNavigator } from '@react-navigation/bottom
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import Animated, { Easing, FadeIn, useAnimatedStyle, useReducedMotion, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming } from 'react-native-reanimated';
+import Animated, { Easing, FadeIn, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming } from 'react-native-reanimated';
+import useReducedMotion from './src/hooks/useReducedMotion';
+import TabGlyph from './src/components/TabGlyph';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as SplashScreen from 'expo-splash-screen';
@@ -96,16 +98,6 @@ const navTheme = {
 
 const TAB_TITLES = { Originals: 'BOA Originals' };
 
-const ICONS = {
-  Home: ['home', 'home-outline'],
-  Originals: ['film', 'film-outline'],
-  Radio: ['radio', 'radio-outline'],
-  Chat: ['chatbubbles', 'chatbubbles-outline'],
-  Talent: ['people', 'people-outline'],
-  Zen: ['sparkles', 'sparkles-outline'],
-  Profile: ['person', 'person-outline'],
-};
-
 // easeOutExpo: nearly all of the movement happens in the first third, so the
 // new tab is readable almost at once and then just settles.
 const EASE_OUT_EXPO = Easing.bezier(0.16, 1, 0.3, 1);
@@ -182,7 +174,9 @@ function TabIcon({ name, focused, color, size, slot }) {
         {premium ? (
           <Animated.View pointerEvents="none" style={[styles.tabGleam, { width: size * 1.7, height: size * 1.7, borderRadius: size, left: -size * 0.35, top: -size * 0.35 }, gleamStyle]} />
         ) : null}
-        <Ionicons name={ICONS[name][focused ? 0 : 1]} size={size} color={color} style={focused ? styles.tabIconGlow : null} />
+        <View style={[{ width: size, height: size }, focused && styles.tabIconGlow]}>
+          <TabGlyph name={name} size={size} color={color} focused={focused} />
+        </View>
       </Animated.View>
     </View>
   );
@@ -311,7 +305,9 @@ function Tabs() {
           // it takes as little of the short screen as it can.
           height: (short ? 44 : sizing.height) + bottomInset,
         },
-        tabBarItemStyle: { paddingHorizontal: 0, paddingTop: short ? 0 : 10 },
+        // Up from 10: the icon and its label sit higher, with air under the lettering
+        // so the bar's dark glass never touches a descender (g, p, y).
+        tabBarItemStyle: { paddingHorizontal: 0, paddingTop: short ? 0 : 7 },
         tabBarBackground: () => <TabBarBackground />,
         // Seven tabs: each label stays on one line and shrinks to fit its
         // slot (down to 65%) rather than wrapping into the icon or
@@ -320,7 +316,7 @@ function Tabs() {
         // Navigation no longer builds one.
         tabBarAccessibilityLabel: `${TAB_TITLES[route.name] ?? route.name}, tab`,
         tabBarLabel: ({ color }) => (
-          <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.65} allowFontScaling={false} style={[styles.tabLabel, { color, fontSize: sizing.label, lineHeight: Math.round(sizing.label * 1.4) }]}>
+          <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.65} allowFontScaling={false} style={[styles.tabLabel, { color, fontSize: sizing.label, lineHeight: Math.round(sizing.label * 1.5) }]}>
             {tabLabel(route.name, phone)}
           </Text>
         ),
@@ -579,12 +575,13 @@ function Root() {
 
 const styles = StyleSheet.create({
   tabBarWrap: { position: 'absolute', left: 0, right: 0, bottom: 0 },
-  tabLabel: { fontFamily: fonts.semibold, letterSpacing: -0.1, textAlign: 'center', maxWidth: '100%', paddingHorizontal: 1, marginTop: 5 },
+  tabLabel: { fontFamily: fonts.semibold, letterSpacing: -0.1, textAlign: 'center', maxWidth: '100%', paddingHorizontal: 1, marginTop: 4, paddingBottom: 2 },
   tabBarEdge: { position: 'absolute', top: 0, left: 0, right: 0, height: StyleSheet.hairlineWidth * 2 },
   tabIconBox: { alignItems: 'center', justifyContent: 'center' },
   // The lit capsule under the active tab's icon: gold glass with a soft glow.
   tabCapsule: { position: 'absolute', backgroundColor: 'rgba(226,168,75,0.16)', borderWidth: 1, borderColor: 'rgba(246,211,138,0.34)', boxShadow: '0px 0px 20px rgba(226,168,75,0.55)' },
-  tabIconGlow: { textShadowColor: 'rgba(246,211,138,0.95)', textShadowRadius: 10, textShadowOffset: { width: 0, height: 0 } },
+  // The active glyph glows (a soft halo, since a vector drawing has no text shadow).
+  tabIconGlow: { borderRadius: 999, boxShadow: '0px 0px 14px 1px rgba(246,211,138,0.42)' },
   // The gold gleam behind the BOA Originals tab icon: a soft radial glow.
   tabGleam: { position: 'absolute', backgroundColor: 'rgba(226,168,75,0.5)', boxShadow: '0px 0px 14px rgba(226,168,75,0.85)' },
   crash: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 12, backgroundColor: colors.bg },

@@ -39,13 +39,24 @@ export function setState(next) {
   });
 }
 
+// The camera engine and the app's own "go easy when it's hot" (src/hooks/
+// useReducedMotion.js) both listen: one native subscription, kept while either
+// still wants it.
+let users = 0;
+
 /** Start listening to the phone. Safe to call often; one native subscription. */
 export function start() {
+  users += 1;
   if (unsubNative || !BoaCall.addThermalListener) return;
   unsubNative = BoaCall.addThermalListener(setState);
 }
 
 export function stop() {
+  users = Math.max(0, users - 1);
+  if (users > 0) return;
   unsubNative?.();
   unsubNative = null;
 }
+
+/** Warm or hotter (FAIR and up): the point where the app's decorative motion pauses. */
+export const isWarm = (s = state) => s !== NOMINAL;

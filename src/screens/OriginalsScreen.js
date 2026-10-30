@@ -1,7 +1,8 @@
 import { useEffect } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Animated, { Easing, FadeIn, useAnimatedStyle, useReducedMotion, useSharedValue, withDelay, withRepeat, withTiming } from 'react-native-reanimated';
+import Animated, { Easing, FadeIn, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withTiming } from 'react-native-reanimated';
+import useReducedMotion from '../hooks/useReducedMotion';
 import { LinearGradient } from 'expo-linear-gradient';
 import { featuredProduction, productions } from '../data/boaContent';
 import { useMedia } from '../context/MediaContext';
@@ -13,6 +14,7 @@ import useBottomSpace from '../hooks/useBottomSpace';
 import useLayout, { WIDE } from '../hooks/useLayout';
 import { haptics } from '../utils/haptics';
 import { colors, fonts, radius, space, type } from '../theme';
+import Panel from '../components/Panel';
 
 const GAP = 14;
 const CONTENT_MAX = 1200;
@@ -237,7 +239,7 @@ export default function OriginalsScreen() {
           </View>
         </View>
 
-        <View style={[styles.casting, { width: contentWidth - space.xl * 2 }]}>
+        <Panel style={[styles.casting, { width: contentWidth - space.xl * 2 }]}>
           <Fog opacity={0.28} />
           <Slate dot>Casting</Slate>
           <Text style={[type.h1, { marginTop: space.md }]}>
@@ -246,7 +248,7 @@ export default function OriginalsScreen() {
           <Text style={[type.bodyMuted, { marginTop: space.sm, maxWidth: 560 }]}>
             Every production on this slate is casting, or will be. Get on our radar before the call goes out.
           </Text>
-        </View>
+        </Panel>
       </ScrollView>
       {/* Titles scrolling up fade out under the clock instead of colliding with it. */}
       <LinearGradient pointerEvents="none" colors={[colors.bg, 'rgba(5,5,6,0)']} style={[styles.scrim, { height: insets.top + space.lg }]} />

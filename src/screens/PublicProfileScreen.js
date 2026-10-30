@@ -11,6 +11,7 @@ import BoaLogo from '../components/BoaLogo';
 import { Button, Slate } from '../components/ui';
 import { colors, fonts, radius, space, type } from '../theme';
 import { ProfileSkeleton } from '../components/Skeleton';
+import Panel from '../components/Panel';
 
 const MAX_WIDTH = 720;
 const CARD = 120;
@@ -139,7 +140,7 @@ export default function PublicProfileScreen({ username }) {
 
             <PublicFavourites items={profile.favourites ?? []} />
 
-            <View style={styles.locked} testID="public-media-locked">
+            <Panel index={1} style={styles.locked} testID="public-media-locked">
               <View style={styles.lockRing}>
                 <Ionicons name="lock-closed" size={22} color={colors.gold} />
               </View>
@@ -151,7 +152,7 @@ export default function PublicProfileScreen({ username }) {
                 <Button label="Sign up" icon="arrow-forward" onPress={() => openApp('join')} testID="public-sign-up" />
                 <Button label="Sign in" variant="ghost" onPress={() => openApp('signin')} testID="public-sign-in" />
               </View>
-            </View>
+            </Panel>
           </>
         )}
         <Text style={styles.footer}>© 2026 BOA Network · {BRAND}, the home for creatives</Text>

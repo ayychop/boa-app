@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { dailyQuote } from '../utils/dailyQuote';
 import { Slate } from './ui';
+import Panel from './Panel';
 import { colors, fonts, radius, space } from '../theme';
 
 /**
@@ -24,7 +25,7 @@ export default function DailySpark({ category, hint }) {
   );
   const { text, category: kind } = dailyQuote(category, today);
   return (
-    <View
+    <Panel
       style={styles.card}
       accessible
       accessibilityLabel={`Daily Spark, ${kind.label}: ${text}`}
@@ -60,7 +61,7 @@ export default function DailySpark({ category, hint }) {
       </Text>
       <Text style={styles.date}>{today.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })} · New every morning</Text>
       {hint ? <Text style={styles.hint}>{hint}</Text> : null}
-    </View>
+    </Panel>
   );
 }
 

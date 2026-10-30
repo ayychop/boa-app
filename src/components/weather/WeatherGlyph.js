@@ -5,13 +5,13 @@ import Animated, {
   cancelAnimation,
   Easing,
   useAnimatedStyle,
-  useReducedMotion,
   useSharedValue,
   withDelay,
   withRepeat,
   withSequence,
   withTiming,
 } from 'react-native-reanimated';
+import useReducedMotion from '../../hooks/useReducedMotion';
 import { colors } from '../../theme';
 
 // Sky tones per condition: the forecast page's backdrop and the glyph's glow.

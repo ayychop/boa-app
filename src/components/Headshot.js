@@ -3,10 +3,12 @@ import { Image, Platform, StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import Svg, { ClipPath, Defs, G, LinearGradient as SvgGradient, Rect, Stop, Text as SvgText } from 'react-native-svg';
-import Animated, { Easing, useAnimatedProps, useReducedMotion, useSharedValue, withDelay, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
+import Animated, { Easing, useAnimatedProps, useSharedValue, withDelay, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
+import useReducedMotion from '../hooks/useReducedMotion';
 import { Fog, Slate } from './ui';
 import { withAlpha } from '../utils/color';
 import { colors, fonts } from '../theme';
+import Panel from './Panel';
 
 function initials(name) {
   return name
@@ -17,6 +19,8 @@ function initials(name) {
 }
 
 const AnimatedRect = Animated.createAnimatedComponent(Rect);
+// Clear air between the initials' area and the name plate under them.
+const PLATE_GAP = 18;
 // The sheen: one sweep across the letters, then a rest before the next.
 const SWEEP_MS = 1500;
 const REST_MS = 2800;
@@ -28,7 +32,7 @@ const REST_MS = 2800;
  * never spills onto the frame. Each person starts at a slightly different
  * moment, so a row of them shimmers in turn. Still gold with reduced motion.
  */
-function StarInitials({ text, width, height, fontSize, delay = 0 }) {
+function StarInitials({ text, width, height, fontSize, delay = 0, lift = 0 }) {
   const id = useId().replace(/:/g, '');
   const reduce = useReducedMotion();
   const band = width * 0.42;
@@ -44,7 +48,8 @@ function StarInitials({ text, width, height, fontSize, delay = 0 }) {
   // Capitals sit centred when the baseline is half their cap height below
   // the middle; the italic leans right, so it's nudged back a touch.
   const x = width / 2 - fontSize * 0.03;
-  const y = height / 2 + fontSize * 0.34;
+  // `lift` raises the letters clear of a name plate under them.
+  const y = height / 2 + fontSize * 0.34 - lift;
   return (
     <Svg width={width} height={height} pointerEvents="none">
       <Defs>
@@ -106,7 +111,7 @@ export default function Headshot({ person, width, ratio = 4 / 5, round = false, 
   // The initials centre in the space above the caption plate.
   const [plate, setPlate] = useState(0);
   return (
-    <View
+    <Panel shimmer={false}
       style={[
         styles.frame,
         { width, height, borderRadius: round ? width / 2 : 14 },
@@ -125,12 +130,14 @@ export default function Headshot({ person, width, ratio = 4 / 5, round = false, 
             style={StyleSheet.absoluteFill}
           />
           <Fog opacity={0.32} variant={person.name.length} />
-          <View style={[styles.center, caption && !round && { paddingBottom: plate + 8 }]} accessible accessibilityLabel={initials(person.name)}>
+          <View style={[styles.center, caption && !round && { paddingBottom: plate + PLATE_GAP }]} accessible accessibilityLabel={initials(person.name)}>
             <StarInitials
               text={initials(person.name)}
               width={width}
-              height={caption && !round ? Math.max(0, height - plate - 8) : height}
-              fontSize={width * (round ? 0.42 : 0.34)}
+              height={caption && !round ? Math.max(0, height - plate - PLATE_GAP) : height}
+              // Never taller than the room above the plate (60% of it), so the letters can't reach the name.
+              fontSize={Math.min(width * (round ? 0.42 : 0.34), (caption && !round ? Math.max(0, height - plate - PLATE_GAP) : height) * 0.62)}
+              lift={caption && !round ? width * 0.05 + 4 : 0}
               delay={(person.name.length % 7) * 260}
             />
           </View>
@@ -138,7 +145,7 @@ export default function Headshot({ person, width, ratio = 4 / 5, round = false, 
         </>
       )}
       {caption && !round && <GlassCaption {...caption} compact={width < 170} onHeight={setPlate} />}
-    </View>
+    </Panel>
   );
 }
 
@@ -165,5 +172,5 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(243,239,232,0.22)',
   },
   glassCompact: { left: 6, right: 6, bottom: 6, paddingHorizontal: 10, paddingVertical: 8 },
-  glassTitle: { fontFamily: fonts.semibold, fontSize: 15, color: colors.text, letterSpacing: -0.3 },
+  glassTitle: { fontFamily: fonts.semibold, fontSize: 15, lineHeight: 20, color: colors.text, letterSpacing: -0.3 },
 });

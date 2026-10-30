@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
-import Animated, { Easing, interpolate, useAnimatedStyle, useReducedMotion, useSharedValue, withDelay, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
+import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
+import useReducedMotion from '../hooks/useReducedMotion';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, radius, space } from '../theme';
 
