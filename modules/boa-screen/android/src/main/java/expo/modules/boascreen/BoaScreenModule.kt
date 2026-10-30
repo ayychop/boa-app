@@ -85,6 +85,23 @@ class BoaScreenModule : Module() {
     (v.parent as? ViewGroup)?.removeView(v)
   }
 
+  // Every reason the window is currently secure. FLAG_SECURE is one bit on
+  // the window, so two features flipping it independently (view-once media
+  // and Privacy Mode on a call) used to switch each other off.
+  private val secureHolders = mutableSetOf<String>()
+
+  private fun applySecure(): Boolean {
+    val a = hostActivity ?: return false
+    if (secureHolders.isNotEmpty()) a.window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+    else a.window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+    return true
+  }
+
+  private fun setSecureHolder(key: String, on: Boolean): Boolean {
+    if (on) secureHolders.add(key) else secureHolders.remove(key)
+    return applySecure()
+  }
+
   private fun clearOverLock() {
     overLock = false
     hostActivity?.let { setShowWhenLocked(it, false) }
@@ -185,15 +202,25 @@ class BoaScreenModule : Module() {
      * of the window come out black (view-once photos and videos).
      */
     AsyncFunction("setSecure") { on: Boolean ->
-      val a = hostActivity ?: return@AsyncFunction false
-      if (on) a.window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
-      else a.window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
-      true
+      setSecureHolder(VIEW_ONCE_HOLDER, on)
     }.runOnQueue(Queues.MAIN)
 
-    // Never leave the cover up if the screen-on broadcast went missing.
+    /**
+     * FLAG_SECURE for one named reason ("viewonce", "call", "remote").
+     * The window stays secure while ANY reason is still holding it, so a
+     * view-once photo closing can't un-protect a call that is in privacy
+     * mode, and the other way round.
+     */
+    AsyncFunction("setSecureFor") { key: String, on: Boolean ->
+      setSecureHolder(key, on)
+    }.runOnQueue(Queues.MAIN)
+
+    // Never leave the cover up if the screen-on broadcast went missing, and
+    // put FLAG_SECURE back: the activity can be re-created (picture in
+    // picture, a rotation, a fold) and a new window starts without it.
     OnActivityEntersForeground {
       if (cover != null) hostActivity?.runOnUiThread { revealCover() }
+      hostActivity?.runOnUiThread { applySecure() }
     }
 
     OnActivityDestroys {
@@ -205,5 +232,6 @@ class BoaScreenModule : Module() {
   companion object {
     private const val COVER_FRAMES = 3
     private const val COVER_FADE_MS = 260L
+    private const val VIEW_ONCE_HOLDER = "viewonce"
   }
 }

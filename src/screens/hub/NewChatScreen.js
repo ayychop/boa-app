@@ -325,7 +325,7 @@ function Smoke({ vibe }) {
  * (a small spinner, the button still works), 'starting' once you've tapped
  * and it's waiting on that ("Preparing call...").
  */
-function Header({ name, person, online, badge, status, vibe, motion, onBack, onProfile, onContact, onVibe, onCall, callState, onLayout }) {
+function Header({ name, person, online, badge, status, vibe, motion, onBack, onProfile, onContact, onVibe, onCall, onVoiceCall, callState, onLayout }) {
   const insets = useSafeAreaInsets();
   const starting = callState === 'starting';
   // The chat header name wears the member's chosen headline typeface, so the
@@ -365,6 +365,19 @@ function Header({ name, person, online, badge, status, vibe, motion, onBack, onP
             )}
           </View>
         </Pressable>
+        {onVoiceCall ? (
+          <Pressable
+            onPress={onVoiceCall}
+            disabled={starting}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={`Voice call ${name}`}
+            style={({ pressed }) => [styles.round, { borderColor: vibe.accentEdge, backgroundColor: vibe.accentSoft }, pressed && styles.pressed]}
+            testID="thread-voice-call"
+          >
+            <Ionicons name="call-outline" size={19} color={vibe.accent} />
+          </Pressable>
+        ) : null}
         {onCall ? (
           <Pressable
             onPress={onCall}
@@ -981,6 +994,7 @@ function Thread({ navigation, route }) {
       onProfile={conv && other ? () => navigation.navigate('HubProfile', { id: conv.otherId }) : null}
       onVibe={() => setPicking(true)}
       onCall={calls && other && !isBlocked ? () => calls.startCall({ ...other, id: conv.otherId }) : null}
+      onVoiceCall={calls && other && !isBlocked ? () => calls.startCall({ ...other, id: conv.otherId }, { voice: true }) : null}
       callState={calls?.callPrep}
       onLayout={(e) => setHeaderH(e.nativeEvent.layout.height)}
     />

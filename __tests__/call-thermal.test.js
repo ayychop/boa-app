@@ -28,7 +28,7 @@ const signal = require('../src/calls/signaling');
 const { __engine: engine } = require('react-native-agora');
 const thermal = require('../src/calls/thermal');
 const media = require('../src/calls/media.native');
-const { COOL_ENCODER, ENCODER, PREVIEW, encoderForThermal } = require('../src/calls/quality');
+const { COLD_ENCODER, COOL_ENCODER, ENCODER, PREVIEW, WARM_ENCODER, encoderForThermal } = require('../src/calls/quality');
 const { PremiumProvider } = require('../src/context/PremiumContext');
 const { CallProvider, useCall } = require('../src/context/CallContext');
 
@@ -76,20 +76,30 @@ async function liveCall(user) {
 }
 
 describe('the encoder for a hot phone', () => {
-  test('WARNING and CRITICAL drop to 720p and hold 60 fps; anything cooler stays 1080p', () => {
-    expect(COOL_ENCODER.dimensions).toEqual({ width: 1280, height: 720 });
-    expect(COOL_ENCODER.frameRate).toBe(60);
-    expect(COOL_ENCODER.degradationPreference).toBe(1); // MaintainFramerate: never choppy
+  test('every step up in heat cuts the work: 720p30, then 540p24, then 360p15; only a cool phone runs 1080p30', () => {
+    const work = (e) => e.dimensions.width * e.dimensions.height * e.frameRate;
+    expect(WARM_ENCODER.dimensions).toEqual({ width: 1280, height: 720 });
+    expect(WARM_ENCODER.frameRate).toBe(30);
+    expect(COOL_ENCODER.dimensions).toEqual({ width: 960, height: 540 });
+    expect(COOL_ENCODER.frameRate).toBe(24);
+    expect(COLD_ENCODER.dimensions).toEqual({ width: 640, height: 360 });
+    expect(COLD_ENCODER.frameRate).toBe(15);
+    // MaintainFramerate: frames are kept, sharpness gives way.
+    expect(COOL_ENCODER.degradationPreference).toBe(1);
+    expect(encoderForThermal('FAIR')).toBe(WARM_ENCODER);
     expect(encoderForThermal('WARNING')).toBe(COOL_ENCODER);
-    expect(encoderForThermal('CRITICAL')).toBe(COOL_ENCODER);
-    expect(encoderForThermal('FAIR')).toBe(ENCODER);
+    expect(encoderForThermal('CRITICAL')).toBe(COLD_ENCODER);
     expect(encoderForThermal('NOMINAL')).toBe(ENCODER);
     expect(encoderForThermal(undefined)).toBe(ENCODER);
+    // Pixels a second really do fall at every step (the old 720p60 "cool" mode barely cooled).
+    expect(work(ENCODER)).toBeGreaterThan(work(WARM_ENCODER) * 2);
+    expect(work(WARM_ENCODER)).toBeGreaterThan(work(COOL_ENCODER) * 2);
+    expect(work(COOL_ENCODER)).toBeGreaterThan(work(COLD_ENCODER) * 2);
   });
 });
 
 describe('a live call as the phone heats up', () => {
-  test('hot: 720p60 at once; cooled down: back to 1080p; ringing stays on the small preview', async () => {
+  test('warm, hot and very hot step the picture down at once; cooled down: back to 1080p; ringing stays on the small preview', async () => {
     const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
     await mount();
     await user.press(screen.getByText('Call Kofi'));
@@ -105,8 +115,10 @@ describe('a live call as the phone heats up', () => {
 
     await act(async () => thermal.setState('NOMINAL'));
     expect(engine.setVideoEncoderConfiguration).toHaveBeenLastCalledWith(ENCODER);
+    await act(async () => thermal.setState('FAIR'));
+    expect(engine.setVideoEncoderConfiguration).toHaveBeenLastCalledWith(WARM_ENCODER);
     await act(async () => thermal.setState('CRITICAL'));
-    expect(engine.setVideoEncoderConfiguration).toHaveBeenLastCalledWith(COOL_ENCODER);
+    expect(engine.setVideoEncoderConfiguration).toHaveBeenLastCalledWith(COLD_ENCODER);
 
     await user.press(screen.getByTestId('call-end'));
     await act(async () => jest.advanceTimersByTime(2000));

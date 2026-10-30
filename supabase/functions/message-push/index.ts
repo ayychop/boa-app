@@ -35,6 +35,9 @@ type Message = { id: string; conversation_id: string; sender_id: string; kind: s
 
 const db = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
 
+// A Giphy address anywhere in the text (same rule as src/chat/gifs.js).
+const GIF_IN_TEXT = /https?:\/\/(?:media\d*\.giphy\.com|i\.giphy\.com)\/\S+/gi;
+
 export function previewOf(m: Pick<Message, 'kind' | 'body'>) {
   switch (m.kind) {
     case 'image':
@@ -46,7 +49,8 @@ export function previewOf(m: Pick<Message, 'kind' | 'body'>) {
     case 'gif':
       return '[GIF]';
     default:
-      return (m.body ?? '').slice(0, 140);
+      // Sent as plain text by an older app, a GIF is still a GIF: never the raw link.
+      return (m.body ?? '').replace(GIF_IN_TEXT, '[GIF]').trim().slice(0, 140);
   }
 }
 

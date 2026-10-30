@@ -1,1 +1,8 @@
-<manifest />
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <!-- Android Auto: lets BoaEq ask whether the phone is projecting to a car
+       (the same connection state androidx CarConnection reads), so the car
+       gets the bigger, wraparound sound. -->
+  <queries>
+    <package android:name="com.google.android.projection.gearhead" />
+  </queries>
+</manifest>

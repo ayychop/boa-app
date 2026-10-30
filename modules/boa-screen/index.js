@@ -63,9 +63,12 @@ export async function clearOverLock() {
  * as long as a view-once photo or video is open. False where it isn't
  * available (iOS, the web, builds without the native module).
  */
-export async function setSecure(on) {
+export async function setSecure(on, key = 'viewonce') {
   if (!native?.setSecure) return false;
   try {
+    // Each reason (view-once media, a call's Privacy Mode) holds the flag
+    // under its own key, so one letting go can't un-protect the other.
+    if (native.setSecureFor) return await native.setSecureFor(String(key), !!on);
     return await native.setSecure(!!on);
   } catch {
     return false;

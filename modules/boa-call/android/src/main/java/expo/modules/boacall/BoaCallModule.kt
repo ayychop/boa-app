@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.net.Uri
+import android.os.BatteryManager
 import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
@@ -16,6 +17,7 @@ import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import expo.modules.kotlin.records.Field
 import expo.modules.kotlin.records.Record
+import kotlin.math.max
 
 /** What JS hands over to ring a call (src/calls/incoming.js builds it). */
 class IncomingCall : Record {
@@ -65,8 +67,11 @@ class BoaCallModule : Module() {
 
   // The power button: the screen going off and on, for a call's camera (src/calls/media.native.js: setAway).
   private var screen: BroadcastReceiver? = null
-  // The phone heating up: drop the call camera to 720p60 (src/calls/thermal.js).
+  // The phone heating up: step the call camera down (src/calls/thermal.js).
   private var thermal: PowerManager.OnThermalStatusChangedListener? = null
+  // The battery's temperature and charger, which heat up before PowerManager says so.
+  private var battery: BroadcastReceiver? = null
+  private var lastHeat = ""
 
   override fun definition() = ModuleDefinition {
     Name("BoaCall")
@@ -77,7 +82,7 @@ class BoaCallModule : Module() {
       CallDeclineReceiver.onDecline = { id -> sendEvent("onDecline", mapOf("callId" to id)) }
       CallDeclineReceiver.onHangUp = { sendEvent("onHangUp", emptyMap<String, Any>()) }
       CallPip.onChange = { active -> sendEvent("onPipChange", mapOf("active" to active)) }
-      // Mute / End tapped on the floating call window (CallPipReceiver).
+      // Mute / Chat / End tapped on the floating call window (CallPipReceiver).
       CallPipReceiver.onAction = { action -> sendEvent("onPipAction", mapOf("action" to action)) }
       val receiver = object : BroadcastReceiver() {
         override fun onReceive(c: Context, intent: Intent) {
@@ -94,13 +99,20 @@ class BoaCallModule : Module() {
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
         val pm = appContext.reactContext?.getSystemService(Context.POWER_SERVICE) as? PowerManager
         if (pm != null) {
-          val listener = PowerManager.OnThermalStatusChangedListener { status ->
-            sendEvent("onThermalChange", mapOf("status" to thermalName(status)))
-          }
+          val listener = PowerManager.OnThermalStatusChangedListener { _ -> emitHeat() }
           runCatching { pm.addThermalStatusListener(listener) }
           thermal = listener
         }
       }
+      // PowerManager's status can lag a hot, charging phone. The battery
+      // broadcast (temperature, plugged in) re-checks, and only a change is sent.
+      val heat = object : BroadcastReceiver() {
+        override fun onReceive(c: Context, intent: Intent) = emitHeat()
+      }
+      appContext.reactContext?.let { c ->
+        runCatching { ContextCompat.registerReceiver(c, heat, IntentFilter(Intent.ACTION_BATTERY_CHANGED), ContextCompat.RECEIVER_NOT_EXPORTED) }
+      }
+      battery = heat
     }
 
     OnDestroy {
@@ -117,6 +129,8 @@ class BoaCallModule : Module() {
         }
       }
       thermal = null
+      battery?.let { r -> runCatching { appContext.reactContext?.unregisterReceiver(r) } }
+      battery = null
     }
 
     /** A call is on (placed, or answered): hold it in the foreground so the screen can go off. */
@@ -132,6 +146,11 @@ class BoaCallModule : Module() {
     /** A call is on (true) or over (false): leaving the app now floats it picture in picture. */
     AsyncFunction("setPipReady") { ready: Boolean ->
       CallPip.setReady(ready)
+    }.runOnQueue(Queues.MAIN)
+
+    /** Floats the call in its picture-in-picture window now. False if it can't. */
+    AsyncFunction("enterPip") {
+      CallPip.enter(appContext.currentActivity)
     }.runOnQueue(Queues.MAIN)
 
     /** Whether this phone does picture in picture. */
@@ -214,18 +233,73 @@ class BoaCallModule : Module() {
       CallLockScreen.leave()
     }.runOnQueue(Queues.MAIN)
 
-    /** NOMINAL, FAIR, WARNING or CRITICAL — WARNING+ cools the camera to 720p60. */
+    /** NOMINAL, FAIR, WARNING or CRITICAL: each step down the call camera (720p30, 540p24, 360p15). */
     Function("thermalState") {
-      if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return@Function "NOMINAL"
-      val pm = context.getSystemService(Context.POWER_SERVICE) as? PowerManager ?: return@Function "NOMINAL"
-      thermalName(pm.currentThermalStatus)
+      Heat.read(context)
     }
+  }
+
+  private fun emitHeat() {
+    val c = appContext.reactContext ?: return
+    val now = Heat.read(c)
+    if (now == lastHeat) return
+    lastHeat = now
+    sendEvent("onThermalChange", mapOf("status" to now))
   }
 }
 
-private fun thermalName(status: Int): String = when (status) {
-  PowerManager.THERMAL_STATUS_NONE -> "NOMINAL"
-  PowerManager.THERMAL_STATUS_LIGHT, PowerManager.THERMAL_STATUS_MODERATE -> "FAIR"
-  PowerManager.THERMAL_STATUS_SEVERE -> "WARNING"
-  else -> "CRITICAL"
+/**
+ * How hot the phone is for a video call: the stricter of Android's thermal
+ * status and the battery's temperature, and a step stricter again while it
+ * charges (charging heats the phone from the inside: a Flip 7's Exynos on a
+ * charger is the worst case).
+ *
+ * Android's own steps are shifted one down from the old mapping, so the call
+ * backs off sooner: LIGHT is FAIR, MODERATE is WARNING, SEVERE and up is
+ * CRITICAL. The battery adds its own: FAIR from 38 C, WARNING from 41 C and
+ * CRITICAL from 44 C (counted 2 C higher while charging). Cooling off holds
+ * the hotter step until the battery is 1 C under its threshold, so the
+ * picture doesn't flap between sizes.
+ */
+private object Heat {
+  private val NAMES = arrayOf("NOMINAL", "FAIR", "WARNING", "CRITICAL")
+  private val FROM = doubleArrayOf(0.0, 38.0, 41.0, 44.0)
+  private const val CHARGING_BIAS = 2.0
+  private const val HOLD = 1.0
+  private var held = 0
+
+  @Synchronized
+  fun read(c: Context): String {
+    var level = 0
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+      val pm = c.getSystemService(Context.POWER_SERVICE) as? PowerManager
+      if (pm != null) {
+        level = when (pm.currentThermalStatus) {
+          PowerManager.THERMAL_STATUS_NONE -> 0
+          PowerManager.THERMAL_STATUS_LIGHT -> 1
+          PowerManager.THERMAL_STATUS_MODERATE -> 2
+          else -> 3
+        }
+      }
+    }
+    // The battery's sticky broadcast: no receiver needed to read it.
+    val b = runCatching { c.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED)) }.getOrNull()
+    val charging = (b?.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) ?: 0) != 0
+    if (b != null) {
+      val tenths = b.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, Int.MIN_VALUE)
+      if (tenths != Int.MIN_VALUE && tenths > 0) {
+        val t = tenths / 10.0 + if (charging) CHARGING_BIAS else 0.0
+        var fromBattery = 0
+        for (i in 1..3) if (t >= FROM[i]) fromBattery = i
+        // Cooling: keep the hotter step until a degree under its threshold.
+        if (fromBattery < held && t > FROM[held] - HOLD) fromBattery = held
+        level = max(level, fromBattery)
+        held = fromBattery
+      } else held = 0
+    }
+    // Hot and charging at once: one step stricter still.
+    if (charging && level in 1..2) level += 1
+    return NAMES[level.coerceIn(0, 3)]
+  }
 }
+

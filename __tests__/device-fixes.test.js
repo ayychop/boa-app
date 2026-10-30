@@ -57,7 +57,10 @@ describe('the [GIF] inbox preview', () => {
     expect(GIF_TAG).toBe('[GIF]');
     expect(previewText('https://media4.giphy.com/media/v1.Y2lk/abc/giphy.gif')).toBe('[GIF]');
     expect(previewText('https://i.giphy.com/abc.gif')).toBe('[GIF]');
-    expect(previewText('hello https://media4.giphy.com/x')).toBe('hello https://media4.giphy.com/x');
+    // Words around a Giphy link stay; the link itself never shows.
+    expect(previewText('hello https://media4.giphy.com/x')).toBe('hello [GIF]');
+    expect(previewText('https://media3.giphy.com/media/v1.Yz/abc/100.gif')).toBe('[GIF]');
+    expect(previewText('see https://example.com/x')).toBe('see https://example.com/x');
     expect(previewText(null)).toBe('');
   });
   test('new messages get it from the database, old rows are rewritten, pushes say it too', () => {

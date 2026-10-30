@@ -13,6 +13,11 @@ jest.mock('../src/api/hub', () => ({
   ...jest.requireActual('../src/api/hub'),
   getPremiumAccess: jest.fn(),
   amIAdmin: jest.fn(async () => false),
+  startConversation: jest.fn(async () => 'conv-kofi'),
+}));
+jest.mock('../src/navigation/ref', () => ({
+  ...jest.requireActual('../src/navigation/ref'),
+  openPage: jest.fn(() => true),
 }));
 let mockSignal = null;
 jest.mock('../src/calls/signaling', () => ({
@@ -57,7 +62,12 @@ beforeEach(() => {
 
 function Dial() {
   const { startCall } = useCall();
-  return <Text onPress={() => startCall(KOFI)}>Call Kofi</Text>;
+  return (
+    <>
+      <Text onPress={() => startCall(KOFI)}>Call Kofi</Text>
+      <Text onPress={() => startCall(KOFI, { voice: true })}>Voice call Kofi</Text>
+    </>
+  );
 }
 const mount = () =>
   render(
@@ -382,6 +392,86 @@ describe('Agora video calls', () => {
     await act(async () => jest.advanceTimersByTime(2000));
   });
 
+  test('the phone Back button on a call never ends it: it shrinks to the floating window and opens their chat', async () => {
+    const { openPage } = require('../src/navigation/ref');
+    openPage.mockClear();
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    await mount();
+    await user.press(screen.getByText('Call Kofi'));
+    const { callId } = signal.send.mock.calls.at(-1)[2];
+    await act(async () => mockSignal('accept', { callId }));
+    await act(async () => handler().onJoinChannelSuccess({}, 10));
+    const leaves = engine.leaveChannel.mock.calls.length;
+    signal.send.mockClear();
+
+    // Back is the Modal's onRequestClose on Android.
+    let modal = screen.getByTestId('call-screen');
+    while (modal && !modal.props.onRequestClose) modal = modal.parent;
+    await act(async () => modal.props.onRequestClose());
+    await act(async () => {});
+    expect(screen.queryByTestId('call-screen')).toBeNull();
+    expect(screen.getByTestId('call-mini')).toBeOnTheScreen();
+    expect(openPage).toHaveBeenCalledWith('HubThread', { id: 'conv-kofi' });
+    expect(hub.startConversation).toHaveBeenCalledWith('user-kofi');
+    // Not hung up.
+    expect(engine.leaveChannel.mock.calls.length).toBe(leaves);
+    expect(signal.send).not.toHaveBeenCalledWith(expect.anything(), 'end', expect.anything());
+    await user.press(screen.getByTestId('call-mini-end'));
+    await act(async () => jest.advanceTimersByTime(2000));
+  });
+
+  test('Go to Chat on the floating window opens their chat with the call carrying on in the app\'s small window', async () => {
+    const BoaCall = require('../modules/boa-call');
+    const { openPage } = require('../src/navigation/ref');
+    openPage.mockClear();
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    await mount();
+    await user.press(screen.getByText('Call Kofi'));
+    const { callId } = signal.send.mock.calls.at(-1)[2];
+    await act(async () => mockSignal('accept', { callId }));
+    await act(async () => handler().onJoinChannelSuccess({}, 10));
+    await act(async () => BoaCall.__pip(true));
+    expect(screen.getByTestId('call-pip')).toBeOnTheScreen();
+    signal.send.mockClear();
+
+    await act(async () => BoaCall.__pipAction('chat'));
+    await act(async () => BoaCall.__pip(false));
+    await act(async () => {});
+    expect(openPage).toHaveBeenCalledWith('HubThread', { id: 'conv-kofi' });
+    expect(screen.getByTestId('call-mini')).toBeOnTheScreen();
+    expect(signal.send).not.toHaveBeenCalledWith(expect.anything(), 'end', expect.anything());
+    await user.press(screen.getByTestId('call-mini-end'));
+    await act(async () => jest.advanceTimersByTime(2000));
+  });
+
+  test('voice call only: rings as voice (video: false), the camera stays off, and the other side sees a voice call', async () => {
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    await mount();
+    await user.press(screen.getByText('Voice call Kofi'));
+    const ring = signal.send.mock.calls.find(([, event]) => event === 'ring');
+    expect(ring[2]).toEqual(expect.objectContaining({ video: false }));
+    const { callId } = ring[2];
+    await act(async () => {});
+    await act(async () => mockSignal('accept', { callId }));
+    await act(async () => handler().onJoinChannelSuccess({}, 10));
+    expect(screen.getByLabelText('Camera on')).toBeOnTheScreen();
+    await user.press(screen.getByTestId('call-end'));
+    await act(async () => jest.advanceTimersByTime(2000));
+
+    // A video call still says video: true.
+    signal.send.mockClear();
+    await user.press(screen.getByText('Call Kofi'));
+    expect(signal.send.mock.calls.find(([, event]) => event === 'ring')[2]).toEqual(expect.objectContaining({ video: true }));
+    await user.press(screen.getByTestId('call-end'));
+    await act(async () => jest.advanceTimersByTime(2000));
+
+    // Coming in: their voice call is announced as one.
+    await act(async () => mockSignal('ring', { callId: 'd1c3e1f0-0000-4000-8000-0000000000a1', video: false, from: { id: 'user-kofi', name: 'Kofi Boateng' } }));
+    expect(screen.getByTestId('call-status')).toHaveTextContent('Incoming voice call');
+    await user.press(screen.getByTestId('call-decline'));
+    await act(async () => jest.advanceTimersByTime(2000));
+  });
+
   test('the Home button shrinks the call to its floating window, which lets taps fall through to the app', async () => {
     const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
     await mount();
@@ -472,7 +562,21 @@ describe('Agora video calls', () => {
 
 describe('Privacy Mode', () => {
   const ScreenCapture = require('expo-screen-capture');
-  const { decodeMessage, encodePrivacy } = require('../src/calls/privacy');
+  const BoaScreen = require('../modules/boa-screen');
+  const { blockScreenshots, decodeMessage, encodePrivacy } = require('../src/calls/privacy');
+
+  // Android: through BoaScreen's FLAG_SECURE holders, one key per reason, so the
+  // window stays secure while ANY of them holds it (view-once media, your own
+  // Privacy Mode, theirs).
+  const secure = (on, key) => BoaScreen.setSecure.mock.calls.filter(([o, k]) => o === on && k === key).length;
+
+  test('falls back to expo-screen-capture (iOS, builds without BoaScreen)', async () => {
+    ScreenCapture.preventScreenCaptureAsync.mockClear();
+    BoaScreen.setSecure.mockResolvedValueOnce(false);
+    blockScreenshots(true, 'call');
+    await act(async () => {});
+    expect(ScreenCapture.preventScreenCaptureAsync).toHaveBeenCalledWith('call');
+  });
 
   test('the message is tiny JSON both ways, and anything else is ignored', () => {
     expect(decodeMessage(encodePrivacy(true))).toEqual({ type: 'privacy', active: true });
@@ -481,8 +585,7 @@ describe('Privacy Mode', () => {
 
   test('blocks screenshots, tells them over the data stream, shows both sides, and resets for the next call', async () => {
     const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
-    ScreenCapture.preventScreenCaptureAsync.mockClear();
-    ScreenCapture.allowScreenCaptureAsync.mockClear();
+    BoaScreen.setSecure.mockClear();
     await mount();
     await act(async () => mockSignal('ring', { callId: 'd1c3e1f0-0000-4000-8000-000000000001', from: { id: 'user-kofi', name: 'Kofi Boateng' } }));
     await user.press(screen.getByTestId('call-accept'));
@@ -494,7 +597,7 @@ describe('Privacy Mode', () => {
 
     // On: screenshots blocked here, a gold shield on your picture, and they're told.
     await user.press(screen.getByTestId('call-privacy'));
-    expect(ScreenCapture.preventScreenCaptureAsync).toHaveBeenCalledTimes(1);
+    expect(secure(true, 'call')).toBe(1);
     expect(screen.getByTestId('call-privacy-on')).toBeOnTheScreen();
     expect(screen.getByLabelText('Privacy Mode on')).toBeOnTheScreen();
     const [streamId, bytes, length] = engine.sendStreamMessage.mock.calls.at(-1);
@@ -508,21 +611,25 @@ describe('Privacy Mode', () => {
 
     // Off again.
     await user.press(screen.getByTestId('call-privacy'));
-    expect(ScreenCapture.allowScreenCaptureAsync).toHaveBeenCalledTimes(1);
+    expect(secure(false, 'call')).toBe(1);
     expect(screen.queryByTestId('call-privacy-on')).toBeNull();
     expect(decodeMessage(engine.sendStreamMessage.mock.calls.at(-1)[1])).toEqual({ type: 'privacy', active: false });
 
     // They turn theirs on: the pill says so, and goes when they turn it off.
     await act(async () => handler().onStreamMessage({}, 777, 1, encodePrivacy(true), 30, 0));
     expect(screen.getByTestId('call-remote-privacy')).toHaveTextContent('🔒 Kofi Boateng has disabled screenshots.');
+    // Their screenshots of YOUR picture are blocked by this phone too: it's the one being looked at.
+    expect(secure(true, 'remote')).toBe(1);
     await act(async () => handler().onStreamMessage({}, 777, 1, encodePrivacy(false), 31, 0));
     expect(screen.queryByTestId('call-remote-privacy')).toBeNull();
+    expect(secure(false, 'remote')).toBe(1);
 
     // On at hang up: screenshots come straight back, and the next call starts with everyone's off.
     await act(async () => handler().onStreamMessage({}, 777, 1, encodePrivacy(true), 30, 0));
     await user.press(screen.getByTestId('call-privacy'));
     await user.press(screen.getByTestId('call-end'));
-    expect(ScreenCapture.allowScreenCaptureAsync).toHaveBeenCalledTimes(2);
+    expect(secure(false, 'call')).toBe(2);
+    expect(secure(false, 'remote')).toBe(2);
     await act(async () => jest.advanceTimersByTime(2000));
     await act(async () => mockSignal('ring', { callId: 'd1c3e1f0-0000-4000-8000-000000000002', from: { id: 'user-kofi', name: 'Kofi Boateng' } }));
     await user.press(screen.getByTestId('call-accept'));

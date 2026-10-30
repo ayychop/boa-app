@@ -26,3 +26,12 @@ export function release() {
     native?.release?.();
   } catch {}
 }
+
+/** Whether the phone is projecting to a car (Android Auto) or in car mode: the sound is then bigger and wider. */
+export function isCar() {
+  try {
+    return !!native?.isCar?.();
+  } catch {
+    return false;
+  }
+}

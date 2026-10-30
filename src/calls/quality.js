@@ -12,8 +12,19 @@
 /** 1080p at 30 fps for the live call. */
 export const HD = Object.freeze({ width: 1920, height: 1080, fps: 30 });
 
-/** 720p at 60 fps when the phone is hot: less work per frame, motion stays smooth. */
-export const COOL = Object.freeze({ width: 1280, height: 720, fps: 60 });
+/**
+ * Heat steps. Pixels per second is what heats the camera, ISP and encoder
+ * (the old 720p60 "cool" mode was 55M px/s against 1080p30's 62M: it barely
+ * cooled anything, and a Flip 7's Exynos kept climbing, worst on a charger).
+ * Each step now cuts the work hard:
+ *   1080p30  62M px/s   NOMINAL
+ *    720p30  28M px/s   FAIR     (the phone is getting warm, or charging hot)
+ *    540p24  12M px/s   WARNING  (hot)
+ *    360p15   3M px/s   CRITICAL (very hot: the call carries on, picture small)
+ */
+export const WARM = Object.freeze({ width: 1280, height: 720, fps: 30 });
+export const COOL = Object.freeze({ width: 960, height: 540, fps: 24 });
+export const COLD = Object.freeze({ width: 640, height: 360, fps: 15 });
 
 /** setVideoEncoderConfiguration while it rings: 360p at 15 fps opens the camera fast. */
 export const PREVIEW = Object.freeze({
@@ -46,24 +57,38 @@ export const ENCODER = Object.freeze({
 });
 
 /**
- * Live encoder when thermal state is WARNING or CRITICAL. Keep 60 fps so
- * the picture doesn't look choppy; drop resolution instead of frames.
- * MaintainFramerate + PreferFrameRate: on a weak network, keep the rate.
+ * The live encoders for a warm, hot and very hot phone. Frames are given up
+ * before faces: MaintainFramerate keeps motion smooth at the lower size, and
+ * the hottest step is a small, light picture so the phone can cool while the
+ * call carries on.
  */
-export const COOL_ENCODER = Object.freeze({
-  dimensions: { width: COOL.width, height: COOL.height },
-  frameRate: COOL.fps,
-  bitrate: 2200, // Kbps: Agora's figure for clean 720p60
-  minBitrate: -1,
-  orientationMode: 0,
-  degradationPreference: 1, // MaintainFramerate
-  advanceOptions: { compressionPreference: 0 }, // PreferFrameRate
-  mirrorMode: 2,
-});
+const cooler = (size, bitrate) =>
+  Object.freeze({
+    dimensions: { width: size.width, height: size.height },
+    frameRate: size.fps,
+    bitrate, // Kbps
+    minBitrate: -1,
+    orientationMode: 0,
+    degradationPreference: 1, // MaintainFramerate
+    advanceOptions: { compressionPreference: 0 }, // PreferFrameRate: the lightest encode
+    mirrorMode: 2,
+  });
+export const WARM_ENCODER = cooler(WARM, 1500); // FAIR
+export const COOL_ENCODER = cooler(COOL, 800); // WARNING
+export const COLD_ENCODER = cooler(COLD, 400); // CRITICAL
 
-/** The live encoder for this thermal state. Hot phones use COOL_ENCODER. */
+/** The live encoder for this thermal state: lighter at every step up in heat. */
 export function encoderForThermal(state) {
-  return state === 'WARNING' || state === 'CRITICAL' ? COOL_ENCODER : ENCODER;
+  switch (state) {
+    case 'FAIR':
+      return WARM_ENCODER;
+    case 'WARNING':
+      return COOL_ENCODER;
+    case 'CRITICAL':
+      return COLD_ENCODER;
+    default:
+      return ENCODER;
+  }
 }
 
 /** The preview's mirror (VideoCanvas.mirrorMode): mirrored for the front camera, true to life for the back. */

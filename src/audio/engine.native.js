@@ -32,6 +32,11 @@ let connectTimer = null;
 let stallTimer = null;
 let retryTimer = null;
 let gen = 0; // see engine.js: guards against stale failures
+// The live stream's clock: { t, at, moved }. Only judged once it has been seen moving.
+let clock = { t: 0, at: 0, moved: false };
+const resetClock = () => {
+  clock = { t: 0, at: Date.now(), moved: false };
+};
 const listeners = new Set();
 let remote = null; // { next, previous } from the player context
 
@@ -63,7 +68,14 @@ export const MAX_RETRIES = 2;
 const RETRY_DELAYS_MS = [1200, 2500];
 // Reconnecting a stream that was playing: keeps trying, backing off to a
 // retry every 30s (a tunnel, a lift, a dead zone).
-const RECONNECT_DELAYS_MS = [1000, 2000, 4000, 8000, 15000, 30000];
+// Quick, and never longer than 8s: a drop should feel like a music player
+// buffering (tunnel, lift, a car's patchy 4G), not a station that went off,
+// and with no network library to say "we're back", a short cap is what gets
+// the audio back within seconds of the signal returning.
+const RECONNECT_DELAYS_MS = [400, 800, 1500, 3000, 5000, 8000];
+// Playing, but the stream's clock has stood still this long (the player says
+// "playing" with nothing coming out: a half-dead connection): reconnect.
+const CLOCK_STALL_MS = 8000;
 
 const isLive = (item) => item?.kind !== 'podcast';
 
@@ -79,6 +91,24 @@ function clearTimers() {
   retryTimer = null;
 }
 
+// A live stream that says "playing" while its clock is stuck is a silent
+// stall (the connection died without an error). Treated as a drop.
+function watchClock(t) {
+  const now = Date.now();
+  if (typeof t !== 'number') return false;
+  if (t > clock.t + 0.2) {
+    clock = { t, at: now, moved: true };
+    return false;
+  }
+  if (clock.moved && now - clock.at > CLOCK_STALL_MS) {
+    console.warn(`[audio] ${current?.streamUrl} stopped moving for ${CLOCK_STALL_MS / 1000}s; reconnecting`);
+    clock = { t: 0, at: now, moved: false };
+    fail(gen);
+    return true;
+  }
+  return false;
+}
+
 function onStatus(s) {
   if (!current) return;
   if (s.error) {
@@ -89,7 +119,7 @@ function onStatus(s) {
   if (!isLive(current)) {
     emit({ position: s.currentTime, ...(s.duration > 0 && { duration: s.duration }) });
   }
-  if (s.didJustFinish || (s.playbackState === 'ended' && state.status === 'playing')) {
+  if (s.didJustFinish || (s.playbackState === 'ended' && (state.status === 'playing' || (state.status === 'loading' && isLive(current))))) {
     // A live stream "ending" is the server dropping the connection.
     if (isLive(current)) return wantPlaying ? fail(gen) : undefined;
     wantPlaying = false;
@@ -100,7 +130,10 @@ function onStatus(s) {
     // Hi-Fi effects can finally attach to it.
     attachEq();
     clearTimeout(stallTimer);
+    // A stuck clock is a drop: this very update must not count as playing again.
+    if (isLive(current) && state.status === 'playing' && wantPlaying && watchClock(s.currentTime)) return;
     if (state.status !== 'playing') {
+      resetClock();
       clearTimeout(connectTimer);
       attempts = 0;
       established = true;
@@ -215,6 +248,7 @@ export function play(item) {
 
 async function connect(item, { retry = false, resumeAt = 0 }) {
   const attempt = ++gen;
+  resetClock();
   const switching = current?.id !== item.id;
   current = item;
   if (retry) {

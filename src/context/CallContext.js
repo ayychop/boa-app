@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { AppState, Platform, Vibration } from 'react-native';
+import { AppState, BackHandler, Platform, Vibration } from 'react-native';
 import * as Linking from 'expo-linking';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
@@ -17,6 +17,8 @@ import { blockScreenshots } from '../calls/privacy';
 import { notifyMissedCall } from '../chat/notifications';
 import * as BoaCall from '../../modules/boa-call';
 import { askForCallWakeUp } from '../calls/wakeUp';
+import { startConversation } from '../api/hub';
+import { goToTab, navigationRef, openPage } from '../navigation/ref';
 import { RING_MS, callFromPush, parseCallLink, pendingCall, ringLeft, ringNotification, stopRingNotification } from '../calls/incoming';
 
 const CallContext = createContext(null);
@@ -209,6 +211,39 @@ export function CallProvider({ children }) {
     if (!onCall) setPip(false);
   }, [onCall]);
 
+  // Their chat, over whatever is on screen, with the call carrying on in its
+  // small window: how Back on the call screen and Chat on the floating
+  // window both end up. Already in that chat: stay where you are.
+  const openChat = useCallback(async () => {
+    const peerId = callRef.current?.peer?.id;
+    if (!peerId) return;
+    try {
+      const id = await startConversation(peerId);
+      const here = navigationRef.isReady() ? navigationRef.getCurrentRoute() : null;
+      if (here?.name === 'HubThread' && here.params?.id === id) return;
+      openPage('HubThread', { id });
+    } catch {
+      // Messages closed, or offline: the chat list is the next best thing.
+      goToTab('Chat');
+    }
+  }, []);
+
+  // Back on a call must never close the app or hang up. The call screen's
+  // own Back goes to the chat (CallScreen). This catches Back once the call
+  // is already in its small window and there's nothing left to go back to
+  // (the app's root): the call floats over the phone's home screen instead
+  // of the app quitting.
+  useEffect(() => {
+    if (!onCall || Platform.OS !== 'android') return undefined;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (navigationRef.isReady() && navigationRef.canGoBack()) return false;
+      if (!BoaCall.isPipSupported()) return false;
+      BoaCall.enterPip();
+      return true;
+    });
+    return () => sub.remove();
+  }, [onCall]);
+
   // A call on keeps going with the screen off (Android: an ongoing-call
   // foreground service, modules/boa-call OngoingCallService). Started as the
   // call is placed or answered, with the app on screen, and again once it's
@@ -306,6 +341,11 @@ export function CallProvider({ children }) {
     const c = callRef.current;
     setCall((cur) => (cur ? { ...cur, phase: 'active', startedAt: Date.now() } : cur));
     if (!c) return;
+    // A voice call starts with the camera off (the camera button still turns it on).
+    if (c.voice && !controlsRef.current.cameraOff) {
+      controlsRef.current = { ...controlsRef.current, cameraOff: true };
+      setControls(controlsRef.current);
+    }
     if (c.direction === 'in') stopRingNotification(c.id);
     // They answered while your phone was locked: the screen lights up on the
     // call, over the lock screen, like a phone call (off again once it's over).
@@ -360,9 +400,9 @@ export function CallProvider({ children }) {
 
   // What a ring says (Realtime): sentAt so a ring delivered late (a phone
   // waking up) only rings for the time it has left.
-  const ringPayload = (id, sentAt) => ({
+  const ringPayload = (id, sentAt, voice = false) => ({
     callId: id,
-    video: true,
+    video: !voice,
     sentAt,
     from: personOf(profileRef.current) ?? {
       id: userIdRef.current,
@@ -398,7 +438,7 @@ export function CallProvider({ children }) {
         });
         goLive();
       } else {
-        signal.send(from.id, 'ring', ringPayload(mine.id, mine.sentAt));
+        signal.send(from.id, 'ring', ringPayload(mine.id, mine.sentAt, mine.voice));
       }
     },
     [goLive],
@@ -410,7 +450,7 @@ export function CallProvider({ children }) {
    * (Answer on the lock screen opened the app), so it doesn't ring at all.
    */
   const ringIn = useCallback(
-    ({ callId, from }, ms = RING_MS, { quiet = false } = {}) => {
+    ({ callId, from, video: wantsVideo }, ms = RING_MS, { quiet = false } = {}) => {
       if (!from?.id || !callId || blockedRef.current.has(from.id) || seen.current.has(callId)) return;
       seen.current.add(callId);
       let current = callRef.current;
@@ -433,6 +473,8 @@ export function CallProvider({ children }) {
         startedAt: null,
         reason: null,
         sentAt: Date.now() - (RING_MS - ms),
+        // A voice call: the caller's ring says video: false.
+        voice: wantsVideo === false,
       };
       setCall(callRef.current);
       setVideo(NO_MEDIA);
@@ -482,6 +524,12 @@ export function CallProvider({ children }) {
       if (event === 'ring') {
         // Older apps don't send sentAt: a full ring.
         const left = p.sentAt ? ringLeft(p.sentAt) : RING_MS;
+        // The same call already rang here by push, which doesn't say whether
+        // it's voice only: this ring does.
+        if (current?.id === p.callId && current.direction === 'in' && p.video === false && !current.voice) {
+          callRef.current = { ...current, voice: true };
+          setCall(callRef.current);
+        }
         if (left >= 2000) ringIn(p, left);
         return;
       }
@@ -574,7 +622,7 @@ export function CallProvider({ children }) {
 
   /** Calls someone (BOA Premium). person: their profile. */
   const startCall = useCallback(
-    (person) =>
+    (person, { voice = false } = {}) =>
       requirePremium(async () => {
         const peer = personOf(person);
         if (!peer || !userId || peer.id === userId) return;
@@ -603,14 +651,19 @@ export function CallProvider({ children }) {
           startedAt: null,
           reason: null,
           sentAt,
+          voice: !!voice,
         };
         setCall(callRef.current);
         setVideo(NO_MEDIA);
         haptics.selection();
         // Your camera comes on while it rings, so you can check how you look.
-        media.prepare(id, beautyRef.current).catch(() => {});
+        // A voice call has no picture to check: the camera stays off.
+        if (voice) {
+          controlsRef.current = { ...controlsRef.current, cameraOff: true };
+          setControls(controlsRef.current);
+        } else media.prepare(id, beautyRef.current).catch(() => {});
         // Realtime reaches a phone with the app open; the push wakes one in a pocket.
-        const [live, pushed] = await Promise.all([signal.send(peer.id, 'ring', ringPayload(id, sentAt)), signal.pushRing(peer.id, id)]);
+        const [live, pushed] = await Promise.all([signal.send(peer.id, 'ring', ringPayload(id, sentAt, voice)), signal.pushRing(peer.id, id)]);
         if (callRef.current?.id !== id) return;
         if (!live && !pushed) return finish('unreachable');
         timers.current.ring = setTimeout(() => {
@@ -697,7 +750,31 @@ export function CallProvider({ children }) {
 
   // The floating picture-in-picture window's own buttons: Mute toggles the
   // mic, End hangs up. Nothing else reaches the call while it's in the window.
-  useEffect(() => BoaCall.addPipActionListener((action) => (action === 'mute' ? toggle('muted') : action === 'end' ? hangUp() : undefined)), [toggle, hangUp]);
+  // Chat brings the app out of the window (native side) onto their chat, the
+  // call shrunk to the app's own small window so you can type while it goes on.
+  useEffect(
+    () =>
+      BoaCall.addPipActionListener((action) => {
+        if (action === 'mute') toggle('muted');
+        else if (action === 'end') hangUp();
+        else if (action === 'chat') {
+          minimize();
+          openChat();
+        }
+      }),
+    [toggle, hangUp, minimize, openChat],
+  );
+
+  // Privacy Mode protects THEIR screenshots of YOUR picture too: a screenshot
+  // is taken by the phone looking at the picture, so when they turn Privacy on
+  // this phone's window goes secure as well (FLAG_SECURE: black in screenshots,
+  // recordings and screen sharing) for as long as their privacy is on.
+  const remotePrivate = !!call && call.phase === 'active' && !!video.remotePrivacy;
+  useEffect(() => {
+    if (!remotePrivate) return undefined;
+    blockScreenshots(true, 'remote');
+    return () => blockScreenshots(false, 'remote');
+  }, [remotePrivate]);
   // Keep that window's Mute button showing the call's real mute state.
   useEffect(() => {
     BoaCall.setPipMuted(controls.muted);
@@ -725,6 +802,7 @@ export function CallProvider({ children }) {
       minimized,
       minimize,
       restore,
+      openChat,
       pip,
       startCall,
       accept,
@@ -756,6 +834,7 @@ export function CallProvider({ children }) {
       minimized,
       minimize,
       restore,
+      openChat,
       pip,
       startCall,
       accept,

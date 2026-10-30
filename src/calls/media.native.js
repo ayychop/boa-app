@@ -508,7 +508,7 @@ function setFacing(next) {
   facingListeners.forEach((fn) => fn(next));
 }
 
-/** The live encoder for the phone's heat: 1080p30, or 720p60 when it's hot. */
+/** The live encoder for the phone's heat: 1080p30, stepping down to 720p30, 540p24 and 360p15 as it heats up. */
 function applyEncoder() {
   if (!engine || !session) return;
   const cfg = session.live ? encoderForThermal(thermal.current()) : PREVIEW;
@@ -577,7 +577,7 @@ export async function prepare(channel, beauty) {
     watchThermal();
     // What's behind you, from the first frame they see.
     if (background.mode !== 'off') applyBackground();
-    // Small and fast while it rings; join success steps it up to HD (or 720p60 if the phone is already hot).
+    // Small and fast while it rings; join success steps it up to HD (or a lighter step if the phone is already warm).
     applyEncoder();
     if (s.camera) engine.startPreview();
     return true;

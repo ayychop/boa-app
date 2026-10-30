@@ -37,10 +37,20 @@ export const isGifUrl = (url) => typeof url === 'string' && url.length <= 600 &&
 
 /** What the inbox and notifications call a GIF, instead of its address. */
 export const GIF_TAG = '[GIF]';
-const GIF_PREFIX = /^https:\/\/(?:media\d*\.giphy\.com|i\.giphy\.com)\//i;
+// A Giphy address anywhere in a message: sent as a GIF, pasted, or sent by an
+// older build as plain text (http too, and any media1..media9 host).
+const GIF_IN_TEXT = /https?:\/\/(?:media\d*\.giphy\.com|i\.giphy\.com)\/\S+/i;
+const GIF_IN_TEXT_ALL = new RegExp(GIF_IN_TEXT.source, 'gi');
 
-/** A conversation's last-message preview, with a GIF's address swapped for [GIF]. */
-export const previewText = (preview) => (typeof preview === 'string' && GIF_PREFIX.test(preview.trim()) ? GIF_TAG : (preview ?? ''));
+/** Whether a message's text is, or carries, a Giphy address. */
+export const hasGifUrl = (text) => typeof text === 'string' && GIF_IN_TEXT.test(text);
+
+/**
+ * A conversation's last-message preview (and a notification's text) with any
+ * Giphy address swapped for [GIF]: a GIF on its own is just "[GIF]", a link
+ * with words around it keeps them ("look [GIF]"). Never the raw address.
+ */
+export const previewText = (preview) => (hasGifUrl(preview) ? preview.replace(GIF_IN_TEXT_ALL, GIF_TAG).trim() : (preview ?? ''));
 
 /** Giphy's response, as the picker uses it: { id, url (to send), preview, width, height, title }. */
 export function shapeGifs(json) {

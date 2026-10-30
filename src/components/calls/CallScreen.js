@@ -750,15 +750,15 @@ function PipCall({ call, video, status }) {
   );
 }
 
-function Incoming({ peer, status, width, onAccept, onDecline }) {
+function Incoming({ peer, status, voice, width, onAccept, onDecline }) {
   const avatar = Math.min(168, width * 0.42);
   return (
     <View style={styles.incoming}>
       <Animated.View entering={settle(FadeInDown)} style={[styles.card, { width: Math.min(width - space.lg * 2, 400) }]}>
         <Glass tint="rgba(12,12,15,0.62)" intensity={60} />
         <View style={styles.brandRow}>
-          <Text style={styles.brand}>BOA VIDEO</Text>
-          <GoldBadge label="HD" />
+          <Text style={styles.brand}>{voice ? 'BOA VOICE' : 'BOA VIDEO'}</Text>
+          {voice ? null : <GoldBadge label="HD" />}
         </View>
         <View style={styles.cardAvatar}>
           <Ripple size={avatar} />
@@ -780,7 +780,7 @@ function Incoming({ peer, status, width, onAccept, onDecline }) {
           <Text style={styles.answerLabel}>Decline</Text>
         </View>
         <View style={styles.answer}>
-          <CallButton icon="videocam" label="Accept" tone={GREEN} size={84} iconSize={34} ring={colors.gold} glow="0px 0px 32px rgba(226,168,75,0.6)" onPress={onAccept} testID="call-accept" />
+          <CallButton icon={voice ? 'call' : 'videocam'} label="Accept" tone={GREEN} size={84} iconSize={34} ring={colors.gold} glow="0px 0px 32px rgba(226,168,75,0.6)" onPress={onAccept} testID="call-accept" />
           <Text style={styles.answerLabel}>Accept</Text>
         </View>
       </Animated.View>
@@ -815,6 +815,7 @@ export default function CallScreen({ me }) {
     minimized,
     minimize,
     restore,
+    openChat,
     pip: inPip,
     accept,
     decline,
@@ -871,13 +872,22 @@ export default function CallScreen({ me }) {
 
   const { peer, phase, direction } = call;
   const incoming = direction === 'in' && phase === 'ringing';
-  const status = phase === 'ended' ? (END_REASONS[call.reason] ?? END_REASONS.ended) : phase === 'active' ? clock(elapsed) : incoming ? 'Incoming video call' : 'Ringing…';
+  const status = phase === 'ended' ? (END_REASONS[call.reason] ?? END_REASONS.ended) : phase === 'active' ? clock(elapsed) : incoming ? (call.voice ? 'Incoming voice call' : 'Incoming video call') : 'Ringing…';
   // A call you're on (not one ringing in) can shrink to a floating window.
   const canShrink = !incoming && phase !== 'ended';
   const shrink = () => {
     haptics.tap();
     setPanel(null);
     minimize();
+  };
+  // The phone's Back button: never closes the call or the app. The call
+  // shrinks to its small window and the user lands in this person's chat, so
+  // they can type with the picture still going.
+  const backToChat = () => {
+    haptics.tap();
+    setPanel(null);
+    minimize();
+    openChat();
   };
   // Shrink to the floating window and drop the user on the Home feed, so they
   // can browse or check messages with the call still going.
@@ -930,7 +940,7 @@ export default function CallScreen({ me }) {
 
   return (
     // Edge to edge: the picture runs under the status bar and the navigation bar, with no bands.
-    <Modal visible transparent animationType="fade" statusBarTranslucent navigationBarTranslucent onRequestClose={incoming ? decline : canShrink ? shrink : hangUp}>
+    <Modal visible transparent animationType="fade" statusBarTranslucent navigationBarTranslucent onRequestClose={incoming ? decline : canShrink ? backToChat : hangUp}>
       <GestureHandlerRootView style={{ flex: 1 }}>
         <View style={styles.screen} testID="call-screen">
           {/* Their picture, blurred, fills the screen until their video does. */}
@@ -967,7 +977,7 @@ export default function CallScreen({ me }) {
                 },
               ]}
             >
-              <Incoming peer={peer} status={status} width={width} onAccept={accept} onDecline={decline} />
+              <Incoming peer={peer} status={status} voice={!!call.voice} width={width} onAccept={accept} onDecline={decline} />
             </View>
           ) : (
             // One column, top to bottom: the brand, the caller (centred in

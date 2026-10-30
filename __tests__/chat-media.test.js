@@ -269,6 +269,9 @@ describe('notifications', () => {
     expect(previewOf({ kind: 'voice' })).toMatch(/Voice note/);
     expect(previewOf({ kind: 'image' })).toMatch(/Photo/);
     expect(previewOf({ kind: 'text', body: 'hi' })).toBe('hi');
+    // A Giphy link sent as plain text (an older app) is a GIF in the notification, not the raw address.
+    expect(previewOf({ kind: 'text', body: 'https://media3.giphy.com/media/v1.Yz/abc/100.gif' })).toBe('[GIF]');
+    expect(previewOf({ kind: 'gif', body: 'https://media3.giphy.com/media/v1.Yz/abc/100.gif' })).toBe('[GIF]');
   });
 });
 

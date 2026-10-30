@@ -327,6 +327,8 @@ jest.mock('./modules/boa-call', () => {
       return () => pips.delete(fn);
     }),
     setPipMuted: jest.fn(async () => {}),
+    enterPip: jest.fn(async () => true),
+    isPipSupported: jest.fn(() => true),
     addPipActionListener: jest.fn((fn) => {
       pipActions.add(fn);
       return () => pipActions.delete(fn);

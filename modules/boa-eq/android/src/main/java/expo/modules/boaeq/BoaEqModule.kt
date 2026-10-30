@@ -1,5 +1,15 @@
 package expo.modules.boaeq
 
+import android.app.UiModeManager
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.content.res.Configuration
+import android.database.ContentObserver
+import android.net.Uri
+import android.os.Handler
+import android.os.Looper
 import android.media.audiofx.BassBoost
 import android.media.audiofx.DynamicsProcessing
 import android.media.audiofx.Equalizer
@@ -34,6 +44,17 @@ import kotlin.math.sqrt
  * to BOOST_GAIN_MILLIBELS, party volume. LoudnessEnhancer is created last,
  * so its limiter sits at the end of the chain and catches every peak. A
  * phone that lacks an effect simply goes without it.
+ *
+ * In the car (Android Auto projecting, or the phone in car mode) the same
+ * sliders sound bigger: a car's cabin and speakers swallow bass, so the
+ * extra bass and treble past Signature is raised (CAR_EXTRA_*_DB, with the
+ * sub-bass weighted up), the volume ceiling is lifted (CAR_EXTRA_GAIN), the
+ * lows are held at least CAR_MIN_PAST past Signature unless the sliders are
+ * flat, and the Virtualizer widens the stage all around the cabin. The
+ * Equalizer itself can't go past the phone's own hardware range, so this is
+ * all DynamicsProcessing and LoudnessEnhancer (its limiter still catches
+ * every peak). The effects follow the car: plugging in or leaving re-applies
+ * the last settings by itself.
  */
 class BoaEqModule : Module() {
   private var session = 0
@@ -42,26 +63,118 @@ class BoaEqModule : Module() {
   private var bassBoost: BassBoost? = null
   private var virtualizer: Virtualizer? = null
   private var loudness: LoudnessEnhancer? = null
+  private var last: DoubleArray? = null // bass, treble, spatial (0/1), boost (0/1)
+  private var carWatch: ContentObserver? = null
+  private var carReceiver: BroadcastReceiver? = null
 
   override fun definition() = ModuleDefinition {
     Name("BoaEq")
 
     // Returns whether any effect is now shaping the sound.
     Function("apply") { sessionId: Int, bass: Double, treble: Double, spatial: Boolean, boost: Boolean ->
-      applyTo(sessionId, bass.coerceIn(-1.0, 1.0), treble.coerceIn(-1.0, 1.0), spatial, boost)
+      val b = bass.coerceIn(-1.0, 1.0)
+      val t = treble.coerceIn(-1.0, 1.0)
+      last = doubleArrayOf(b, t, if (spatial) 1.0 else 0.0, if (boost) 1.0 else 0.0)
+      applyTo(sessionId, b, t, spatial, boost)
     }
 
     Function("release") {
       releaseAll()
     }
 
+    /** Whether the phone is projecting to a car (Android Auto) or in car mode right now. */
+    Function("isCar") {
+      inCar()
+    }
+
+    OnCreate {
+      watchCar()
+    }
+
     OnDestroy {
+      unwatchCar()
       releaseAll()
     }
   }
 
+  // ---- the car
+
+  private val ctx: Context?
+    get() = appContext.reactContext
+
+  // Android Auto's own connection state (what androidx CarConnection reads):
+  // 0 not connected, 1 a car's built-in Android (Automotive), 2 projecting.
+  private fun projecting(c: Context): Boolean =
+    try {
+      c.contentResolver.query(CAR_URI, arrayOf(CAR_STATE), null, null, null)?.use { cur ->
+        if (!cur.moveToFirst()) return@use false
+        val i = cur.getColumnIndex(CAR_STATE)
+        i >= 0 && cur.getInt(i) >= 1
+      } ?: false
+    } catch (_: Exception) {
+      false
+    }
+
+  private fun carMode(c: Context): Boolean =
+    (c.getSystemService(Context.UI_MODE_SERVICE) as? UiModeManager)?.currentModeType == Configuration.UI_MODE_TYPE_CAR
+
+  private fun inCar(): Boolean {
+    val c = ctx ?: return false
+    return projecting(c) || carMode(c)
+  }
+
+  // The car connecting or leaving re-applies the last settings, with the car's
+  // (or the phone's own) sound, without JS having to know.
+  private fun reapply() {
+    val l = last ?: return
+    if (session <= 0) return
+    try {
+      applyTo(session, l[0], l[1], l[2] > 0, l[3] > 0)
+    } catch (e: Exception) {
+      Log.w(TAG, "re-apply: ${e.message}")
+    }
+  }
+
+  private fun watchCar() {
+    val c = ctx ?: return
+    if (carWatch != null) return
+    val main = Handler(Looper.getMainLooper())
+    val observer = object : ContentObserver(main) {
+      override fun onChange(selfChange: Boolean) = reapply()
+    }
+    try {
+      c.contentResolver.registerContentObserver(CAR_URI, false, observer)
+      carWatch = observer
+    } catch (_: Exception) {
+      // Android Auto isn't installed or won't say: car mode below still works.
+    }
+    val receiver = object : BroadcastReceiver() {
+      override fun onReceive(context: Context, intent: Intent) = reapply()
+    }
+    val filter = IntentFilter().apply {
+      addAction(UiModeManager.ACTION_ENTER_CAR_MODE)
+      addAction(UiModeManager.ACTION_EXIT_CAR_MODE)
+    }
+    try {
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) c.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
+      else c.registerReceiver(receiver, filter)
+      carReceiver = receiver
+    } catch (_: Exception) {
+    }
+  }
+
+  private fun unwatchCar() {
+    val c = ctx
+    carWatch?.let { o -> try { c?.contentResolver?.unregisterContentObserver(o) } catch (_: Exception) {} }
+    carReceiver?.let { r -> try { c?.unregisterReceiver(r) } catch (_: Exception) {} }
+    carWatch = null
+    carReceiver = null
+  }
+
+  @Synchronized
   private fun applyTo(sessionId: Int, bass: Double, treble: Double, spatial: Boolean, boost: Boolean): Boolean {
     if (sessionId <= 0) return false
+    val car = inCar()
     if (sessionId != session) {
       releaseAll()
       session = sessionId
@@ -77,8 +190,11 @@ class BoaEqModule : Module() {
     // How far each slider sits from flat to Signature (0 to 1), and past Signature (0 to 1).
     val lowsUpTo = 1 + min(lows, 0.0)
     val highsUpTo = 1 + min(treble, 0.0)
-    val lowsPast = max(lows, 0.0)
-    val highsPast = max(treble, 0.0)
+    // In the car the sliders count as at least CAR_MIN_PAST past Signature
+    // (unless flat on that side), so even a phone-perfect setting gets the
+    // cabin's extra bass and treble.
+    val lowsPast = if (car && lows > -1.0) max(lows, CAR_MIN_PAST) else max(lows, 0.0)
+    val highsPast = if (car && treble > -1.0) max(treble, CAR_MIN_PAST) else max(treble, 0.0)
     var shaping = false
 
     equalizer?.let { eq ->
@@ -109,11 +225,13 @@ class BoaEqModule : Module() {
           if (lowsPast <= 0 && highsPast <= 0) {
             dp.setEnabled(false)
           } else {
-            val extraLows = lowsPast * EXTRA_BASS_DB
-            val extraHighs = highsPast * EXTRA_TREBLE_DB
+            val extraLows = lowsPast * (EXTRA_BASS_DB + if (car) CAR_EXTRA_BASS_DB else 0.0)
+            val extraHighs = highsPast * (EXTRA_TREBLE_DB + if (car) CAR_EXTRA_TREBLE_DB else 0.0)
             PRE_EQ_CUTOFFS.forEachIndexed { i, cutoff ->
               val hz = bandCentre(i)
-              val gain = (extraLows * bassWeight(hz) + extraHighs * trebleWeight(hz)).toFloat()
+              // The sub-bass (under 120 Hz) is what a car's cabin loses first.
+              val sub = if (car && hz <= 120) CAR_SUB_WEIGHT else 1.0
+              val gain = (extraLows * bassWeight(hz) * sub + extraHighs * trebleWeight(hz)).toFloat()
               dp.setPreEqBandAllChannelsTo(i, DynamicsProcessing.EqBand(true, cutoff, gain))
             }
             // Room for the extra before the limiter, so it grows the bass
@@ -151,7 +269,9 @@ class BoaEqModule : Module() {
         // on to MAX_SLIDER_GAIN at the top.
         val up = max(lowsUpTo, highsUpTo)
         val past = max(lowsPast, highsPast)
-        val gain = if (boost) BOOST_GAIN_MILLIBELS else (up * SIGNATURE_GAIN_MILLIBELS + past * (MAX_SLIDER_GAIN_MILLIBELS - SIGNATURE_GAIN_MILLIBELS)).roundToInt()
+        val base = if (boost) BOOST_GAIN_MILLIBELS else (up * SIGNATURE_GAIN_MILLIBELS + past * (MAX_SLIDER_GAIN_MILLIBELS - SIGNATURE_GAIN_MILLIBELS)).roundToInt()
+        // Louder in the car: a moving cabin is noisy. LoudnessEnhancer's limiter still holds the peaks.
+        val gain = if (car && base > 0) base + CAR_EXTRA_GAIN_MILLIBELS else base
         if (gain > 0) {
           l.setTargetGain(gain)
           l.setEnabled(true)
@@ -166,7 +286,8 @@ class BoaEqModule : Module() {
 
     virtualizer?.let { v ->
       try {
-        if (spatial) {
+        // The car gets the wraparound stage whether or not Spatial is on.
+        if (spatial || car) {
           if (v.strengthSupported) v.setStrength(1000)
           v.setEnabled(true)
           shaping = true
@@ -229,6 +350,7 @@ class BoaEqModule : Module() {
       null
     }
 
+  @Synchronized
   private fun releaseAll() {
     listOf(equalizer, dynamics, bassBoost, virtualizer, loudness).forEach {
       try {
@@ -271,5 +393,14 @@ class BoaEqModule : Module() {
     // up to 14 dB at the top.
     const val SIGNATURE_GAIN_MILLIBELS = 600
     const val MAX_SLIDER_GAIN_MILLIBELS = 1400
+    // The car: more on top of all that (DynamicsProcessing and LoudnessEnhancer
+    // only; the Equalizer is already at the phone's hardware ceiling).
+    private const val CAR_MIN_PAST = 0.4
+    const val CAR_EXTRA_BASS_DB = 6.0
+    const val CAR_EXTRA_TREBLE_DB = 3.0
+    private const val CAR_SUB_WEIGHT = 1.35
+    const val CAR_EXTRA_GAIN_MILLIBELS = 500
+    private val CAR_URI: Uri = Uri.parse("content://androidx.car.app.connection")
+    private const val CAR_STATE = "CarConnectionState"
   }
 }

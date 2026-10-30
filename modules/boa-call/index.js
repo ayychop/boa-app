@@ -106,7 +106,25 @@ export async function setPipMuted(muted) {
   } catch {}
 }
 
-/** Calls fn('mute' | 'end') when a button on the floating call window is tapped; returns an unsubscribe function. */
+/** Floats the call in its picture-in-picture window right now (the Back button on a call). True if it did. */
+export async function enterPip() {
+  try {
+    return !!(await native?.enterPip?.());
+  } catch {
+    return false;
+  }
+}
+
+/** Whether this phone does picture in picture. */
+export function isPipSupported() {
+  try {
+    return !!native?.isPipSupported?.();
+  } catch {
+    return false;
+  }
+}
+
+/** Calls fn('mute' | 'chat' | 'end') when a button on the floating call window is tapped; returns an unsubscribe function. */
 export function addPipActionListener(fn) {
   if (!native) return () => {};
   const sub = native.addListener('onPipAction', (e) => e?.action && fn(e.action));

@@ -4,6 +4,7 @@ import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import { CHAT_SOUNDS, DEFAULT_CHAT_SOUND, RETIRED_CHAT_SOUNDS, chatChannel, chatSoundById } from './sounds';
 import { RINGTONES } from '../calls/ringtone';
+import { GIF_TAG, previewText } from './gifs';
 
 // New-message notifications for BOA HUB Chat.
 //
@@ -188,9 +189,10 @@ export function previewOf(message) {
     case 'voice':
       return '🎙️ Voice note';
     case 'gif':
-      return '[GIF]';
+      return GIF_TAG;
     default:
-      return (message?.body ?? '').slice(0, 140);
+      // A Giphy address sent as plain text (an older app) is still a GIF, never the raw link.
+      return previewText(message?.body ?? '').slice(0, 140);
   }
 }
 

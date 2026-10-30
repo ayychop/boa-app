@@ -1,9 +1,10 @@
 import * as BoaCall from '../../modules/boa-call';
 
-// The phone's thermal state for video calls. WARNING and CRITICAL drop the
-// camera to 720p60 (src/calls/quality.js COOL_ENCODER) so the silicon can
-// cool without the picture looking choppy. Android reports it from
-// PowerManager (modules/boa-call); tests push a state with setState.
+// The phone's thermal state for video calls. Every step up in heat steps the
+// camera and encoder down (src/calls/quality.js: 720p30, 540p24, 360p15), so
+// the silicon cools while the call carries on. Android reports it from
+// PowerManager and the battery's temperature, a step stricter while charging
+// (modules/boa-call); tests push a state with setState.
 
 export const NOMINAL = 'NOMINAL';
 export const FAIR = 'FAIR';

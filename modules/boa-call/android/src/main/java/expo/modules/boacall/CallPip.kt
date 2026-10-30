@@ -25,7 +25,8 @@ import java.lang.ref.WeakReference
  *
  * The window is too small for the in-app controls, so it carries native
  * floating buttons instead (setActions): Mute, which toggles between a mic
- * and a struck-through mic, and End. A tap on one broadcasts to
+ * and a struck-through mic, Chat (back to this person's chat, the picture
+ * carrying on in the app's own small window) and End. A tap on one broadcasts to
  * CallPipReceiver and reaches JS, which mutes or ends the call. JS keeps the
  * Mute button in step with the real state (setMuted). So the window only ever
  * shows the call: their video (or a black screen with their photo when the
@@ -56,7 +57,7 @@ object CallPip : ReactActivityLifecycleListener {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return null
     val b = PictureInPictureParams.Builder().setAspectRatio(Rational(9, 16))
     // The buttons are a nicety: if they can't be built, the call still floats.
-    runCatching { b.setActions(listOf(muteAction(a), endAction(a))) }
+    runCatching { b.setActions(listOf(muteAction(a), chatAction(a), endAction(a))) }
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
       b.setAutoEnterEnabled(ready)
       b.setSeamlessResizeEnabled(true)
@@ -68,6 +69,12 @@ object CallPip : ReactActivityLifecycleListener {
     val icon = Icon.createWithResource(ctx, if (muted) R.drawable.ic_pip_mic else R.drawable.ic_pip_mic_off)
     val title = if (muted) "Unmute" else "Mute"
     return RemoteAction(icon, title, title, broadcast(ctx, CallPipReceiver.ACTION_PIP_MUTE, REQUEST_MUTE))
+  }
+
+  // Back to the chat with this person, so you can type while the picture carries on.
+  private fun chatAction(ctx: Context): RemoteAction {
+    val icon = Icon.createWithResource(ctx, R.drawable.ic_pip_chat)
+    return RemoteAction(icon, "Chat", "Go to chat", broadcast(ctx, CallPipReceiver.ACTION_PIP_CHAT, REQUEST_CHAT))
   }
 
   private fun endAction(ctx: Context): RemoteAction {
@@ -88,6 +95,16 @@ object CallPip : ReactActivityLifecycleListener {
     if (!supported(a)) return
     watch(a)
     runCatching { params(a)?.let { a.setPictureInPictureParams(it) } }
+  }
+
+  /**
+   * Floats the call now (the phone's Back button on the call screen). False
+   * if there's no call, or this phone doesn't do picture in picture.
+   */
+  fun enter(a: Activity?): Boolean {
+    a ?: return false
+    if (!ready || !supported(a) || a.isInPictureInPictureMode) return false
+    return runCatching { params(a)?.let { a.enterPictureInPictureMode(it) } ?: false }.getOrDefault(false)
   }
 
   /** The call's mute state changed: redraw the window's Mute button to match. */
@@ -117,10 +134,13 @@ object CallPip : ReactActivityLifecycleListener {
     this.activity = WeakReference(activity)
   }
 
-  // Android 8 to 11: no auto-enter, so go in as you leave.
+  // Home (or a swipe to another app) with a call on: float it. Android 12+
+  // auto-enters by itself on gesture navigation, but not on every phone or
+  // with the three-button bar (Samsung's One UI included), so this asks
+  // too. It does nothing if the window is already there.
   override fun onUserLeaveHint(activity: Activity?) {
     val a = activity ?: return
-    if (!ready || !supported(a) || Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) return
+    if (!ready || !supported(a) || a.isInPictureInPictureMode) return
     runCatching { params(a)?.let { a.enterPictureInPictureMode(it) } }
   }
 
@@ -134,4 +154,5 @@ object CallPip : ReactActivityLifecycleListener {
 
   private const val REQUEST_MUTE = 71
   private const val REQUEST_END = 72
+  private const val REQUEST_CHAT = 73
 }
