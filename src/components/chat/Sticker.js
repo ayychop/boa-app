@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { requireOptionalNativeModule } from 'expo';
 import { stickerUrl } from '../../chat/stickers';
@@ -13,6 +13,12 @@ const Image = requireOptionalNativeModule('ExpoImage') ? require('expo-image').I
 export default function Sticker({ emoji, size = 32, animate = true, style, testID }) {
   const [ready, setReady] = useState(false);
   const [failed, setFailed] = useState(false);
+  const playing = !!Image && animate && !failed;
+  // An emoji that stops animating (scrolled away, or its sheet closing) goes
+  // back to the plain emoji, which frees its animation.
+  useEffect(() => {
+    if (!playing) setReady(false);
+  }, [playing]);
   return (
     <View style={[{ width: size, height: size }, styles.box, style]} testID={testID} accessible accessibilityLabel={emoji}>
       {!ready ? (
@@ -20,7 +26,7 @@ export default function Sticker({ emoji, size = 32, animate = true, style, testI
           {emoji}
         </Text>
       ) : null}
-      {Image && animate && !failed ? (
+      {playing ? (
         <Image
           source={{ uri: stickerUrl(emoji) }}
           style={StyleSheet.absoluteFill}

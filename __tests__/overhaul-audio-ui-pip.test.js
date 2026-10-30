@@ -150,8 +150,9 @@ describe('BOA Originals polish', () => {
     const hero = src.slice(src.indexOf('function Featured'), src.indexOf('function GoldSheen'));
     expect(hero).toMatch(/testID="originals-hero-play"/);
     // Dead centre of the picture, under the status bar, not pushed up or down.
-    expect(hero).toMatch(/styles\.playOverlay, \{ paddingTop: insets\.top \}/);
-    expect(hero).toMatch(/<BoaPlayButton size=\{104\}/);
+    expect(hero).toMatch(/styles\.heroPlay, \{ top: playTop \}/);
+    expect(hero).toMatch(/insets\.top \+ Math\.round\(\(height - insets\.top - PLAY\) \/ 2\)/);
+    expect(hero).toMatch(/<BoaPlayButton size=\{PLAY\}/);
     expect(hero).toMatch(/media\.openEpisode\(production\)/);
   });
 
@@ -168,7 +169,7 @@ describe('BOA Originals polish', () => {
     const src = read('src/components/Poster.js');
     // Moved up to eye level (a quarter of the way down the card), with room for the line-height.
     expect(src).toMatch(/contentSoon: \{ justifyContent: 'flex-start' \}/);
-    expect(src).toMatch(/soon && \[styles\.contentSoon, \{ paddingTop: Math\.round\(height \* 0\.24\) \}\]/);
+    expect(src).toMatch(/soon && \[styles\.contentSoon, portrait \? \{ paddingTop: Math\.round\(height \* 0\.24\) \} : styles\.contentSoonCentered\]/);
   });
 
   test('the BOA Originals tab has a gold gleam that honours Reduce Motion', () => {

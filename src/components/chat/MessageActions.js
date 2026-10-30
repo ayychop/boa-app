@@ -14,7 +14,7 @@ import { colors, fonts, radius, space } from '../../theme';
 export function describeMessage(m) {
   if (!m) return '';
   if (m.kind === 'sticker') return `${m.body} Sticker`;
-  if (m.kind === 'gif') return 'GIF';
+  if (m.kind === 'gif') return '[GIF]';
   if (m.view_once) return m.kind === 'video' ? 'View once video' : 'View once photo';
   if (m.kind === 'image') return m.body?.trim() ? `📷 ${m.body.trim()}` : '📷 Photo';
   if (m.kind === 'video') return m.body?.trim() ? `🎬 ${m.body.trim()}` : '🎬 Video';

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { interpolate, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
@@ -39,19 +39,43 @@ export default function BottomSheet({ open, onClose, children, dragAnywhere = tr
     }
   }, [open, y]);
 
-  const dismiss = () => onClose();
+  // The parent's onClose changes identity on every render; the gesture only
+  // ever calls this one, which always reaches the latest.
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+  const notifyClose = useCallback(() => closeRef.current?.(), []);
+  const dismiss = notifyClose;
+  // Set once a swipe has decided to dismiss, so nothing else moves the sheet or asks twice.
+  const leaving = useSharedValue(false);
+  useEffect(() => {
+    if (open) leaving.value = false;
+  }, [open, leaving]);
 
   const pan = usePanGesture({
+    // Down only: a sideways or upward drag is never ours, so it can't fight the content.
     activeOffsetY: 6,
+    failOffsetX: [-24, 24],
     onUpdate: (e) => {
       'worklet';
+      if (leaving.value) return;
       // Resist dragging upward; follow the finger downward.
       y.value = e.translationY < 0 ? e.translationY * 0.2 : e.translationY;
     },
     onDeactivate: (e) => {
       'worklet';
-      if (e.translationY > 120 || e.velocityY > 900) scheduleOnRN(onClose);
-      else y.value = withSpring(0, { ...OPEN, velocity: e.velocityY });
+      if (leaving.value) return;
+      if (e.translationY > 120 || e.velocityY > 900) {
+        // The slide away finishes on the UI thread, whatever the JS thread is
+        // busy with; only then is the parent told, so a heavy sheet can't
+        // leave itself half way down the screen.
+        leaving.value = true;
+        y.value = withTiming(OFFSCREEN, { duration: 220 }, (done) => {
+          'worklet';
+          if (done) scheduleOnRN(notifyClose);
+        });
+      } else {
+        y.value = withSpring(0, { ...OPEN, velocity: e.velocityY });
+      }
     },
   });
 

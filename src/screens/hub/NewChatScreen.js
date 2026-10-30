@@ -43,6 +43,8 @@ import Sticker from '../../components/chat/Sticker';
 import GifPicker from '../../components/chat/GifPicker';
 import GifTile from '../../components/chat/GifTile';
 import { isGifUrl } from '../../chat/gifs';
+import { nameFor, useAlias } from '../../chat/contacts';
+import ContactSheet from '../../components/hub/ContactSheet';
 import { setOpenThread } from '../../chat/notifications';
 import { openTyping, TYPING_HOLD_MS } from '../../chat/typing';
 import { Avatar, BoaStarBadge, DayOneBadge } from '../../components/kit';
@@ -323,7 +325,7 @@ function Smoke({ vibe }) {
  * (a small spinner, the button still works), 'starting' once you've tapped
  * and it's waiting on that ("Preparing call...").
  */
-function Header({ name, person, online, badge, status, vibe, motion, onBack, onProfile, onVibe, onCall, callState, onLayout }) {
+function Header({ name, person, online, badge, status, vibe, motion, onBack, onProfile, onContact, onVibe, onCall, callState, onLayout }) {
   const insets = useSafeAreaInsets();
   const starting = callState === 'starting';
   // The chat header name wears the member's chosen headline typeface, so the
@@ -338,9 +340,12 @@ function Header({ name, person, online, badge, status, vibe, motion, onBack, onP
         </Pressable>
         <Pressable
           onPress={onProfile}
+          onLongPress={onContact}
+          delayLongPress={350}
           disabled={!onProfile}
           accessibilityRole="button"
           accessibilityLabel={`View ${name}'s profile`}
+          accessibilityHint={onContact ? 'Hold to save or rename this contact' : undefined}
           style={({ pressed }) => [styles.who, pressed && { opacity: 0.75 }]}
         >
           {person ? <Avatar uri={person.avatar_url} name={name} size={AVATAR} online={online} /> : <View style={{ width: AVATAR, height: AVATAR }} />}
@@ -892,7 +897,10 @@ function Thread({ navigation, route }) {
   };
 
   const other = conv?.other;
-  const name = other?.display_name || (other?.username ? `@${other.username}` : 'Conversation');
+  // Your Contact Book name for them, if you've saved one, beats their own.
+  const alias = useAlias(conv?.otherId);
+  const name = nameFor(other, alias, 'Conversation');
+  const [contactOpen, setContactOpen] = useState(false);
   const online = conv ? isOnline(conv.otherId) : false;
   const dayOne = useDayOne([conv?.otherId]).has(conv?.otherId);
   const isBlocked = conv ? blocked.has(conv.otherId) : false;
@@ -955,6 +963,7 @@ function Thread({ navigation, route }) {
   const header = (
     <Header
       name={name}
+      onContact={other ? () => { haptics.selection(); setContactOpen(true); } : undefined}
       person={other}
       online={online}
       vibe={vibe}
@@ -1116,6 +1125,7 @@ function Thread({ navigation, route }) {
         onReport={() => setReporting({ message: holding, user: conv?.other ?? { id: holding.sender_id } })}
         onClose={() => setHolding(null)}
       />
+      <ContactSheet person={contactOpen ? other : null} onClose={() => setContactOpen(false)} />
       <GifPicker open={gifs} onPick={(gif) => sendGifMessage(gif)} onClose={() => setGifs(false)} />
       <StickerPicker
         open={!!stickers}

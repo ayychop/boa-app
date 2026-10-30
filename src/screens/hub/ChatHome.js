@@ -13,6 +13,8 @@ import { Button, Slate } from '../../components/ui';
 import DailySpark from '../../components/DailySpark';
 import Headshot from '../../components/Headshot';
 import { ThreadRow } from './HubChatsScreen';
+import ContactSheet from '../../components/hub/ContactSheet';
+import { nameFor, useContactBook } from '../../chat/contacts';
 import useDayOne from '../../hooks/useDayOne';
 import { CardRowSkeleton, ThreadSkeleton } from '../../components/Skeleton';
 import { haptics } from '../../utils/haptics';
@@ -266,14 +268,19 @@ export default function ChatHome({ navigation, bottomPadding }) {
   };
   const empty = EMPTY[filter];
 
-  // Hold a conversation: move it between Primary and General.
+  // Hold a conversation: save or rename the contact, or move it between Primary and General.
+  const [contact, setContact] = useState(null);
+  const book = useContactBook();
   const options = (conv) => {
-    if (conv.request) return;
     haptics.selection();
     const to = conv.folder === 'general' ? 'primary' : 'general';
-    Alert.alert(conv.other?.display_name || 'Conversation', undefined, [
+    const saved = !!book[conv.otherId];
+    const buttons = [
       { text: 'Cancel', style: 'cancel' },
-      {
+      { text: saved ? 'Edit contact name' : 'Save to contacts', onPress: () => setContact({ id: conv.otherId, ...conv.other }) },
+    ];
+    if (!conv.request) {
+      buttons.push({
         text: to === 'general' ? 'Move to General' : 'Move to Primary',
         onPress: () =>
           hub
@@ -283,8 +290,9 @@ export default function ChatHome({ navigation, bottomPadding }) {
               reload(true);
             })
             .catch((err) => Alert.alert("Couldn't move it", err.message)),
-      },
-    ]);
+      });
+    }
+    Alert.alert(nameFor(conv.other, book[conv.otherId]?.name, 'Conversation'), undefined, buttons);
   };
   const dayOnes = useDayOne([userId, ...visible.map((c) => c.otherId)]);
 
@@ -445,6 +453,7 @@ export default function ChatHome({ navigation, bottomPadding }) {
         {!pulse.ready && <CardRowSkeleton />}
         </View>
       </ScrollView>
+      <ContactSheet person={contact} onClose={() => setContact(null)} />
     </View>
   );
 }

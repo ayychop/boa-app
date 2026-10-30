@@ -9,6 +9,7 @@ import { RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync, 
 import { claim } from '../../audio/focus';
 import { haptics } from '../../utils/haptics';
 import { PulseDot } from '../ui';
+import GifIcon from './GifIcon';
 import { clock, downsample, level, Waveform } from './media';
 import { TYPING_EVERY_MS } from '../../chat/typing';
 import { vibeById } from '../../chat/vibes';
@@ -56,6 +57,10 @@ function GlowRing({ children, size = 42, testID, vibe }) {
  * (Android's blur needs a blur target view, and that view painted opaque
  * over the backdrop, which left the thread flat black).
  */
+// The bar sits this much higher than the bottom inset alone puts it, so the
+// buttons are under the thumb rather than at the very bottom edge.
+const BAR_LIFT = 10;
+
 export default function Composer({ onSend, onAttach, onVoice, onTyping, onStickers, onGifs, replyTo, onCancelReply, bottomInset = 0, onFocus, vibe = vibeById(), onLayout, style }) {
   const [draft, setDraft] = useState('');
   const lastPing = useRef(0);
@@ -142,7 +147,7 @@ export default function Composer({ onSend, onAttach, onVoice, onTyping, onSticke
   const typing = draft.trim().length > 0;
 
   return (
-    <View style={[styles.wrap, { paddingBottom: bottomInset + space.sm }, style]} onLayout={onLayout} testID="hub-composer-bar">
+    <View style={[styles.wrap, { paddingBottom: bottomInset + space.sm + BAR_LIFT }, style]} onLayout={onLayout} testID="hub-composer-bar">
       {Platform.OS === 'ios' ? <BlurView intensity={50} tint={vibe.light ? 'light' : 'dark'} style={StyleSheet.absoluteFill} /> : null}
       {/* The glass's tint, which is also its look wherever blur isn't drawn. */}
       <View style={[StyleSheet.absoluteFill, { backgroundColor: vibe.bar }]} />
@@ -225,9 +230,7 @@ export default function Composer({ onSend, onAttach, onVoice, onTyping, onSticke
               style={({ pressed }) => [styles.gif, pressed && styles.pressed]}
               testID="hub-gifs"
             >
-              <View style={[styles.gifBadge, { borderColor: vibe.accent }]}>
-                <Text style={[styles.gifText, { color: vibe.accent }]}>GIF</Text>
-              </View>
+              <GifIcon size={24} color={vibe.accent} testID="hub-gifs-icon" />
             </Pressable>
           ) : null}
           {onStickers && !typing ? (
@@ -305,9 +308,7 @@ const styles = StyleSheet.create({
   send: { width: 42, height: 42, borderRadius: 21, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
   mic: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' },
   sticker: { width: 34, height: 42, alignItems: 'center', justifyContent: 'center' },
-  gif: { width: 36, height: 42, alignItems: 'center', justifyContent: 'center' },
-  gifBadge: { paddingHorizontal: 5, height: 20, borderRadius: 6, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
-  gifText: { fontFamily: fonts.chatBold, fontSize: 10.5, letterSpacing: 0.4 },
+  gif: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center' },
   reply: {
     flexDirection: 'row',
     alignItems: 'center',

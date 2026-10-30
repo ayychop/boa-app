@@ -88,6 +88,8 @@ function Featured({ production, width, clear = 0 }) {
           node: <Image source={toSource(poster)} resizeMode="cover" style={fillFrame} />,
         }
       : heroArt(production, width, height);
+  const PLAY = 104;
+  const playTop = Math.max(insets.top, insets.top + Math.round((height - insets.top - PLAY) / 2));
   const play = () => (production.episodes[0] ? media.openEpisode(production) : media.openTrailer(production));
 
   return (
@@ -98,9 +100,10 @@ function Featured({ production, width, clear = 0 }) {
         </Animated.View>
         <LinearGradient colors={['rgba(5,5,6,0.55)', 'rgba(5,5,6,0)', 'rgba(5,5,6,0)', colors.bg]} locations={[0, 0.25, 0.8, 1]} style={StyleSheet.absoluteFill} />
         <Viewfinder inset={16} />
-        {/* The gold BOA play button, dead centre of the picture you can see
-            (below the status bar), so it is the first thing the eye lands on. */}
-        <View pointerEvents="box-none" style={[styles.playOverlay, { paddingTop: insets.top }]}>
+        {/* The gold BOA play button, placed by sum rather than left to flex:
+            its middle is the middle of the picture you can see (the frame
+            below the status bar), so it is the first thing the eye lands on. */}
+        <View pointerEvents="box-none" style={[styles.heroPlay, { top: playTop }]}>
           <Pressable
             onPress={() => {
               haptics.tap();
@@ -111,7 +114,7 @@ function Featured({ production, width, clear = 0 }) {
             accessibilityLabel={production.episodes[0] ? `Play ${production.title} Episode 1` : `Watch the ${production.title} trailer`}
             testID="originals-hero-play"
           >
-            <BoaPlayButton size={104} testID="originals-hero-play-button" />
+            <BoaPlayButton size={PLAY} testID="originals-hero-play-button" />
           </Pressable>
         </View>
         <View style={[styles.featuredTop, { top: insets.top + space.xl }]}>
@@ -265,6 +268,7 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: GAP, paddingHorizontal: space.xl },
   episodeCaption: { paddingTop: 10, gap: 4 },
   episodeTitle: { fontFamily: fonts.semibold, fontSize: 15, lineHeight: 20, color: colors.text },
+  heroPlay: { position: 'absolute', left: 0, right: 0, alignItems: 'center' },
   playOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
   sheen: { position: 'absolute', top: '-20%', bottom: '-20%', left: 0 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: space.xl },

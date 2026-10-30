@@ -35,6 +35,13 @@ const GIF_HOST = /^https:\/\/(?:media\d*\.giphy\.com|i\.giphy\.com)\/[^\s]+$/i;
 /** Whether this is a GIF address we're willing to load: https, on Giphy's media hosts. */
 export const isGifUrl = (url) => typeof url === 'string' && url.length <= 600 && GIF_HOST.test(url);
 
+/** What the inbox and notifications call a GIF, instead of its address. */
+export const GIF_TAG = '[GIF]';
+const GIF_PREFIX = /^https:\/\/(?:media\d*\.giphy\.com|i\.giphy\.com)\//i;
+
+/** A conversation's last-message preview, with a GIF's address swapped for [GIF]. */
+export const previewText = (preview) => (typeof preview === 'string' && GIF_PREFIX.test(preview.trim()) ? GIF_TAG : (preview ?? ''));
+
 /** Giphy's response, as the picker uses it: { id, url (to send), preview, width, height, title }. */
 export function shapeGifs(json) {
   const out = [];

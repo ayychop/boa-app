@@ -247,7 +247,9 @@ function TabBarBackground() {
 // Breathing room above the gesture bar or navigation buttons, so the
 // labels never sit right on it. The inset itself is floored for Android
 // (SafeBottomFloor).
-const ANDROID_BOTTOM_COMFORT = 10;
+// Clear air under the labels. Samsung's taskbar and 3-button bar sit over the
+// bottom of the window without always reporting it as an inset.
+const ANDROID_BOTTOM_COMFORT = 20;
 
 // Seven tabs share the bar. Phones scale everything to the width of one
 // tab's slot, so a standard phone (360 to 412pt) and the Fold's narrow
@@ -256,7 +258,7 @@ const ANDROID_BOTTOM_COMFORT = 10;
 // spare, so they keep a slim bar.
 const TAB_COUNT = 7;
 export const TAB_BAR_HEIGHT = 74;
-export const TAB_BAR_HEIGHT_PHONE = 76;
+export const TAB_BAR_HEIGHT_PHONE = 84;
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 export const tabSizing = (slot, phone = false) => {
   if (!phone) {
@@ -269,8 +271,8 @@ export const tabSizing = (slot, phone = false) => {
   }
   const icon = Math.round(clamp(slot * 0.5, 26, 30));
   const label = slot < 52 ? 11 : slot < 60 ? 11.5 : 12.5;
-  // Top padding, icon, label line and a little air under it.
-  return { icon, label, slot, height: Math.min(TAB_BAR_HEIGHT_PHONE, Math.round(icon + label * 1.35 + 30)) };
+  // Top padding, icon, a whole label line (never clipped) and air under it.
+  return { icon, label, slot, height: Math.min(TAB_BAR_HEIGHT_PHONE, Math.round(icon + label * 1.5 + 36)) };
 };
 
 // "BOA Originals" can't fit a phone's tab slot at a readable size, so
@@ -318,7 +320,7 @@ function Tabs() {
         // Navigation no longer builds one.
         tabBarAccessibilityLabel: `${TAB_TITLES[route.name] ?? route.name}, tab`,
         tabBarLabel: ({ color }) => (
-          <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.65} allowFontScaling={false} style={[styles.tabLabel, { color, fontSize: sizing.label }]}>
+          <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.65} allowFontScaling={false} style={[styles.tabLabel, { color, fontSize: sizing.label, lineHeight: Math.round(sizing.label * 1.4) }]}>
             {tabLabel(route.name, phone)}
           </Text>
         ),

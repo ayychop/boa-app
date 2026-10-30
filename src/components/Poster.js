@@ -55,7 +55,7 @@ export default function Poster({ production, width, ratio = 16 / 9, showTitle = 
       {/* Brand line and caption share one column, so however small the
           card, they stack instead of overlapping. */}
       {(brandLine || caption) && (
-        <View style={[styles.content, soon && [styles.contentSoon, { paddingTop: Math.round(height * 0.24) }]]} pointerEvents="none">
+        <View style={[styles.content, soon && [styles.contentSoon, portrait ? { paddingTop: Math.round(height * 0.24) } : styles.contentSoonCentered]]} pointerEvents="none">
           {brandLine ? (
             <Slate color={colors.gold} lines={2}>
               Best of all networks
@@ -101,6 +101,8 @@ const styles = StyleSheet.create({
   // rides up to eye level (the upper third) instead of sitting on the floor
   // or dead centre. Its top padding is set from the card's height.
   contentSoon: { justifyContent: 'flex-start' },
+  // A landscape card has little height: its text sits on the middle line, with even padding all round.
+  contentSoonCentered: { justifyContent: 'center', paddingTop: 14, paddingBottom: 14 },
   soonText: { alignItems: 'flex-start' },
   title: { fontFamily: fonts.semibold, color: colors.text, letterSpacing: -0.6 },
   meta: { fontFamily: fonts.medium, fontSize: 11.5, lineHeight: 16, color: colors.textMuted, marginTop: 4 },

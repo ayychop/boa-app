@@ -17,6 +17,8 @@ import { lastSeen, statusLine } from '../../components/hub/hubNav';
 import NowPlaying from '../../components/hub/NowPlaying';
 import useProfileUpdates from '../../hooks/useProfileUpdates';
 import BlockSheet from '../../components/hub/BlockSheet';
+import ContactSheet from '../../components/hub/ContactSheet';
+import { nameFor, useAlias } from '../../chat/contacts';
 import ReportSheet from '../../components/hub/ReportSheet';
 import BoaCodeSheet from '../../components/hub/BoaCode';
 import ProfileVibeSheet from '../../components/chat/ProfileVibeSheet';
@@ -184,6 +186,9 @@ function HubProfileScreenBody({ navigation, route }) {
   const [heroH, setHeroH] = useState(420);
   const [codeOpen, setCodeOpen] = useState(false);
   const [vibeOpen, setVibeOpen] = useState(false);
+  // Your Contact Book name for them, and the sheet to set it.
+  const alias = useAlias(mine ? null : id);
+  const [contactOpen, setContactOpen] = useState(false);
 
   // The Profile Vibe: this profile's own look, separate from the Chat Vibe,
   // so theming the profile never touches how chats look and vice versa (a
@@ -307,7 +312,7 @@ function HubProfileScreenBody({ navigation, route }) {
     );
   }
 
-  const name = person.display_name || `@${person.username}`;
+  const name = mine ? person.display_name || `@${person.username}` : nameFor(person, alias, `@${person.username}`);
   const status = statusLine(person);
   const roles = person.roles ?? [];
   const star = !!person.is_boa_star;
@@ -365,6 +370,11 @@ function HubProfileScreenBody({ navigation, route }) {
                 {dayOnes.length ? <DayOneBadge size={18} /> : null}
               </View>
             ) : null}
+            {alias ? (
+              <Text style={styles.handle} numberOfLines={1} testID="profile-contact-note">
+                Saved contact{person.display_name ? ` · ${person.display_name}` : ''}
+              </Text>
+            ) : null}
             <Text style={styles.handle} numberOfLines={1}>
               @{person.username}
               <Text style={styles.seen}>{`  ·  ${mine ? (person.visible_on_hub ? 'Visible on the Hub' : 'Hidden from the Hub') : lastSeen(person.last_seen_at, online) || 'On the Hub'}`}</Text>
@@ -416,6 +426,7 @@ function HubProfileScreenBody({ navigation, route }) {
                   ) : (
                     <Action label="Messages off" icon="lock-closed-outline" onPress={() => Alert.alert('Messages off', MESSAGES_CLOSED)} testID="profile-messages-off" />
                   )}
+                  <Action label={alias ? 'Edit contact' : 'Save contact'} icon={alias ? 'person-circle-outline' : 'person-add-outline'} onPress={() => setContactOpen(true)} testID="profile-contact" />
                   <Action label="Block" icon="ban-outline" onPress={confirmBlock} testID="profile-block" />
                 </>
               )}
@@ -459,6 +470,7 @@ function HubProfileScreenBody({ navigation, route }) {
       </ScrollView>
       {mine ? <BoaCodeSheet open={codeOpen} onClose={() => setCodeOpen(false)} profile={person} /> : null}
       {mine ? <ProfileVibeSheet open={vibeOpen} onClose={() => setVibeOpen(false)} /> : null}
+      <ContactSheet person={contactOpen ? person : null} onClose={() => setContactOpen(false)} />
       <BlockSheet person={blocking} onClose={() => setBlocking(null)} />
       <ReportSheet target={reporting} onClose={(didBlock) => (setReporting(null), didBlock && navigation.goBack())} />
     </View>

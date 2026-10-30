@@ -28,6 +28,8 @@ const TABS = [
 // skin tone you pick, and every flag. They're always there, even offline.
 const STATIC_TABS = ['People', 'Flags'];
 const TONE_KEY = 'boa.stickers.tone';
+// The most animations playing at once in the grid.
+const MAX_LIVE = 24;
 const CELL = 64;
 const GRID_H = 340;
 
@@ -75,11 +77,29 @@ export default function StickerPicker({ open, purpose = 'send', onPick, onClose 
     if (tab === 'new') sawFresh.current = true;
   }, [tab]);
 
+  // Only the cells on screen move: a few dozen animated images at once is
+  // what a phone can carry, a few hundred is what froze it. Everything else
+  // is its plain emoji until it scrolls into view.
+  const [live, setLive] = useState(() => new Set());
+  const [closing, setClosing] = useState(false);
+  const onViewable = useRef(({ viewableItems }) => {
+    setLive(new Set(viewableItems.slice(0, MAX_LIVE).map((v) => v.item?.code)));
+  }).current;
+  const viewability = useRef({ itemVisiblePercentThreshold: 60, minimumViewTime: 80 }).current;
   const close = () => {
     if (sawFresh.current) clearFresh();
     sawFresh.current = false;
+    // Let go of every animation before the sheet slides away, so closing is
+    // just a plain list leaving the screen.
+    setClosing(true);
     onClose();
   };
+  useEffect(() => {
+    if (open) {
+      setClosing(false);
+      setLive(new Set());
+    }
+  }, [open]);
 
   // People in the chosen skin tone, and the flags, as picker items.
   const people = useMemo(() => PEOPLE.map((p) => ({ emoji: withTone(p.emoji, tone), tags: p.tags, category: 'People' })).map((i) => ({ ...i, code: toCode(i.emoji) })), [tone]);
@@ -182,9 +202,11 @@ export default function StickerPicker({ open, purpose = 'send', onPick, onClose 
           numColumns={columns}
           keyExtractor={(i) => `${i.code}`}
           style={{ height: GRID_H }}
-          initialNumToRender={columns * 5}
-          windowSize={5}
-          removeClippedSubviews
+          initialNumToRender={columns * 4}
+          maxToRenderPerBatch={columns * 2}
+          windowSize={3}
+          onViewableItemsChanged={onViewable}
+          viewabilityConfig={viewability}
           contentContainerStyle={styles.grid}
           renderItem={({ item }) => (
             <Pressable
@@ -194,7 +216,7 @@ export default function StickerPicker({ open, purpose = 'send', onPick, onClose 
               style={({ pressed }) => [styles.cell, { width: cellW }, pressed && styles.cellPressed]}
               testID={`sticker-${item.emoji}`}
             >
-              <Sticker emoji={item.emoji} size={46} animate={!item.flag} />
+              <Sticker emoji={item.emoji} size={46} animate={!item.flag && !closing && live.has(item.code)} />
               {freshSet.has(item.code) && tab !== 'new' ? <View style={styles.dot} /> : null}
             </Pressable>
           )}

@@ -13,6 +13,8 @@ import { colors, fonts, radius, space, type } from '../../theme';
 import { haptics } from '../../utils/haptics';
 import { ThreadSkeleton } from '../../components/Skeleton';
 import { column } from '../../hooks/useLayout';
+import { nameFor, useAlias } from '../../chat/contacts';
+import { previewText } from '../../chat/gifs';
 
 /** "14:05" today, "Mon" this week, "12 Oct" before that. */
 export function chatTime(iso, now = new Date()) {
@@ -30,8 +32,10 @@ export function chatTime(iso, now = new Date()) {
  * glow gold at the edge. Rows rise in one after another.
  */
 export function ThreadRow({ conv, online, onPress, onLongPress, index, myId, dayOne = false }) {
-  const name = conv.other?.display_name || (conv.other?.username ? `@${conv.other.username}` : 'BOA HUB member');
-  const preview = `${conv.last_sender_id === myId ? 'You: ' : ''}${conv.last_message_preview ?? ''}`;
+  // The name you saved them under in your Contact Book wins over their own.
+  const alias = useAlias(conv.otherId);
+  const name = nameFor(conv.other, alias);
+  const preview = `${conv.last_sender_id === myId ? 'You: ' : ''}${previewText(conv.last_message_preview)}`;
   return (
     <Animated.View
       entering={FadeInDown.delay(Math.min(index, 8) * 50)
