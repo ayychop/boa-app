@@ -43,6 +43,8 @@ export function previewOf(m: Pick<Message, 'kind' | 'body'>) {
       return '🎬 Video';
     case 'voice':
       return '🎙️ Voice note';
+    case 'gif':
+      return 'GIF';
     default:
       return (m.body ?? '').slice(0, 140);
   }

@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
+import Text from '../ScopedText';
 import Animated, { FadeIn, useAnimatedStyle, useReducedMotion, useSharedValue, withSequence, withSpring, withTiming, ZoomIn } from 'react-native-reanimated';
 import Sticker from './Sticker';
 import { describeMessage } from './MessageActions';

@@ -1,35 +1,79 @@
 import { useEffect } from 'react';
-import { Image, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Image, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Animated, { Easing, FadeIn, FadeInDown, useAnimatedStyle, useReducedMotion, useSharedValue, withDelay, withRepeat, withTiming } from 'react-native-reanimated';
-import { Ionicons } from '@expo/vector-icons';
+import Animated, { Easing, FadeIn, useAnimatedStyle, useReducedMotion, useSharedValue, withDelay, withRepeat, withTiming } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { featuredProduction, productions } from '../data/boaContent';
 import { useMedia } from '../context/MediaContext';
 import Poster, { metaLine } from '../components/Poster';
+import BoaPlayButton from '../components/BoaPlayButton';
 import { BACKDROP_TITLE_TOP, fillFrame, heroArt, toSource } from '../components/HeroArt';
-import { Button, Fog, SectionHeader, Slate, Tappable, Viewfinder } from '../components/ui';
+import { Button, Fog, SectionHeader, Slate, Viewfinder } from '../components/ui';
 import useBottomSpace from '../hooks/useBottomSpace';
 import useLayout, { WIDE } from '../hooks/useLayout';
+import { haptics } from '../utils/haptics';
 import { colors, fonts, radius, space, type } from '../theme';
 
 const GAP = 14;
 const CONTENT_MAX = 1200;
-// About how tall the copy under the art is (the slate line, title, logline
-// and buttons): the art leaves this much room above the tab bar and mini
-// player, so Play and Watch Trailer are in view before you scroll.
-const BODY_HEIGHT = 250;
+// About how tall the copy under the art is (the slate line, title, the full
+// logline and buttons): the art leaves this much room above the tab bar and
+// mini player, so the copy is never squeezed or cut off.
+const BODY_HEIGHT = 300;
+
+// One feel for everything on this screen that appears or is pressed: a long,
+// soft ease-out with no bounce, run on the UI thread.
+const EASE = Easing.bezier(0.16, 1, 0.3, 1);
+const ENTER_MS = 560;
+const PRESS_IN_MS = 140;
+const PRESS_OUT_MS = 320;
+
+/**
+ * A card that fades up and settles from a touch smaller when it arrives, and
+ * sinks a little (scale and fade) under the finger, then rises back on a soft
+ * ease: no spring, so it never wobbles. Reduce Motion keeps the fade alone.
+ * Put the card inside; `onPress` makes it a button.
+ */
+function PremiumCard({ children, index = 0, onPress, accessibilityLabel, testID, style }) {
+  const reduce = useReducedMotion();
+  const enter = useSharedValue(reduce ? 1 : 0);
+  const press = useSharedValue(0);
+  useEffect(() => {
+    enter.value = withDelay(reduce ? 0 : 70 * index, withTiming(1, { duration: reduce ? 200 : ENTER_MS, easing: EASE }));
+  }, [enter, index, reduce]);
+  const animated = useAnimatedStyle(() => ({
+    opacity: enter.value * (1 - 0.12 * press.value),
+    transform: reduce ? [] : [{ scale: (0.94 + 0.06 * enter.value) * (1 - 0.035 * press.value) }, { translateY: (1 - enter.value) * 14 }],
+  }));
+  return (
+    <Pressable
+      onPress={onPress}
+      onPressIn={() => {
+        haptics.tap();
+        press.value = withTiming(1, { duration: PRESS_IN_MS, easing: Easing.out(Easing.quad) });
+      }}
+      onPressOut={() => {
+        press.value = withTiming(0, { duration: PRESS_OUT_MS, easing: EASE });
+      }}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      testID={testID}
+    >
+      <Animated.View style={[style, animated]}>{children}</Animated.View>
+    </Pressable>
+  );
+}
 
 function Featured({ production, width, clear = 0 }) {
   const insets = useSafeAreaInsets();
   const window = useWindowDimensions();
   const media = useMedia();
   const wide = width >= 900;
-  // Narrow screens (a folded phone's cover screen) show the whole 9:16
-  // poster, title and all, so the copy goes underneath it rather than over
-  // it. Wider ones get the cinematic crop, capped at half the screen so the
-  // buttons below are always in view without scrolling, and stopped short of
-  // the backdrop's baked-in title so it never shows half cut off.
+  // Narrow screens (a folded phone's cover screen) show the 9:16 poster, title
+  // and all, so the copy goes underneath it rather than over it. Wider ones
+  // get the cinematic crop, capped at half the screen so the buttons below are
+  // always in view without scrolling, and stopped short of the backdrop's
+  // baked-in title so it never shows half cut off.
   const stacked = width < WIDE;
   const natural = wide ? Math.round(width / 2.39) + insets.top : Math.round(width * 1.68) + insets.top;
   const room = Math.max(window.height * 0.3, window.height - clear - BODY_HEIGHT);
@@ -39,36 +83,36 @@ function Featured({ production, width, clear = 0 }) {
     stacked && poster
       ? {
           titleInFrame: !!production.titleInArt,
-          node: (
-            // The whole poster, letterboxed over a blurred copy of itself.
-            <>
-              <Image source={toSource(poster)} resizeMode="cover" blurRadius={24} style={[fillFrame, { opacity: 0.5 }]} />
-              <Image source={toSource(poster)} resizeMode="contain" style={fillFrame} />
-            </>
-          ),
+          // The poster fills the frame edge to edge (cover): no blurred
+          // letterbox, no grey bars at the sides.
+          node: <Image source={toSource(poster)} resizeMode="cover" style={fillFrame} />,
         }
       : heroArt(production, width, height);
+  const play = () => (production.episodes[0] ? media.openEpisode(production) : media.openTrailer(production));
 
   return (
     <View style={{ width }}>
-      <View style={{ width, height, overflow: 'hidden' }}>
-        <Animated.View entering={FadeInDown.duration(600)} style={StyleSheet.absoluteFill}>
+      <View style={{ width, height, overflow: 'hidden', backgroundColor: colors.bg }}>
+        <Animated.View entering={FadeIn.duration(700).easing(EASE)} style={StyleSheet.absoluteFill}>
           {art}
         </Animated.View>
         <LinearGradient colors={['rgba(5,5,6,0.55)', 'rgba(5,5,6,0)', 'rgba(5,5,6,0)', colors.bg]} locations={[0, 0.25, 0.8, 1]} style={StyleSheet.absoluteFill} />
         <Viewfinder inset={16} />
-        {/* The gold BOA play badge on the hero: tap it to start the show. */}
-        <View pointerEvents="box-none" style={styles.playOverlay}>
-          <Tappable
-            onPress={() => (production.episodes[0] ? media.openEpisode(production) : media.openTrailer(production))}
+        {/* The gold BOA play button, dead centre of the picture you can see
+            (below the status bar), so it is the first thing the eye lands on. */}
+        <View pointerEvents="box-none" style={[styles.playOverlay, { paddingTop: insets.top }]}>
+          <Pressable
+            onPress={() => {
+              haptics.tap();
+              play();
+            }}
+            hitSlop={16}
             accessibilityRole="button"
             accessibilityLabel={production.episodes[0] ? `Play ${production.title} Episode 1` : `Watch the ${production.title} trailer`}
             testID="originals-hero-play"
           >
-            <View style={[styles.playBadge, styles.heroPlay]}>
-              <Ionicons name="play" size={34} color={colors.bg} style={{ marginLeft: 4 }} />
-            </View>
-          </Tappable>
+            <BoaPlayButton size={104} testID="originals-hero-play-button" />
+          </Pressable>
         </View>
         <View style={[styles.featuredTop, { top: insets.top + space.xl }]}>
           <Slate dot>02 · Productions</Slate>
@@ -77,7 +121,7 @@ function Featured({ production, width, clear = 0 }) {
       </View>
       {/* The copy lines up with the centred sections below at any width. */}
       <View style={[styles.featuredBody, { width: Math.min(width, CONTENT_MAX), alignSelf: 'center' }]}>
-        <Slate color={colors.gold} lines={2}>
+        <Slate color={colors.gold} lines={3}>
           Featured · {metaLine(production)}
         </Slate>
         {/* When the art's own title is in frame it is the title; keep the
@@ -85,9 +129,8 @@ function Featured({ production, width, clear = 0 }) {
         <Text style={titleInFrame ? styles.srOnly : [type.display, styles.featuredTitle]} accessibilityRole="header">
           {production.title}
         </Text>
-        <Text style={[type.bodyMuted, styles.logline]} numberOfLines={wide ? 3 : 4}>
-          {production.logline}
-        </Text>
+        {/* The whole logline, never cut short. */}
+        <Text style={[type.bodyMuted, styles.logline]}>{production.logline}</Text>
         <View style={styles.actions}>
           {production.episodes[0] && <Button label="Play Episode 1" icon="play" onPress={() => media.openEpisode(production)} />}
           <Button label="Watch Trailer" icon="film-outline" variant="ghost" onPress={() => media.openTrailer(production)} />
@@ -125,17 +168,15 @@ function GoldSheen({ width, radius: r = radius.md }) {
 function EpisodeCard({ production, episode, width }) {
   const media = useMedia();
   return (
-    <Tappable onPress={() => media.openEpisode(production, episode)} accessibilityRole="button" accessibilityLabel={`Play ${episode.title}`}>
+    <PremiumCard onPress={() => media.openEpisode(production, episode)} accessibilityLabel={`Play ${episode.title}`} index={1}>
       <View>
         {/* Edge to edge: the still fills its frame, no blurred letterbox. */}
         <Poster production={{ ...production, backdrop: episode.image, status: 'available' }} width={width} showTitle={false} fit="cover" />
-        {/* The gold BOA play badge, centred over the still, like a premium
+        {/* The gold BOA play button, centred over the still, like a premium
             streaming service. A pointer-through overlay: the whole card plays. */}
         <GoldSheen width={width} />
         <View pointerEvents="none" style={styles.playOverlay}>
-          <View style={styles.playBadge}>
-            <Ionicons name="play" size={26} color={colors.bg} style={{ marginLeft: 3 }} />
-          </View>
+          <BoaPlayButton size={64} />
         </View>
       </View>
       <View style={[styles.episodeCaption, { width }]}>
@@ -144,7 +185,7 @@ function EpisodeCard({ production, episode, width }) {
           {episode.title}
         </Text>
       </View>
-    </Tappable>
+    </PremiumCard>
   );
 }
 
@@ -181,20 +222,14 @@ export default function OriginalsScreen() {
           <SectionHeader index="02" kicker="All productions" title="Stories worth the big screen." />
           <View style={[styles.grid, { gap: GAP }]}>
             {productions.map((p, i) => (
-              <Animated.View
+              <PremiumCard
                 key={p.id}
-                entering={FadeInDown.delay(80 * i)
-                  .springify()
-                  .damping(18)}
+                index={i}
+                onPress={() => (p.episodes[0] ? media.openEpisode(p) : media.openTrailer(p))}
+                accessibilityLabel={`${p.title}${p.status === 'coming-soon' ? ', coming soon' : ''}`}
               >
-                <Tappable
-                  onPress={() => (p.episodes[0] ? media.openEpisode(p) : media.openTrailer(p))}
-                  accessibilityRole="button"
-                  accessibilityLabel={`${p.title}${p.status === 'coming-soon' ? ', coming soon' : ''}`}
-                >
-                  <Poster production={p} width={posterWidth} ratio={2 / 3} />
-                </Tappable>
-              </Animated.View>
+                <Poster production={p} width={posterWidth} ratio={2 / 3} />
+              </PremiumCard>
             ))}
           </View>
         </View>
@@ -220,28 +255,17 @@ const styles = StyleSheet.create({
   scrim: { position: 'absolute', top: 0, left: 0, right: 0 },
   screen: { flex: 1, backgroundColor: colors.bg },
   featuredTop: { position: 'absolute', left: space.xl + 8, right: space.xl + 8, flexDirection: 'row', justifyContent: 'space-between' },
-  featuredBody: { paddingHorizontal: space.xl, paddingTop: space.lg },
+  featuredBody: { paddingHorizontal: space.xl, paddingTop: space.lg, paddingBottom: space.md },
   srOnly: { position: 'absolute', width: 1, height: 1, opacity: 0, overflow: 'hidden' },
-  featuredTitle: { fontSize: 48, lineHeight: 50, marginTop: space.md },
-  logline: { marginTop: space.md, maxWidth: 680 },
+  // A line box taller than the type, so ascenders and descenders are never cut.
+  featuredTitle: { fontSize: 48, lineHeight: 58, marginTop: space.md, paddingBottom: 2 },
+  logline: { marginTop: space.md, maxWidth: 680, lineHeight: 23 },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: space.md, marginTop: space.xl },
   block: { alignSelf: 'center', marginTop: space.xxl },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: GAP, paddingHorizontal: space.xl },
   episodeCaption: { paddingTop: 10, gap: 4 },
-  episodeTitle: { fontFamily: fonts.semibold, fontSize: 15, color: colors.text },
+  episodeTitle: { fontFamily: fonts.semibold, fontSize: 15, lineHeight: 20, color: colors.text },
   playOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
-  playBadge: {
-    width: 58,
-    height: 58,
-    borderRadius: 29,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.gold,
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,245,224,0.85)',
-    boxShadow: '0px 6px 22px rgba(226,168,75,0.55)',
-  },
-  heroPlay: { width: 76, height: 76, borderRadius: 38, borderWidth: 2, boxShadow: '0px 8px 32px rgba(226,168,75,0.6)' },
   sheen: { position: 'absolute', top: '-20%', bottom: '-20%', left: 0 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: space.xl },
   casting: {

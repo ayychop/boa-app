@@ -1,4 +1,5 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import Text from '../ScopedText';
 import { isPremiumVibe, useProfileVibe } from '../../chat/vibes';
 import { usePremiumMaybe } from '../../context/PremiumContext';
 import BottomSheet from '../BottomSheet';

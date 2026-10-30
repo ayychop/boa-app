@@ -1,4 +1,5 @@
-import { Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
+import Text from '../ScopedText';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeIn, FadeInDown, FadeOut, ZoomIn, useReducedMotion } from 'react-native-reanimated';
@@ -13,6 +14,7 @@ import { colors, fonts, radius, space } from '../../theme';
 export function describeMessage(m) {
   if (!m) return '';
   if (m.kind === 'sticker') return `${m.body} Sticker`;
+  if (m.kind === 'gif') return 'GIF';
   if (m.view_once) return m.kind === 'video' ? 'View once video' : 'View once photo';
   if (m.kind === 'image') return m.body?.trim() ? `📷 ${m.body.trim()}` : '📷 Photo';
   if (m.kind === 'video') return m.body?.trim() ? `🎬 ${m.body.trim()}` : '🎬 Video';

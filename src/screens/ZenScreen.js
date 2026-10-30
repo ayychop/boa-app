@@ -394,7 +394,9 @@ function Clock({ width, height, compact, signed = false }) {
       <MinuteSweep now={now} width={Math.round(Math.min(clockSize * 1.8, width * 0.6))} />
       {signed ? (
         <View style={styles.mark} testID="zen-logo" accessibilityLabel="BOA Network" accessible>
-          <BoaLogo height={Math.round(Math.max(14, Math.min(clockSize * 0.13, 24)))} color="#E9BE6E" />
+          {/* A soft gold halo behind the wordmark, so it glows against the dark. */}
+          <View pointerEvents="none" style={styles.markGlow} testID="zen-logo-glow" />
+          <BoaLogo sheen height={Math.round(Math.max(24, Math.min(clockSize * 0.2, 44)))} color="#F5CE7E" />
         </View>
       ) : null}
     </Animated.View>
@@ -900,7 +902,10 @@ const styles = StyleSheet.create({
   period: { position: 'absolute', left: '100%', marginLeft: space.sm, fontFamily: fonts.serif, color: colors.gold },
   // Faint enough to read as part of the dial, not a logo on top of it, but
   // lifted a touch so the mark is legible against a bright screensaver.
-  mark: { marginTop: space.lg, opacity: 0.42 },
+  // The signature under the clock: bright brushed gold with a halo, readable
+  // across a room but still a signature (the clock stays the loudest thing).
+  mark: { marginTop: space.xl, opacity: 0.96, alignItems: 'center', justifyContent: 'center' },
+  markGlow: { position: 'absolute', width: '135%', height: '240%', borderRadius: 999, backgroundColor: 'rgba(245,206,126,0.1)', boxShadow: '0 0 36px 14px rgba(245,206,126,0.22)' },
   sweep: { height: 2, marginTop: space.md, borderRadius: 1, backgroundColor: 'rgba(243,239,232,0.12)', justifyContent: 'center' },
   sweepFill: { position: 'absolute', left: 0, height: 2, borderRadius: 1, backgroundColor: 'rgba(226,168,75,0.75)' },
   bead: { position: 'absolute', left: 0, width: 6, height: 6, borderRadius: 3, backgroundColor: colors.gold },

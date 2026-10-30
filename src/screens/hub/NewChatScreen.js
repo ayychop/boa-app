@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, FlatList, Keyboard, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Alert, FlatList, Keyboard, KeyboardAvoidingView, Platform, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
+import Text, { FontScope } from '../../components/ScopedText';
 import { READING } from '../../hooks/useLayout';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -31,6 +32,7 @@ import {
   sendMedia,
   sendMessage,
   sendSticker,
+  sendGif,
   unreact,
   uploadChatMedia,
 } from '../../api/hub';
@@ -38,6 +40,9 @@ import MessageActions, { describeMessage } from '../../components/chat/MessageAc
 import { ReactionChips, ReplyQuote } from '../../components/chat/MessageExtras';
 import StickerPicker from '../../components/chat/StickerPicker';
 import Sticker from '../../components/chat/Sticker';
+import GifPicker from '../../components/chat/GifPicker';
+import GifTile from '../../components/chat/GifTile';
+import { isGifUrl } from '../../chat/gifs';
 import { setOpenThread } from '../../chat/notifications';
 import { openTyping, TYPING_HOLD_MS } from '../../chat/typing';
 import { Avatar, BoaStarBadge, DayOneBadge } from '../../components/kit';
@@ -136,6 +141,9 @@ const discarded = new Set();
 
 // ------------------------------------------------------------ layer 2
 
+// How long the page takes to slide away; the backdrop pauses after it.
+const LEAVE_SETTLE_MS = 600;
+
 // Two taps this close together are a double tap (a ❤️).
 const DOUBLE_TAP_MS = 280;
 
@@ -158,7 +166,9 @@ function Bubble({ message, mine, seen, fresh, vibe, reactions, myId, quoted, quo
   const once = !!message.view_once && (message.kind === 'image' || message.kind === 'video');
   const media = !once && (message.kind === 'image' || message.kind === 'video');
   const voice = message.kind === 'voice';
-  const sticker = message.kind === 'sticker';
+  const gif = message.kind === 'gif' && isGifUrl(message.body);
+  // Animated emoji and GIFs have no bubble around them.
+  const sticker = message.kind === 'sticker' || gif;
   const caption = message.body?.trim();
   const status = message.failed ? 'Not sent · hold to retry' : message.pending ? 'Sending…' : chatTime(message.created_at);
   const left = message.expires_at ? timeLeft(message.expires_at) : null;
@@ -210,7 +220,7 @@ function Bubble({ message, mine, seen, fresh, vibe, reactions, myId, quoted, quo
           testID={`hub-message-${message.id}`}
         >
           {quote}
-          <Sticker emoji={message.body} size={128} />
+          {gif ? <GifTile message={message} maxWidth={maxWidth} /> : <Sticker emoji={message.body} size={128} />}
           {meta}
           {hearted ? <HeartPop key={hearted} /> : null}
         </Pressable>
@@ -413,6 +423,7 @@ function Thread({ navigation, route }) {
   const [holding, setHolding] = useState(null);
   const [replyTo, setReplyTo] = useState(null);
   const [stickers, setStickers] = useState(null);
+  const [gifs, setGifs] = useState(false);
   const [flashId, setFlashId] = useState(null);
   // A picked photo or video waiting on the send sheet, and its View once switch.
   const [picked, setPicked] = useState(null);
@@ -436,16 +447,37 @@ function Thread({ navigation, route }) {
   const [focused, setFocused] = useState(true);
   // A light vibe gets dark status bar icons; the app's light ones come back on leaving.
   const lightVibe = !!vibe.light;
+  // Leaving: the page slides away on the native thread, and nothing here
+  // should re-render under it. So the backdrop is paused only once the slide
+  // has finished (a re-render mid-slide is what made it stutter), and the
+  // keyboard going down doesn't re-lay-out the thread while it goes.
+  const leaving = useRef(false);
   useFocusEffect(
     useCallback(() => {
+      leaving.current = false;
       setFocused(true);
       setStatusBarStyle(lightVibe ? 'dark' : 'light');
+      const pause = { timer: null };
       return () => {
-        setFocused(false);
         setStatusBarStyle('light');
+        pause.timer = setTimeout(() => setFocused(false), LEAVE_SETTLE_MS);
+        // Coming straight back (a swipe let go of) cancels it.
+        cancelPause.current = () => clearTimeout(pause.timer);
       };
     }, [lightVibe]),
   );
+  const cancelPause = useRef(() => {});
+  useEffect(() => {
+    if (!navigation?.addListener) return undefined;
+    const start = () => {
+      leaving.current = true;
+    };
+    const stop = () => {
+      leaving.current = false;
+    };
+    const subs = [navigation.addListener('beforeRemove', start), navigation.addListener('gestureCancel', stop), navigation.addListener('focus', () => (stop(), cancelPause.current()))];
+    return () => subs.forEach((unsub) => unsub?.());
+  }, [navigation]);
   const alive = useRef(true);
   const list = useRef(null);
   const typing = useRef(null);
@@ -505,7 +537,9 @@ function Thread({ navigation, route }) {
       setKeyboard(true);
       requestAnimationFrame(toNewest);
     });
-    const hide = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide', () => setKeyboard(false));
+    const hide = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide', () => {
+      if (!leaving.current) setKeyboard(false);
+    });
     return () => {
       show.remove();
       hide.remove();
@@ -674,6 +708,19 @@ function Thread({ navigation, route }) {
     }
   };
 
+  // A GIF from the picker, sent on its own.
+  const sendGifMessage = async (gif, retryId = null, retryReply) => {
+    const reply = takeReply(retryReply);
+    const tempId = retryId ?? `pending-${Date.now()}`;
+    optimistic(tempId, { kind: 'gif', body: gif.url, media_width: gif.width ?? null, media_height: gif.height ?? null, reply_to: reply });
+    toNewest();
+    try {
+      settle(tempId, await sendGif(id, gif, { replyTo: reply }));
+    } catch (err) {
+      fail(tempId, 'GIF not sent', err);
+    }
+  };
+
   // An animated emoji, sent on its own.
   const sendStickerMessage = async (emoji, retryId = null, retryReply) => {
     const reply = takeReply(retryReply);
@@ -820,9 +867,11 @@ function Thread({ navigation, route }) {
   const retry = (message) =>
     message.upload
       ? sendFile(message.upload, message.id)
-      : message.kind === 'sticker'
-        ? sendStickerMessage(message.body, message.id, message.reply_to ?? null)
-        : send(message.body, message.id, message.reply_to ?? null);
+      : message.kind === 'gif'
+        ? sendGifMessage({ url: message.body, width: message.media_width, height: message.media_height }, message.id, message.reply_to ?? null)
+        : message.kind === 'sticker'
+          ? sendStickerMessage(message.body, message.id, message.reply_to ?? null)
+          : send(message.body, message.id, message.reply_to ?? null);
 
   // Holding a message lifts it out with its reactions and actions.
   const onLongPress = (message) => {
@@ -1036,6 +1085,7 @@ function Thread({ navigation, route }) {
               onAttach={attach}
               onVoice={sendVoice}
               onStickers={() => setStickers({ purpose: 'send' })}
+              onGifs={() => setGifs(true)}
               replyTo={replyTo ? { message: replyTo, who: replyTo.sender_id === userId ? 'yourself' : name, text: describeMessage(replyTo) } : null}
               onCancelReply={() => setReplyTo(null)}
               onTyping={(on) => (on ? typing.current?.ping() : typing.current?.stop())}
@@ -1066,6 +1116,7 @@ function Thread({ navigation, route }) {
         onReport={() => setReporting({ message: holding, user: conv?.other ?? { id: holding.sender_id } })}
         onClose={() => setHolding(null)}
       />
+      <GifPicker open={gifs} onPick={(gif) => sendGifMessage(gif)} onClose={() => setGifs(false)} />
       <StickerPicker
         open={!!stickers}
         purpose={stickers?.purpose}
@@ -1106,7 +1157,10 @@ function ThreadFallback({ error, retry, navigation }) {
 export default function NewChatScreen(props) {
   return (
     <ErrorBoundary name="hub-thread" fallback={(f) => <ThreadFallback {...f} navigation={props.navigation} />}>
-      <Thread {...props} />
+      {/* The member's chosen typeface dresses the thread (and only the thread). */}
+      <FontScope>
+        <Thread {...props} />
+      </FontScope>
     </ErrorBoundary>
   );
 }

@@ -1,12 +1,11 @@
 import { Alert, Linking, PermissionsAndroid, Platform } from 'react-native';
 import { createAgoraRtcEngine, MediaSourceType, RtcSurfaceView, RtcTextureView } from 'react-native-agora';
-import { Asset } from 'expo-asset';
 import Constants from 'expo-constants';
 import * as Application from 'expo-application';
 import { File, Paths } from 'expo-file-system';
 import { fetchToken } from './token';
 import { toAgora } from './beauty';
-import { DEFAULT_BACKGROUND, assetOf, toAgora as backgroundForAgora, toBanuba } from './backgrounds';
+import { DEFAULT_BACKGROUND, toAgora as backgroundForAgora, toBanuba } from './backgrounds';
 import { lutPath, toneLutPath } from './luts';
 import { decodeMessage, encodePrivacy } from './privacy';
 import { AINS_BALANCED, AUDIO, AUDIO_PROCESSING, CAPTURE, DENOISER, encoderForThermal, LOW_LIGHT, MIRROR_OFF, MIRROR_ON, PREVIEW, STABILIZATION_OFF, VIDEO_SCENARIO } from './quality';
@@ -259,26 +258,6 @@ function banubaProperty(key, value) {
   return code;
 }
 
-// A choice's image (a studio sweep or a scene) as a file on the phone, which
-// both engines need as an absolute path. Kept once resolved.
-const imagePaths = new Map();
-async function imagePath(bg) {
-  const asset = assetOf(bg);
-  if (!asset) return null;
-  if (imagePaths.has(asset)) return imagePaths.get(asset);
-  try {
-    const a = Asset.fromModule(asset);
-    await a.downloadAsync();
-    const file = (a.localUri ?? a.uri ?? '').replace(/^file:\/\//, '');
-    const out = file ? decodeURI(file) : null;
-    if (out) imagePaths.set(asset, out);
-    return out;
-  } catch (err) {
-    console.warn('[call] backdrop not readable', err?.message ?? err);
-    return null;
-  }
-}
-
 // Whether Agora's virtual background is switched on in this engine. Switching
 // from one backdrop straight to another without turning it off first left
 // the segmentation pipeline stuck on the first choice on some phones.
@@ -310,8 +289,8 @@ function fallbackCameraFeed() {
   banuba = false;
 }
 
-function agoraBackground(bg, path) {
-  const { enabled, source, segmentation } = backgroundForAgora(bg, path);
+function agoraBackground(bg) {
+  const { enabled, source, segmentation } = backgroundForAgora(bg);
   if (enabled && engine.isFeatureAvailableOnDevice?.(VIRTUAL_BACKGROUND_FEATURE) === false) return 'unsupported';
   if (enabled) resetBackgroundPipeline();
   const code = engine.enableVirtualBackground(enabled, source, segmentation, PRIMARY_CAMERA);
@@ -325,8 +304,8 @@ function agoraBackground(bg, path) {
   return 'ok';
 }
 
-function banubaBackground(bg, path) {
-  const scripts = toBanuba(bg, path);
+function banubaBackground(bg) {
+  const scripts = toBanuba(bg);
   try {
     banubaProperty('unload_effect', BANUBA.effect);
   } catch {}
@@ -346,11 +325,9 @@ async function applyBackground() {
   const bg = background;
   if (!engine) return 'later';
   try {
-    const path = await imagePath(bg);
-    // Something else was chosen, or the call ended, while the image was found.
     if (bg !== background || !engine) return 'later';
     if (banuba) {
-      const result = banubaBackground(bg, path);
+      const result = banubaBackground(bg);
       if (result === 'ok') return result;
       // Banuba wouldn't draw it: Agora does, from here on.
       console.warn('[call] Banuba background failed, switching to Agora');
@@ -359,7 +336,7 @@ async function applyBackground() {
       } catch {}
       banuba = false;
     }
-    return agoraBackground(bg, path);
+    return agoraBackground(bg);
   } catch (err) {
     console.warn('[call] background failed, default camera', err?.message ?? err);
     fallbackCameraFeed();
@@ -482,6 +459,23 @@ export function setBrightness(brightness) {
     engine.setBeautyEffectOptions(b.enabled, b, PRIMARY_CAMERA);
   }
   scheduleTone();
+}
+
+/**
+ * Enhance while its slider moves (src/calls/beauty.js): the smoothing, flush,
+ * sharpness and colour go to the camera at once, and the grade's strength
+ * with them (one LUT file, only its strength changes, so it's as quick as the
+ * slider). Nothing is saved until it's let go (setBeauty).
+ */
+export function setEnhance(enhance) {
+  if (!look) return;
+  look = { ...look, mode: 'enhance', enhance };
+  if (!engine) return;
+  const os = Platform.OS === 'ios' ? 'ios' : 'android';
+  const { beauty: b, colorEnhance: c, filter: f, tone: t } = toAgora(look, { os, exposure: exposureSupported() });
+  engine.setBeautyEffectOptions(b.enabled, b, PRIMARY_CAMERA);
+  engine.setColorEnhanceOptions(c.enabled, c, PRIMARY_CAMERA);
+  applyGrade(f, t);
 }
 
 /** Contrast while the slider moves: the tone curve, as often as TONE_EVERY_MS allows. */

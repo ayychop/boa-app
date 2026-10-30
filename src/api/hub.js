@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { isGifUrl } from '../chat/gifs';
 import { assertCloudUrl, isCloudUrl, readFileBytes } from './upload';
 
 // The Creative Hub's calls to the BOA HUB Supabase project. Access rules
@@ -553,6 +554,29 @@ export async function sendSticker(conversationId, emoji, { replyTo = null } = {}
     .select('*')
     .single();
   if (res.error && /messages_(kind|body)_check/.test(res.error.message || '')) throw new Error("Animated emoji aren't switched on yet.");
+  if (res.error) throw sendError(res.error);
+  return res.data;
+}
+
+/**
+ * A GIF from GIPHY (src/chat/gifs.js): the body is its address, and the size
+ * rides along so the thread can lay it out before it loads.
+ */
+export async function sendGif(conversationId, gif, { replyTo = null } = {}) {
+  if (!isGifUrl(gif?.url)) throw new Error("That GIF can't be sent.");
+  const res = await need()
+    .from('messages')
+    .insert({
+      conversation_id: conversationId,
+      kind: 'gif',
+      body: gif.url,
+      media_width: gif.width ? Math.round(gif.width) : null,
+      media_height: gif.height ? Math.round(gif.height) : null,
+      ...replyField(replyTo),
+    })
+    .select('*')
+    .single();
+  if (res.error && /messages_(kind|body)_check/.test(res.error.message || '')) throw new Error("GIFs aren't switched on yet.");
   if (res.error) throw sendError(res.error);
   return res.data;
 }

@@ -55,11 +55,12 @@ describe('media is saved to the cloud, never as a phone path', () => {
 describe('tab bar and safe areas', () => {
   test('phones scale icons, labels and the bar to the slot', () => {
     // S26 Ultra (412pt / 7), a standard phone (360pt / 7) and a Fold cover screen (344pt / 7).
-    expect(tabSizing(412 / 7, true)).toEqual(expect.objectContaining({ icon: 26, label: 11.5, height: 64 }));
+    expect(tabSizing(412 / 7, true)).toEqual(expect.objectContaining({ icon: 29, label: 11.5, height: 75 }));
     const standard = tabSizing(360 / 7, true);
     const cover = tabSizing(344 / 7, true);
-    expect(standard.icon).toBeGreaterThanOrEqual(22);
-    expect(cover.icon).toBeGreaterThanOrEqual(22);
+    // Bigger than the old 26 pt: the new-gen bar has large, easy-to-hit icons.
+    expect(standard.icon).toBeGreaterThanOrEqual(26);
+    expect(cover.icon).toBeGreaterThanOrEqual(26);
     expect(cover.label).toBeGreaterThanOrEqual(11);
     // Narrower screens never get a bigger bar than wider ones.
     expect(cover.height).toBeLessThanOrEqual(tabSizing(412 / 7, true).height);

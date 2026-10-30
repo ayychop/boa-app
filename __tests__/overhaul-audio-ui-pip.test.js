@@ -139,15 +139,19 @@ describe('BOA Originals polish', () => {
 
   test('Episode 1 carries a gold BOA play badge', () => {
     const src = read('src/screens/OriginalsScreen.js');
-    expect(src).toMatch(/playBadge/);
-    expect(src).toMatch(/name="play"/);
+    expect(src).toMatch(/<BoaPlayButton size=\{64\}/);
+    const button = read('src/components/BoaPlayButton.js');
+    expect(button).toMatch(/name="play"/);
+    expect(button).toMatch(/BOA/);
   });
 
   test('the Mind States UK hero carries a tappable gold play badge that starts Episode 1', () => {
     const src = read('src/screens/OriginalsScreen.js');
     const hero = src.slice(src.indexOf('function Featured'), src.indexOf('function GoldSheen'));
     expect(hero).toMatch(/testID="originals-hero-play"/);
-    expect(hero).toMatch(/styles\.playBadge, styles\.heroPlay/);
+    // Dead centre of the picture, under the status bar, not pushed up or down.
+    expect(hero).toMatch(/styles\.playOverlay, \{ paddingTop: insets\.top \}/);
+    expect(hero).toMatch(/<BoaPlayButton size=\{104\}/);
     expect(hero).toMatch(/media\.openEpisode\(production\)/);
   });
 
@@ -162,8 +166,9 @@ describe('BOA Originals polish', () => {
 
   test('Coming Soon cards centre their text rather than pushing it to the floor', () => {
     const src = read('src/components/Poster.js');
-    expect(src).toMatch(/contentSoon: \{ justifyContent: 'center' \}/);
-    expect(src).toMatch(/soon && styles\.contentSoon/);
+    // Moved up to eye level (a quarter of the way down the card), with room for the line-height.
+    expect(src).toMatch(/contentSoon: \{ justifyContent: 'flex-start' \}/);
+    expect(src).toMatch(/soon && \[styles\.contentSoon, \{ paddingTop: Math\.round\(height \* 0\.24\) \}\]/);
   });
 
   test('the BOA Originals tab has a gold gleam that honours Reduce Motion', () => {

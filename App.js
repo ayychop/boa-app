@@ -9,6 +9,7 @@ import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-cont
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, { Easing, FadeIn, useAnimatedStyle, useReducedMotion, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
 import * as SplashScreen from 'expo-splash-screen';
 import { Ionicons } from '@expo/vector-icons';
 import { useFonts } from 'expo-font';
@@ -136,15 +137,20 @@ function TabTransition({ children }) {
 }
 
 // Dynamic Island-style pop on the icon that just became active: a quick dip
-// then an under-damped overshoot back to size.
-function TabIcon({ name, focused, color, size }) {
+// then an under-damped overshoot back to size. The active tab also rests on a
+// lit gold capsule (a soft glow that swells in behind its icon), so you can
+// tell where you are at a glance.
+function TabIcon({ name, focused, color, size, slot }) {
   const reduceMotion = useReducedMotion();
   const scale = useSharedValue(1);
+  const lit = useSharedValue(focused ? 1 : 0);
   useEffect(() => {
+    lit.value = withTiming(focused ? 1 : 0, { duration: reduceMotion ? 0 : 260, easing: EASE_OUT_EXPO });
     if (!focused || reduceMotion) return;
     scale.value = withSequence(withTiming(0.8, { duration: 90, easing: Easing.bezier(0.23, 1, 0.32, 1) }), withSpring(1, { duration: 480, dampingRatio: 0.42 }));
-  }, [focused, reduceMotion, scale]);
+  }, [focused, reduceMotion, scale, lit]);
   const style = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+  const capsule = useAnimatedStyle(() => ({ opacity: lit.value, transform: [{ scale: 0.7 + lit.value * 0.3 }] }));
   // BOA Originals is the premium headline: a slow gold gleam swells behind its
   // icon and rests, so it stands out as the marquee tab. Off under Reduce
   // Motion, and only ever on this one tab.
@@ -163,13 +169,22 @@ function TabIcon({ name, focused, color, size }) {
     );
   }, [premium, reduceMotion, gleam]);
   const gleamStyle = useAnimatedStyle(() => ({ opacity: gleam.value * 0.7 }));
+  const capsuleW = Math.round(Math.min(size * 1.95, Math.max(size + 8, (slot ?? size * 2) - 6)));
+  const capsuleH = Math.round(size * 1.38);
   return (
-    <Animated.View style={style}>
-      {premium ? (
-        <Animated.View pointerEvents="none" style={[styles.tabGleam, { width: size * 1.7, height: size * 1.7, borderRadius: size, left: -size * 0.35, top: -size * 0.35 }, gleamStyle]} />
-      ) : null}
-      <Ionicons name={ICONS[name][focused ? 0 : 1]} size={size} color={color} />
-    </Animated.View>
+    <View style={styles.tabIconBox}>
+      <Animated.View
+        pointerEvents="none"
+        testID={focused ? 'tab-active-glow' : undefined}
+        style={[styles.tabCapsule, { width: capsuleW, height: capsuleH, borderRadius: capsuleH / 2, left: (size - capsuleW) / 2, top: (size - capsuleH) / 2 }, capsule]}
+      />
+      <Animated.View style={style}>
+        {premium ? (
+          <Animated.View pointerEvents="none" style={[styles.tabGleam, { width: size * 1.7, height: size * 1.7, borderRadius: size, left: -size * 0.35, top: -size * 0.35 }, gleamStyle]} />
+        ) : null}
+        <Ionicons name={ICONS[name][focused ? 0 : 1]} size={size} color={color} style={focused ? styles.tabIconGlow : null} />
+      </Animated.View>
+    </View>
   );
 }
 
@@ -208,13 +223,23 @@ function FloatingTabBar(props) {
   );
 }
 
+// The bar is frosted glass: the blur, a translucent smoked tint (light enough
+// to read as glass, dense enough that round artwork scrolling under it never
+// shows as dark discs behind the icons), a sheen falling from the top edge,
+// and a fine line of gold light along the top.
 function TabBarBackground() {
   return (
     <View style={StyleSheet.absoluteFill}>
-      <BlurView intensity={70} tint="dark" experimentalBlurMethod="dimezisBlurView" style={StyleSheet.absoluteFill} />
-      {/* Dense enough that round artwork scrolling under the bar (station logos)
-          never reads as dark discs behind the icons where the blur is weak. */}
-      <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(5,5,6,0.86)' }]} />
+      <BlurView intensity={80} tint="dark" experimentalBlurMethod="dimezisBlurView" style={StyleSheet.absoluteFill} />
+      <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(8,8,11,0.74)' }]} />
+      <LinearGradient pointerEvents="none" colors={['rgba(255,255,255,0.09)', 'rgba(255,255,255,0)']} locations={[0, 0.6]} style={StyleSheet.absoluteFill} />
+      <LinearGradient
+        pointerEvents="none"
+        colors={['rgba(226,168,75,0)', 'rgba(246,211,138,0.55)', 'rgba(226,168,75,0)']}
+        start={{ x: 0, y: 0.5 }}
+        end={{ x: 1, y: 0.5 }}
+        style={styles.tabBarEdge}
+      />
     </View>
   );
 }
@@ -230,21 +255,22 @@ const ANDROID_BOTTOM_COMFORT = 10;
 // bar only as tall as they need. Tablets and unfolded phones have room to
 // spare, so they keep a slim bar.
 const TAB_COUNT = 7;
-export const TAB_BAR_HEIGHT = 66;
-export const TAB_BAR_HEIGHT_PHONE = 64;
+export const TAB_BAR_HEIGHT = 74;
+export const TAB_BAR_HEIGHT_PHONE = 76;
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 export const tabSizing = (slot, phone = false) => {
   if (!phone) {
     return {
-      icon: Math.round(Math.min(28, Math.max(24, slot * 0.44))),
-      label: slot < 54 ? 11 : slot < 70 ? 11.5 : 13,
+      icon: Math.round(Math.min(34, Math.max(28, slot * 0.46))),
+      label: slot < 54 ? 11.5 : slot < 70 ? 12 : 13.5,
       height: TAB_BAR_HEIGHT,
+      slot,
     };
   }
-  const icon = Math.round(clamp(slot * 0.44, 22, 27));
+  const icon = Math.round(clamp(slot * 0.5, 26, 30));
   const label = slot < 52 ? 11 : slot < 60 ? 11.5 : 12.5;
   // Top padding, icon, label line and a little air under it.
-  return { icon, label, height: Math.min(TAB_BAR_HEIGHT_PHONE, Math.round(icon + label * 1.35 + 22)) };
+  return { icon, label, slot, height: Math.min(TAB_BAR_HEIGHT_PHONE, Math.round(icon + label * 1.35 + 30)) };
 };
 
 // "BOA Originals" can't fit a phone's tab slot at a readable size, so
@@ -274,8 +300,8 @@ function Tabs() {
         tabBarInactiveTintColor: colors.textFaint,
         tabBarStyle: {
           backgroundColor: 'transparent',
-          borderTopColor: colors.border,
-          borderTopWidth: StyleSheet.hairlineWidth,
+          // The glass draws its own top edge (TabBarBackground).
+          borderTopWidth: 0,
           elevation: 0,
           paddingLeft: side,
           paddingRight: side,
@@ -283,7 +309,7 @@ function Tabs() {
           // it takes as little of the short screen as it can.
           height: (short ? 44 : sizing.height) + bottomInset,
         },
-        tabBarItemStyle: { paddingHorizontal: 0, paddingTop: short ? 0 : 8 },
+        tabBarItemStyle: { paddingHorizontal: 0, paddingTop: short ? 0 : 10 },
         tabBarBackground: () => <TabBarBackground />,
         // Seven tabs: each label stays on one line and shrinks to fit its
         // slot (down to 65%) rather than wrapping into the icon or
@@ -296,7 +322,7 @@ function Tabs() {
             {tabLabel(route.name, phone)}
           </Text>
         ),
-        tabBarIcon: ({ focused, color }) => <TabIcon name={route.name} focused={focused} color={color} size={sizing.icon} />,
+        tabBarIcon: ({ focused, color }) => <TabIcon name={route.name} focused={focused} color={color} size={short ? Math.min(sizing.icon, 26) : sizing.icon} slot={sizing.slot} />,
       })}
       screenListeners={{ tabPress: () => haptics.selection() }}
     >
@@ -551,7 +577,12 @@ function Root() {
 
 const styles = StyleSheet.create({
   tabBarWrap: { position: 'absolute', left: 0, right: 0, bottom: 0 },
-  tabLabel: { fontFamily: fonts.semibold, letterSpacing: -0.1, textAlign: 'center', maxWidth: '100%', paddingHorizontal: 1, marginTop: 3 },
+  tabLabel: { fontFamily: fonts.semibold, letterSpacing: -0.1, textAlign: 'center', maxWidth: '100%', paddingHorizontal: 1, marginTop: 5 },
+  tabBarEdge: { position: 'absolute', top: 0, left: 0, right: 0, height: StyleSheet.hairlineWidth * 2 },
+  tabIconBox: { alignItems: 'center', justifyContent: 'center' },
+  // The lit capsule under the active tab's icon: gold glass with a soft glow.
+  tabCapsule: { position: 'absolute', backgroundColor: 'rgba(226,168,75,0.16)', borderWidth: 1, borderColor: 'rgba(246,211,138,0.34)', boxShadow: '0px 0px 20px rgba(226,168,75,0.55)' },
+  tabIconGlow: { textShadowColor: 'rgba(246,211,138,0.95)', textShadowRadius: 10, textShadowOffset: { width: 0, height: 0 } },
   // The gold gleam behind the BOA Originals tab icon: a soft radial glow.
   tabGleam: { position: 'absolute', backgroundColor: 'rgba(226,168,75,0.5)', boxShadow: '0px 0px 14px rgba(226,168,75,0.85)' },
   crash: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 12, backgroundColor: colors.bg },

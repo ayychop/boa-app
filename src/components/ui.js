@@ -1,4 +1,5 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
+import Text from './ScopedText';
 import { useEffect } from 'react';
 import Animated, {
   Easing,
@@ -13,7 +14,6 @@ import BoaLogo from './BoaLogo';
 import Smoke from './Smoke';
 import { colors, fonts, radius, space, type } from '../theme';
 import { PRESS_SCALE, usePress } from '../utils/motion';
-import { useHeadlineFont } from '../context/FontContext';
 
 /** Mono, letter-spaced label, optionally led by a gold "recording" dot. */
 export function Slate({ children, dot = false, color, style, lines = 1 }) {
@@ -81,13 +81,12 @@ export function Button({ label, icon, onPress, variant = 'primary', disabled, st
 
 /** "01 · TALENT" index slate + headline, with an optional trailing action. */
 export function SectionHeader({ index, kicker, title, action, onAction, style }) {
-  const headlineFont = useHeadlineFont();
   return (
     <View style={[styles.section, style]}>
       <View style={{ flex: 1 }}>
         <Slate lines={2}>{[index, kicker].filter(Boolean).join(' · ')}</Slate>
         {/* Room between the kicker (often a long genre list) and the title. */}
-        <Text style={[type.title, { marginTop: space.md, fontFamily: headlineFont }]}>{title}</Text>
+        <Text style={[type.title, { marginTop: space.md }]}>{title}</Text>
       </View>
       {action && (
         <Pressable onPress={onAction} hitSlop={10} style={({ pressed }) => [styles.action, pressed && { opacity: 0.6 }]}>

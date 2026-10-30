@@ -187,6 +187,8 @@ export function previewOf(message) {
       return '🎬 Video';
     case 'voice':
       return '🎙️ Voice note';
+    case 'gif':
+      return 'GIF';
     default:
       return (message?.body ?? '').slice(0, 140);
   }

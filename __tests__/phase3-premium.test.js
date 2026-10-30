@@ -241,9 +241,9 @@ describe('beauty filters', () => {
     }
     expect(describeBeauty({ preset: 'cinematic', brightness: 0.7, enabled: true })).toBe('Cinematic · Bright +40');
     // Brightness saved before it became exposure meant lightening: it starts again on Auto.
-    expect(fromStored({ studio: 0.7, flawless: 0.2, enabled: false })).toEqual({ preset: 'natural', brightness: 0.5, contrast: 0.5, enabled: false });
-    expect(fromStored({ preset: 'golden', brightness: 0.3 })).toEqual({ preset: 'golden', brightness: 0.5, contrast: 0.5, enabled: true });
-    expect(fromStored({ preset: 'golden', brightness: 0.3, v: 2 })).toEqual({ preset: 'golden', brightness: 0.3, contrast: 0.5, enabled: true });
+    expect(fromStored({ studio: 0.7, flawless: 0.2, enabled: false })).toEqual({ preset: 'natural', brightness: 0.5, contrast: 0.5, enabled: false, mode: 'filters', enhance: 0.55 });
+    expect(fromStored({ preset: 'golden', brightness: 0.3 })).toEqual({ preset: 'golden', brightness: 0.5, contrast: 0.5, enabled: true, mode: 'filters', enhance: 0.55 });
+    expect(fromStored({ preset: 'golden', brightness: 0.3, v: 2 })).toEqual({ preset: 'golden', brightness: 0.3, contrast: 0.5, enabled: true, mode: 'filters', enhance: 0.55 });
     expect(fromStored({ preset: 'nope' }).preset).toBe('natural');
   });
 

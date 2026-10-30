@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
+import Text, { TextInput } from '../ScopedText';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import BottomSheet from '../BottomSheet';
 import Sticker from './Sticker';
-import { clearFresh, rememberSticker, useStickerCatalogue } from '../../chat/stickers';
+import { clearFresh, rememberSticker, toCode, useStickerCatalogue } from '../../chat/stickers';
+import { FLAGS, PEOPLE, TONES, withTone } from '../../chat/emojiSet';
 import { haptics } from '../../utils/haptics';
 import { colors, fonts, radius, space } from '../../theme';
 
@@ -20,6 +23,11 @@ const TABS = [
   { id: 'Symbols', label: 'Symbols', icon: 'heart-outline' },
   { id: 'Flags', label: 'Flags', icon: 'flag-outline' },
 ];
+// Google's animated set has hardly any people or flags, so those two tabs are
+// the phone's own emoji (src/chat/emojiSet.js): every person and hand, in the
+// skin tone you pick, and every flag. They're always there, even offline.
+const STATIC_TABS = ['People', 'Flags'];
+const TONE_KEY = 'boa.stickers.tone';
 const CELL = 64;
 const GRID_H = 340;
 
@@ -38,6 +46,22 @@ export default function StickerPicker({ open, purpose = 'send', onPick, onClose 
   const [tab, setTab] = useState(null);
   const [query, setQuery] = useState('');
   const sawFresh = useRef(false);
+  // The skin tone for the People tab (0 is the default yellow), kept between visits.
+  const [tone, setTone] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    AsyncStorage.getItem(TONE_KEY)
+      .then((raw) => alive && TONES[Number(raw)] && setTone(Number(raw)))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const chooseTone = (id) => {
+    haptics.selection();
+    setTone(id);
+    AsyncStorage.setItem(TONE_KEY, String(id)).catch(() => {});
+  };
   const freshSet = useMemo(() => new Set(fresh ?? []), [fresh]);
 
   // Opens on New when Google has added some, else Recent, else Faces.
@@ -57,15 +81,25 @@ export default function StickerPicker({ open, purpose = 'send', onPick, onClose 
     onClose();
   };
 
+  // People in the chosen skin tone, and the flags, as picker items.
+  const people = useMemo(() => PEOPLE.map((p) => ({ emoji: withTone(p.emoji, tone), tags: p.tags, category: 'People' })).map((i) => ({ ...i, code: toCode(i.emoji) })), [tone]);
+  const flags = useMemo(() => FLAGS.map((f) => ({ ...f, category: 'Flags', flag: true, code: toCode(f.emoji) })), []);
+
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase().replace(/^:|:$/g, '');
-    if (q) return icons.filter((i) => i.emoji === q || i.tags.some((t) => t.includes(q)));
+    if (q) {
+      const match = (i) => i.emoji === q || i.tags.some((t) => t.includes(q));
+      const seen = new Set();
+      return [...icons.filter(match), ...people.filter(match), ...flags.filter(match)].filter((i) => !seen.has(i.emoji) && seen.add(i.emoji));
+    }
     if (tab === 'recent') return recent.map((emoji) => icons.find((i) => i.emoji === emoji) ?? { code: emoji, emoji });
     if (tab === 'new') return icons.filter((i) => freshSet.has(i.code));
+    if (tab === 'People') return people;
+    if (tab === 'Flags') return flags;
     return icons.filter((i) => i.category === tab);
-  }, [icons, recent, freshSet, tab, query]);
+  }, [icons, recent, freshSet, tab, query, people, flags]);
 
-  const tabs = TABS.filter((t) => (t.id === 'new' ? freshSet.size > 0 : t.id === 'recent' ? recent.length > 0 : icons.some((i) => i.category === t.id)));
+  const tabs = TABS.filter((t) => (STATIC_TABS.includes(t.id) ? true : t.id === 'new' ? freshSet.size > 0 : t.id === 'recent' ? recent.length > 0 : icons.some((i) => i.category === t.id)));
 
   const pick = (emoji) => {
     haptics.tap();
@@ -126,11 +160,27 @@ export default function StickerPicker({ open, purpose = 'send', onPick, onClose 
             }}
           />
         ) : null}
+        {!query && tab === 'People' ? (
+          <View style={styles.tones} accessibilityRole="radiogroup" testID="sticker-tones">
+            {TONES.map((t) => (
+              <Pressable
+                key={t.id}
+                onPress={() => chooseTone(t.id)}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: tone === t.id }}
+                accessibilityLabel={`${t.label} skin tone`}
+                hitSlop={4}
+                style={[styles.toneDot, { backgroundColor: t.color }, tone === t.id && styles.toneDotOn]}
+                testID={`sticker-tone-${t.id}`}
+              />
+            ))}
+          </View>
+        ) : null}
         <FlatList
-          key={`${columns}-${tab}-${query ? 'q' : ''}`}
+          key={`${columns}-${tab}-${tab === 'People' ? tone : ''}-${query ? 'q' : ''}`}
           data={shown}
           numColumns={columns}
-          keyExtractor={(i) => i.code}
+          keyExtractor={(i) => `${i.code}`}
           style={{ height: GRID_H }}
           initialNumToRender={columns * 5}
           windowSize={5}
@@ -144,7 +194,7 @@ export default function StickerPicker({ open, purpose = 'send', onPick, onClose 
               style={({ pressed }) => [styles.cell, { width: cellW }, pressed && styles.cellPressed]}
               testID={`sticker-${item.emoji}`}
             >
-              <Sticker emoji={item.emoji} size={46} />
+              <Sticker emoji={item.emoji} size={46} animate={!item.flag} />
               {freshSet.has(item.code) && tab !== 'new' ? <View style={styles.dot} /> : null}
             </Pressable>
           )}
@@ -152,7 +202,7 @@ export default function StickerPicker({ open, purpose = 'send', onPick, onClose 
             <Text style={styles.empty}>{query ? `Nothing for “${query}”.` : 'Nothing here yet.'}</Text>
           }
         />
-        <Text style={styles.credit}>Animated emoji by Google (Noto), new ones arrive on their own.</Text>
+        <Text style={styles.credit}>Animated emoji by Google (Noto), new ones arrive on their own. People and flags are your phone's own.</Text>
       </View>
     </BottomSheet>
   );
@@ -167,6 +217,9 @@ const styles = StyleSheet.create({
   search: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingHorizontal: space.md, height: 40, borderRadius: radius.pill, backgroundColor: 'rgba(255,255,255,0.07)', borderWidth: 1, borderColor: colors.border },
   searchInput: { flex: 1, fontFamily: fonts.chat, fontSize: 14, color: colors.text, paddingVertical: 0 },
   tabs: { gap: 6, paddingVertical: space.md },
+  tones: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.md, paddingBottom: space.md },
+  toneDot: { width: 26, height: 26, borderRadius: 13, borderWidth: 2, borderColor: 'rgba(243,239,232,0.18)' },
+  toneDotOn: { borderColor: colors.gold, transform: [{ scale: 1.12 }] },
   tab: { flexDirection: 'row', alignItems: 'center', gap: 5, height: 32, paddingHorizontal: space.md, borderRadius: radius.pill, backgroundColor: 'rgba(255,255,255,0.06)' },
   tabOn: { backgroundColor: colors.gold },
   tabText: { fontFamily: fonts.chat, fontSize: 12.5, color: colors.textMuted },

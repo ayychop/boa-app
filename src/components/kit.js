@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Image, Pressable, StyleSheet, View } from 'react-native';
+import Text, { TextInput } from './ScopedText';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -161,7 +162,7 @@ export function SettingRow({ icon, title, detail, children, onPress, danger, las
   );
 }
 
-export function Chip({ label, selected, onPress, icon, testID }) {
+export function Chip({ label, selected, onPress, icon, testID, family }) {
   const t = useSharedValue(selected ? 1 : 0);
   useEffect(() => {
     t.value = withTiming(selected ? 1 : 0, { duration: 220 });
@@ -183,7 +184,7 @@ export function Chip({ label, selected, onPress, icon, testID }) {
     >
       <Animated.View style={[styles.chip, style]}>
         {icon ? <Ionicons name={icon} size={13} color={selected ? colors.bg : colors.textMuted} /> : null}
-        <Text style={[styles.chipText, selected && { color: colors.bg }]}>{label}</Text>
+        <Text style={[styles.chipText, family && { fontFamily: family }, selected && { color: colors.bg }]}>{label}</Text>
       </Animated.View>
     </Pressable>
   );

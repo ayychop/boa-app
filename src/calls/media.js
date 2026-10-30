@@ -19,6 +19,7 @@ export const setPrivacy = () => {};
 export const setBeauty = () => {};
 export const setBrightness = () => {};
 export const setContrast = () => {};
+export const setEnhance = () => {};
 export const setBackground = async () => 'unsupported';
 export const backgroundEngine = () => 'agora';
 export const focusAt = () => false;

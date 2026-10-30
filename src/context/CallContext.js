@@ -193,6 +193,7 @@ export function CallProvider({ children }) {
   // nothing saved or re-rendered until they're let go (setBeauty then).
   const previewBrightness = useCallback((v) => media.setBrightness(v), []);
   const previewContrast = useCallback((v) => media.setContrast(v), []);
+  const previewEnhance = useCallback((v) => media.setEnhance(v), []);
 
   // Every call starts full screen.
   const callId = call?.id ?? null;
@@ -711,6 +712,7 @@ export function CallProvider({ children }) {
       setBeauty,
       previewBrightness,
       previewContrast,
+      previewEnhance,
       background,
       setBackground,
       backgroundStatus,
@@ -741,6 +743,7 @@ export function CallProvider({ children }) {
       setBeauty,
       previewBrightness,
       previewContrast,
+      previewEnhance,
       background,
       setBackground,
       backgroundStatus,

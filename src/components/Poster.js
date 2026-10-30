@@ -11,6 +11,9 @@ export function metaLine(p) {
 /**
  * Production artwork. Without an image it renders the site's own placeholder
  * treatment: fogged charcoal, a gold glow and slate labels.
+ *
+ * With artwork the picture runs edge to edge: no border, no letterbox, no
+ * panel colour showing at the sides, in portrait and landscape alike.
  */
 export default function Poster({ production, width, ratio = 16 / 9, showTitle = true, rounded = radius.md, fit = 'cover' }) {
   const height = Math.round(width / ratio);
@@ -27,9 +30,10 @@ export default function Poster({ production, width, ratio = 16 / 9, showTitle = 
   // tall enough to hold it clear of the caption below. A coming-soon card
   // says "Coming soon" and nothing else.
   const brandLine = !art && !soon && height >= (caption ? 150 : 70);
+  const titleSize = Math.max(15, Math.min(26, width / 11));
 
   return (
-    <View style={[styles.frame, { width, height, borderRadius: rounded }]}>
+    <View style={[styles.frame, art ? styles.framed : styles.placeholder, { width, height, borderRadius: rounded }]}>
       {art ? (
         fit === 'contain' ? (
           // The whole artwork, letterboxed over a blurred copy of itself.
@@ -51,7 +55,7 @@ export default function Poster({ production, width, ratio = 16 / 9, showTitle = 
       {/* Brand line and caption share one column, so however small the
           card, they stack instead of overlapping. */}
       {(brandLine || caption) && (
-        <View style={[styles.content, soon && styles.contentSoon]} pointerEvents="none">
+        <View style={[styles.content, soon && [styles.contentSoon, { paddingTop: Math.round(height * 0.24) }]]} pointerEvents="none">
           {brandLine ? (
             <Slate color={colors.gold} lines={2}>
               Best of all networks
@@ -60,19 +64,19 @@ export default function Poster({ production, width, ratio = 16 / 9, showTitle = 
             <View />
           )}
           {caption && (
-            <View>
+            <View style={soon && styles.soonText}>
               {soon && (
-                <Slate color={colors.gold} dot style={{ marginBottom: 6 }}>
+                <Slate color={colors.gold} dot style={{ marginBottom: 8 }}>
                   Coming soon
                 </Slate>
               )}
               {!titled && (
-                <Text style={[styles.title, { fontSize: Math.max(15, Math.min(26, width / 11)) }]} numberOfLines={2}>
+                <Text style={[styles.title, { fontSize: titleSize, lineHeight: Math.round(titleSize * 1.18) }]} numberOfLines={3}>
                   {production.title}
                 </Text>
               )}
               {!!metaLine(production) && (
-                <Text style={styles.meta} numberOfLines={2}>
+                <Text style={styles.meta} numberOfLines={3}>
                   {metaLine(production)}
                 </Text>
               )}
@@ -87,14 +91,17 @@ export default function Poster({ production, width, ratio = 16 / 9, showTitle = 
 const styles = StyleSheet.create({
   frame: {
     overflow: 'hidden',
-    backgroundColor: colors.surface,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
   },
-  content: { ...StyleSheet.absoluteFill, padding: 14, justifyContent: 'space-between' },
+  // Artwork fills the frame to its very edge: no hairline border, and the
+  // stage colour behind it, so an antialiased edge never shows a grey rim.
+  framed: { backgroundColor: colors.bg },
+  placeholder: { backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
+  content: { ...StyleSheet.absoluteFill, paddingHorizontal: 14, paddingTop: 14, paddingBottom: 18, justifyContent: 'space-between' },
   // A Coming Soon card has no artwork and no caption at the foot, so its text
-  // centres rather than sitting pushed to the bottom edge: eye level.
-  contentSoon: { justifyContent: 'center' },
+  // rides up to eye level (the upper third) instead of sitting on the floor
+  // or dead centre. Its top padding is set from the card's height.
+  contentSoon: { justifyContent: 'flex-start' },
+  soonText: { alignItems: 'flex-start' },
   title: { fontFamily: fonts.semibold, color: colors.text, letterSpacing: -0.6 },
-  meta: { fontFamily: fonts.medium, fontSize: 11.5, color: colors.textMuted, marginTop: 3 },
+  meta: { fontFamily: fonts.medium, fontSize: 11.5, lineHeight: 16, color: colors.textMuted, marginTop: 4 },
 });

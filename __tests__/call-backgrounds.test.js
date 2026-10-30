@@ -20,59 +20,43 @@ jest.mock('expo-linking', () => ({
   addEventListener: jest.fn(() => ({ remove: () => {} })),
 }));
 jest.mock('../src/calls/token', () => ({ fetchToken: jest.fn(async () => ({ appId: 'boa-app-id', token: 'tok-1', uid: 4242 })) }));
-// A backdrop image, once it's a file on the phone.
-jest.mock('expo-asset', () => ({
-  Asset: {
-    fromModule: jest.fn((mod) => ({ downloadAsync: jest.fn(async () => {}), localUri: `file:///cache/backdrop-${typeof mod === 'string' ? mod : 'image'}.jpg` })),
-  },
-}));
-
 const bg = require('../src/calls/backgrounds');
 
-describe('the backdrops themselves', () => {
-  test('three studio tones, each a lit backdrop image with its true hex underneath', () => {
-    expect(bg.STUDIO.map((s) => [s.id, s.hex])).toEqual([
-      ['black', '#000000'],
-      ['charcoal', '#1A1A1A'],
-      ['warm-grey', '#6E675F'],
-    ]);
-    for (const s of bg.STUDIO) expect(s.asset).toBeTruthy();
-    expect(bg.hexToInt('#1A1A1A')).toBe(0x1a1a1a);
-    expect(bg.hexToInt('nonsense')).toBe(0);
+describe('the blur itself', () => {
+  test('three depths named like a lens; the backdrop pictures are gone', () => {
+    expect(bg.BLURS.map((b) => b.id)).toEqual(['f4', 'f2.8', 'f1.4']);
+    expect(bg.MODES).toEqual(['off', 'blur']);
+    for (const gone of ['STUDIO', 'SCENES', 'assetOf', 'hexToInt']) expect(bg[gone]).toBeUndefined();
   });
 
-  test('Agora: AI segmentation always (never a green screen), the image with its colour as a fallback, and blur by depth', () => {
-    const studio = bg.toAgora({ mode: 'studio', id: 'charcoal' }, '/cache/charcoal.jpg');
-    expect(studio).toEqual({ enabled: true, source: { background_source_type: 2, color: 0x1a1a1a, source: '/cache/charcoal.jpg' }, segmentation: { modelType: 1 } });
-    // No file yet: the tone itself still goes down.
-    expect(bg.toAgora({ mode: 'studio', id: 'black' }, null).source).toEqual({ background_source_type: 1, color: 0 });
-    expect(bg.toAgora({ mode: 'blur', id: 'f1.4' }).source).toEqual({ background_source_type: 3, blur_degree: 3 });
+  test('Agora: AI segmentation always (never a green screen), blur by depth', () => {
+    expect(bg.toAgora({ mode: 'blur', id: 'f1.4' })).toEqual({ enabled: true, source: { background_source_type: 3, blur_degree: 3 }, segmentation: { modelType: 1 } });
     expect(bg.toAgora({ mode: 'blur', id: 'f4' }).source.blur_degree).toBe(1);
     expect(bg.toAgora({ mode: 'off', id: null }).enabled).toBe(false);
-    for (const choice of [
-      { mode: 'studio', id: 'black' },
-      { mode: 'blur', id: 'f2.8' },
-    ])
-      expect(bg.toAgora(choice, '/x.jpg').segmentation.modelType).toBe(1);
+    expect(bg.toAgora({ mode: 'blur', id: 'f2.8' }).segmentation.modelType).toBe(1);
   });
 
-  test('Banuba: its background module, the image filled to the frame, or a blur radius', () => {
-    expect(bg.toBanuba({ mode: 'studio', id: 'warm-grey' }, "/data/it's/warm.jpg")).toEqual([
-      "Background = require('bnb_js/background')",
-      "Background.texture('/data/it\\'s/warm.jpg')",
-      "Background.contentMode('scale_to_fill')",
-    ]);
+  test('Banuba: its background module and a blur radius', () => {
     expect(bg.toBanuba({ mode: 'blur', id: 'f2.8' })).toEqual(["Background = require('bnb_js/background')", 'Background.blur(0.6)']);
     expect(bg.toBanuba({ mode: 'off', id: null })).toEqual([]);
   });
 
-  test('saved choices come back only if they are still offered', () => {
+  test('saved choices come back only if they are still offered; studio and scene ones are off', () => {
     expect(bg.fromStored({ mode: 'blur', id: 'f1.4' })).toEqual({ mode: 'blur', id: 'f1.4' });
+    expect(bg.fromStored({ mode: 'studio', id: 'charcoal' })).toEqual(bg.DEFAULT_BACKGROUND);
     expect(bg.fromStored({ mode: 'scene', id: 'gone' })).toEqual(bg.DEFAULT_BACKGROUND);
-    expect(bg.fromStored({ mode: 'hologram', id: 'x' })).toEqual(bg.DEFAULT_BACKGROUND);
+    expect(bg.fromStored({ mode: 'blur', id: 'f9' })).toEqual(bg.DEFAULT_BACKGROUND);
     expect(bg.fromStored(null)).toEqual(bg.DEFAULT_BACKGROUND);
-    expect(bg.describe({ mode: 'studio', id: 'charcoal' })).toBe('Studio · Charcoal');
+    expect(bg.describe({ mode: 'blur', id: 'f2.8' })).toBe('Blur · f/2.8');
     expect(bg.describe({ mode: 'off' })).toBe('Off');
+  });
+
+  test('no backdrop images or green-screen options are left in the app', () => {
+    const fs = require('fs');
+    const path = require('path');
+    expect(fs.existsSync(path.join(__dirname, '..', 'assets/backdrops'))).toBe(false);
+    const call = fs.readFileSync(path.join(__dirname, '..', 'src/components/calls/CallScreen.js'), 'utf8');
+    expect(call).not.toMatch(/call-backdrop-|call-background-tab-|Match lighting/);
   });
 });
 
@@ -91,12 +75,10 @@ describe('the camera, with Agora drawing the background', () => {
     expect(engine.enableVirtualBackground).toHaveBeenCalledWith(true, { background_source_type: 3, blur_degree: 2 }, { modelType: 1 }, 2);
     expect(media.backgroundEngine()).toBe('agora');
 
-    expect(await media.setBackground({ mode: 'studio', id: 'charcoal' })).toBe('ok');
+    expect(await media.setBackground({ mode: 'blur', id: 'f4' })).toBe('ok');
     const [on, source, seg] = engine.enableVirtualBackground.mock.calls.at(-1);
     expect(on).toBe(true);
-    expect(source).toEqual(expect.objectContaining({ background_source_type: 2, color: 0x1a1a1a }));
-    // An absolute path on the phone, as Agora needs: no file:// in front.
-    expect(source.source).toMatch(/^\/cache\/backdrop-.*\.jpg$/);
+    expect(source).toEqual({ background_source_type: 3, blur_degree: 1 });
     expect(seg).toEqual({ modelType: 1 });
 
     expect(await media.setBackground({ mode: 'off', id: null })).toBe('ok');
@@ -117,11 +99,11 @@ describe('the camera, with Agora drawing the background', () => {
       await media.prepare('call-bg-repeat', { preset: 'natural', enabled: true });
     });
     const presses = [
-      { mode: 'studio', id: 'charcoal' },
-      { mode: 'studio', id: 'black' },
+      { mode: 'blur', id: 'f4' },
+      { mode: 'blur', id: 'f1.4' },
       { mode: 'blur', id: 'f2.8' },
-      { mode: 'studio', id: 'charcoal' },
-      { mode: 'studio', id: 'charcoal' },
+      { mode: 'blur', id: 'f4' },
+      { mode: 'blur', id: 'f4' },
       { mode: 'blur', id: 'f1.4' },
     ];
     for (const [i, choice] of presses.entries()) {
@@ -131,7 +113,7 @@ describe('the camera, with Agora drawing the background', () => {
       // From the second press on, the one before is switched off first, then the new one goes on.
       if (i > 0) expect(calls[0][0]).toBe(false);
       expect(calls.at(-1)[0]).toBe(true);
-      expect(calls.at(-1)[1]).toEqual(bg.toAgora(choice, calls.at(-1)[1].source).source);
+      expect(calls.at(-1)[1]).toEqual(bg.toAgora(choice).source);
     }
     expect(await media.setBackground({ mode: 'off', id: null })).toBe('ok');
   });
@@ -141,8 +123,8 @@ describe('the camera, with Agora drawing the background', () => {
       await media.prepare('call-bg-burst', { preset: 'natural', enabled: true });
     });
     const results = await Promise.all([
-      media.setBackground({ mode: 'studio', id: 'black' }),
-      media.setBackground({ mode: 'studio', id: 'warm-grey' }),
+      media.setBackground({ mode: 'blur', id: 'f1.4' }),
+      media.setBackground({ mode: 'blur', id: 'f2.8' }),
       media.setBackground({ mode: 'blur', id: 'f4' }),
     ]);
     expect(results.at(-1)).toBe('ok');
@@ -157,7 +139,7 @@ describe('the camera, with Agora drawing the background', () => {
     engine.enableVirtualBackground.mockImplementationOnce(() => {
       throw new Error('segmentation crashed');
     });
-    expect(await media.setBackground({ mode: 'studio', id: 'charcoal' })).toBe('failed');
+    expect(await media.setBackground({ mode: 'blur', id: 'f1.4' })).toBe('failed');
     expect(engine.enableVirtualBackground.mock.calls.at(-1)[0]).toBe(false);
 
     engine.enableVirtualBackground.mockReturnValueOnce(-1);
@@ -165,7 +147,7 @@ describe('the camera, with Agora drawing the background', () => {
     expect(engine.enableVirtualBackground.mock.calls.at(-1)[0]).toBe(false);
 
     // And the next press still works.
-    expect(await media.setBackground({ mode: 'studio', id: 'black' })).toBe('ok');
+    expect(await media.setBackground({ mode: 'blur', id: 'f4' })).toBe('ok');
     expect(engine.enableVirtualBackground.mock.calls.at(-1)[0]).toBe(true);
     await media.setBackground({ mode: 'off', id: null });
   });
@@ -246,14 +228,14 @@ describe('the camera, with Banuba drawing the background', () => {
     disk.set('banuba-trial', '1.4.0+42');
     const { media, engine } = load();
     jest.clearAllMocks();
-    media.setBackground({ mode: 'studio', id: 'charcoal' });
+    media.setBackground({ mode: 'blur', id: 'f2.8' });
     await act(async () => {
       await media.prepare('call-after-crash', { preset: 'natural', enabled: true });
     });
     expect(engine.enableExtension).not.toHaveBeenCalledWith('Banuba', 'BanubaFilter', true);
     expect(disk.get('banuba-benched')).toBe('1.4.0+42');
     expect(media.backgroundEngine()).toBe('agora');
-    expect(engine.enableVirtualBackground).toHaveBeenCalledWith(true, expect.objectContaining({ color: 0x1a1a1a }), { modelType: 1 }, 2);
+    expect(engine.enableVirtualBackground).toHaveBeenCalledWith(true, { background_source_type: 3, blur_degree: 2 }, { modelType: 1 }, 2);
     media.reset();
 
     // A new build of the app tries Banuba again.
@@ -311,13 +293,13 @@ describe('the camera, with Banuba drawing the background', () => {
     const { media, engine } = load();
     jest.clearAllMocks();
     engine.setExtensionProperty.mockReturnValueOnce(-3);
-    media.setBackground({ mode: 'studio', id: 'black' });
+    media.setBackground({ mode: 'blur', id: 'f4' });
     await act(async () => {
       await media.prepare('call-bnb-2', { preset: 'natural', enabled: true });
     });
     expect(media.backgroundEngine()).toBe('agora');
-    expect(await media.setBackground({ mode: 'studio', id: 'black' })).toBe('ok');
-    expect(engine.enableVirtualBackground).toHaveBeenCalledWith(true, expect.objectContaining({ color: 0 }), { modelType: 1 }, 2);
+    expect(await media.setBackground({ mode: 'blur', id: 'f4' })).toBe('ok');
+    expect(engine.enableVirtualBackground).toHaveBeenCalledWith(true, { background_source_type: 3, blur_degree: 1 }, { modelType: 1 }, 2);
     media.reset();
   });
 });
@@ -339,7 +321,7 @@ describe('the Background sheet on the call screen', () => {
     return <Text onPress={() => startCall(KOFI)}>Call Kofi</Text>;
   }
 
-  test('Backdrop opens three tabs; a studio tone and a blur go to the camera, and Match lighting is right there', async () => {
+  test('Blur opens the blur depths only: no backdrop tabs, no green screen; a depth goes to the camera, off turns it off', async () => {
     const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
     await render(
       <PremiumProvider>
@@ -352,35 +334,27 @@ describe('the Background sheet on the call screen', () => {
     await act(async () => {});
     await user.press(screen.getByTestId('call-background-button'));
     expect(screen.getByTestId('call-background')).toBeOnTheScreen();
-    for (const tab of ['studio', 'scene', 'blur']) expect(screen.getByTestId(`call-background-tab-${tab}`)).toBeOnTheScreen();
-    // Lighting to match the backdrop: the camera's exposure.
-    expect(screen.getByText('Match lighting')).toBeOnTheScreen();
+    for (const gone of ['studio', 'scene', 'blur']) expect(screen.queryByTestId(`call-background-tab-${gone}`)).toBeNull();
+    expect(screen.queryByTestId('call-backdrop-charcoal')).toBeNull();
+    expect(screen.queryByText('Match lighting')).toBeNull();
+    for (const id of ['f4', 'f2.8', 'f1.4']) expect(screen.getByTestId(`call-blur-${id}`)).toBeOnTheScreen();
 
-    await user.press(screen.getByTestId('call-backdrop-charcoal'));
-    await act(async () => {});
-    expect(engine.enableVirtualBackground).toHaveBeenLastCalledWith(true, expect.objectContaining({ background_source_type: 2, color: 0x1a1a1a }), { modelType: 1 }, 2);
-    expect(screen.getByTestId('call-background-now')).toHaveTextContent('Studio · Charcoal');
-
-    // Scenes wait for their photographs.
-    await user.press(screen.getByTestId('call-background-tab-scene'));
-    expect(screen.getByTestId('call-scenes-empty')).toBeOnTheScreen();
-
-    await user.press(screen.getByTestId('call-background-tab-blur'));
     await user.press(screen.getByTestId('call-blur-f1.4'));
     await act(async () => {});
     expect(engine.enableVirtualBackground).toHaveBeenLastCalledWith(true, { background_source_type: 3, blur_degree: 3 }, { modelType: 1 }, 2);
+    expect(screen.getByTestId('call-background-now')).toHaveTextContent('Blur · f/1.4');
 
     await user.press(screen.getByTestId('call-background-off'));
     await act(async () => {});
     expect(engine.enableVirtualBackground.mock.calls.at(-1)[0]).toBe(false);
 
-    // One panel at a time: Filters closes Background.
+    // One panel at a time: Filters closes Blur.
     await user.press(screen.getByTestId('call-filters-button'));
     expect(screen.queryByTestId('call-background')).toBeNull();
     expect(screen.getByTestId('call-filters')).toBeOnTheScreen();
   });
 
-  test('the Backdrop button pressed many times in a row keeps working, and a crash falls back to the plain camera', async () => {
+  test('the Blur button pressed many times in a row keeps working, and a crash falls back to the plain camera', async () => {
     const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
     await render(
       <PremiumProvider>
@@ -392,17 +366,16 @@ describe('the Background sheet on the call screen', () => {
     await user.press(screen.getByText('Call Kofi'));
     await act(async () => {});
 
-    // Open and close the sheet, picking a different backdrop each time.
-    const order = ['charcoal', 'black', 'warm-grey', 'charcoal', 'black'];
-    for (const id of order) {
+    // Open and close the sheet, picking a different depth each time.
+    for (const id of ['f4', 'f1.4', 'f2.8', 'f4', 'f1.4']) {
       await user.press(screen.getByTestId('call-background-button'));
       expect(screen.getByTestId('call-background')).toBeOnTheScreen();
-      await user.press(screen.getByTestId(`call-backdrop-${id}`));
+      await user.press(screen.getByTestId(`call-blur-${id}`));
       await act(async () => {});
       const [on, source] = engine.enableVirtualBackground.mock.calls.at(-1);
       expect(on).toBe(true);
-      expect(source.color).toBe(bg.hexToInt(bg.STUDIO.find((s) => s.id === id).hex));
-      expect(screen.getByTestId('call-background-now')).toHaveTextContent(`Studio · ${bg.STUDIO.find((s) => s.id === id).label}`);
+      expect(source.blur_degree).toBe(bg.BLURS.find((b) => b.id === id).agora);
+      expect(screen.getByTestId('call-background-now')).toHaveTextContent(`Blur · ${bg.BLURS.find((b) => b.id === id).label}`);
       expect(screen.queryByTestId('call-background-failed')).toBeNull();
       await user.press(screen.getByTestId('call-background-button'));
     }
@@ -412,17 +385,51 @@ describe('the Background sheet on the call screen', () => {
     engine.enableVirtualBackground.mockImplementationOnce(() => 0).mockImplementationOnce(() => {
       throw new Error('extension died');
     });
-    await user.press(screen.getByTestId('call-backdrop-warm-grey'));
+    await user.press(screen.getByTestId('call-blur-f2.8'));
     await act(async () => {});
     expect(engine.enableVirtualBackground.mock.calls.at(-1)[0]).toBe(false);
     expect(screen.getByTestId('call-background-failed')).toBeOnTheScreen();
     expect(screen.getByTestId('call-background-now')).toHaveTextContent('Off');
 
     // And it recovers on the very next press.
-    await user.press(screen.getByTestId('call-backdrop-charcoal'));
+    await user.press(screen.getByTestId('call-blur-f4'));
     await act(async () => {});
-    expect(engine.enableVirtualBackground).toHaveBeenLastCalledWith(true, expect.objectContaining({ color: 0x1a1a1a }), { modelType: 1 }, 2);
+    expect(engine.enableVirtualBackground).toHaveBeenLastCalledWith(true, { background_source_type: 3, blur_degree: 1 }, { modelType: 1 }, 2);
     expect(screen.queryByTestId('call-background-failed')).toBeNull();
+
+    await user.press(screen.getByTestId('call-end'));
+    await act(async () => jest.advanceTimersByTime(2000));
+  });
+
+  test('Filters and Enhance: a toggle in the studio panel; Enhance is one slider that goes to the camera', async () => {
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    await render(
+      <PremiumProvider>
+        <CallProvider>
+          <Dial />
+        </CallProvider>
+      </PremiumProvider>,
+    );
+    await user.press(screen.getByText('Call Kofi'));
+    await act(async () => {});
+    await user.press(screen.getByTestId('call-filters-button'));
+    expect(screen.getByTestId('call-studio-modes')).toBeOnTheScreen();
+    expect(screen.getByTestId('call-mode-filters')).toBeOnTheScreen();
+    expect(screen.getByTestId('call-mode-enhance')).toBeOnTheScreen();
+    expect(screen.queryByTestId('call-enhance-panel')).toBeNull();
+
+    await user.press(screen.getByTestId('call-mode-enhance'));
+    await act(async () => {});
+    expect(screen.getByTestId('call-enhance-panel')).toBeOnTheScreen();
+    expect(screen.getByTestId('call-enhance-value')).toBeOnTheScreen();
+    // Enhance went to the camera at its saved strength, with skin protection at full.
+    const [on, options] = engine.setBeautyEffectOptions.mock.calls.at(-1);
+    expect(on).toBe(true);
+    expect(options.smoothnessLevel).toBeGreaterThan(0);
+    expect(engine.setColorEnhanceOptions.mock.calls.at(-1)[1].skinProtectLevel).toBe(1);
+
+    await user.press(screen.getByTestId('call-mode-filters'));
+    expect(screen.queryByTestId('call-enhance-panel')).toBeNull();
 
     await user.press(screen.getByTestId('call-end'));
     await act(async () => jest.advanceTimersByTime(2000));

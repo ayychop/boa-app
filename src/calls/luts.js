@@ -6,7 +6,7 @@ import { Directory, File, Paths } from 'expo-file-system';
 // here, written out once to the cache the first time it's used. Bump
 // VERSION when a grade changes, so phones write it again.
 
-const VERSION = 1;
+const VERSION = 2;
 export const LUT_SIZE = 32;
 
 const clamp = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
@@ -18,6 +18,30 @@ const saturate = (r, g, b, s) => {
   const y = luma(r, g, b);
   return [y + (r - y) * s, y + (g - y) * s, y + (b - y) * s];
 };
+
+// How far the highlights are lifted, where on the tone scale, and how wide.
+const GLASS = { lift: 0.075, centre: 0.46, width: 0.3 };
+const smooth = (v) => v * v * (3 - 2 * v);
+
+/** The 'enhance' grade: (r, g, b) in 0..1 to [r, g, b]. Exported to be tested. */
+export function enhanceSkin(r, g, b) {
+  const y = luma(r, g, b);
+  // A bell of light on the mid-tones, nothing at black, little at white.
+  const bell = Math.exp(-Math.pow((y - GLASS.centre) / GLASS.width, 2));
+  const edge = smooth(clamp(y / 0.12)) * smooth(clamp((1 - y) / 0.08));
+  const lifted = y > 0.0001 ? 1 + (GLASS.lift * bell * edge) / y : 1;
+  let [lr, lg, lb] = [r * lifted, g * lifted, b * lifted];
+  // Vibrance: the thinner the colour, the more it is topped up.
+  const max = Math.max(lr, lg, lb);
+  const sat = max > 0.0001 ? (max - Math.min(lr, lg, lb)) / max : 0;
+  const ly = luma(lr, lg, lb);
+  const v = 1 + 0.12 * (1 - sat);
+  lr = ly + (lr - ly) * v;
+  lg = ly + (lg - ly) * v;
+  lb = ly + (lb - ly) * v;
+  // A hair of warmth, so skin stays golden, never cool.
+  return [clamp(lr * 1.012), clamp(lg), clamp(lb * 0.985)];
+}
 
 /** Each grade: (r, g, b) in 0..1 to [r, g, b]. */
 export const GRADES = {
@@ -44,6 +68,13 @@ export const GRADES = {
     const [sr, sg, sb] = saturate(r, g, b, 1.05);
     return [soft(sr) + 0.025, soft(sg) + 0.008, soft(sb) + 0.012];
   },
+  // Glass skin, tuned for deeper skin tones. It never lifts the shadows (that
+  // is what greys deep skin) and never pulls colour towards grey. Light goes
+  // up only on the upper mid-tones, where cheekbones and the bridge of the
+  // nose catch it, by scaling each pixel's own colour, so hue and richness
+  // ride along with it. Colour is topped up where it is thin (vibrance, not
+  // saturation), and a hair of warmth keeps skin from ever going cool.
+  enhance: (r, g, b) => enhanceSkin(r, g, b),
   // Black and white with depth: true luminance on a contrast curve.
   bw: (r, g, b) => {
     const y = curve(luma(r, g, b), 0.35);

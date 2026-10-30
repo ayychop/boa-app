@@ -1,4 +1,5 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
+import Text from './ScopedText';
 import { CheckIcon } from './icons';
 import { haptics } from '../utils/haptics';
 import { colors, fonts, radius, space } from '../theme';

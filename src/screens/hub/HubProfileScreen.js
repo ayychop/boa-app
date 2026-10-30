@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
+import Text, { FontScope } from '../../components/ScopedText';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -161,7 +162,7 @@ function Action({ label, icon, onPress, primary, disabled, testID, send, sendFg,
  * Posts, Reels and Tagged grids. Yours has Edit profile, New post and
  * Splits; someone else's has Message (and Block or Report).
  */
-export default function HubProfileScreen({ navigation, route }) {
+function HubProfileScreenBody({ navigation, route }) {
   const insets = useSafeAreaInsets();
   const window = useWindowDimensions();
   const width = Math.min(window.width, MAX_WIDTH);
@@ -552,3 +553,12 @@ const styles = StyleSheet.create({
   dayOneRank: { fontFamily: fonts.medium, fontSize: 12.5, color: 'rgba(243,239,232,0.82)', marginTop: 2 },
   gridError: { textAlign: 'center', marginTop: space.xxl, paddingHorizontal: space.lg },
 });
+
+/** The member's chosen typeface dresses this page (and the other scoped pages), nothing else. */
+export default function HubProfileScreen(props) {
+  return (
+    <FontScope>
+      <HubProfileScreenBody {...props} />
+    </FontScope>
+  );
+}

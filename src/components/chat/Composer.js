@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { Alert, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Platform, Pressable, StyleSheet, View } from 'react-native';
+import Text, { TextInput } from '../ScopedText';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -55,7 +56,7 @@ function GlowRing({ children, size = 42, testID, vibe }) {
  * (Android's blur needs a blur target view, and that view painted opaque
  * over the backdrop, which left the thread flat black).
  */
-export default function Composer({ onSend, onAttach, onVoice, onTyping, onStickers, replyTo, onCancelReply, bottomInset = 0, onFocus, vibe = vibeById(), onLayout, style }) {
+export default function Composer({ onSend, onAttach, onVoice, onTyping, onStickers, onGifs, replyTo, onCancelReply, bottomInset = 0, onFocus, vibe = vibeById(), onLayout, style }) {
   const [draft, setDraft] = useState('');
   const lastPing = useRef(0);
   const input = useRef(null);
@@ -215,6 +216,20 @@ export default function Composer({ onSend, onAttach, onVoice, onTyping, onSticke
             accessibilityLabel="Message"
             testID="hub-composer"
           />
+          {onGifs && !typing ? (
+            <Pressable
+              onPress={onGifs}
+              accessibilityRole="button"
+              accessibilityLabel="Send a GIF"
+              hitSlop={6}
+              style={({ pressed }) => [styles.gif, pressed && styles.pressed]}
+              testID="hub-gifs"
+            >
+              <View style={[styles.gifBadge, { borderColor: vibe.accent }]}>
+                <Text style={[styles.gifText, { color: vibe.accent }]}>GIF</Text>
+              </View>
+            </Pressable>
+          ) : null}
           {onStickers && !typing ? (
             <Pressable
               onPress={onStickers}
@@ -290,6 +305,9 @@ const styles = StyleSheet.create({
   send: { width: 42, height: 42, borderRadius: 21, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
   mic: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' },
   sticker: { width: 34, height: 42, alignItems: 'center', justifyContent: 'center' },
+  gif: { width: 36, height: 42, alignItems: 'center', justifyContent: 'center' },
+  gifBadge: { paddingHorizontal: 5, height: 20, borderRadius: 6, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
+  gifText: { fontFamily: fonts.chatBold, fontSize: 10.5, letterSpacing: 0.4 },
   reply: {
     flexDirection: 'row',
     alignItems: 'center',

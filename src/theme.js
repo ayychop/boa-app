@@ -53,6 +53,8 @@ export const type = {
   slate: {
     fontFamily: fonts.mono,
     fontSize: 10.5,
+    // Room above and below the capitals, so no line of a slate is ever clipped.
+    lineHeight: 16,
     letterSpacing: 2.3,
     textTransform: 'uppercase',
     color: colors.textMuted,

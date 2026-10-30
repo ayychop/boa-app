@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
+import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, Share, StyleSheet, View } from 'react-native';
+import Text, { FontScope } from '../../components/ScopedText';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useHub } from '../../context/HubContext';
-import { useAppFont } from '../../context/FontContext';
+import { APP_FONTS, loadAppFont, useAppFont } from '../../context/FontContext';
 import { useCallMaybe } from '../../context/CallContext';
 import * as hub from '../../api/hub';
 import { Avatar, Chip, Field, PageHeader, SettingRow, Toggle } from '../../components/kit';
@@ -25,9 +26,22 @@ import { LoadingDots } from '../../components/Skeleton';
  * shows; chat (its vibe, the new-message sound, disappearing messages); the people
  * you've blocked; and your data (export or delete).
  */
-export default function HubSettingsScreen({ navigation }) {
+function HubSettingsScreenBody({ navigation }) {
   const insets = useSafeAreaInsets();
   const appFont = useAppFont();
+  // The typefaces draw their own names once their faces are registered (the picker previews them).
+  const [faces, setFaces] = useState({});
+  useEffect(() => {
+    let alive = true;
+    APP_FONTS.forEach((f) =>
+      loadAppFont(f.id, { preview: true }).then((ok) => {
+        if (alive && ok) setFaces((cur) => ({ ...cur, [f.id]: true }));
+      }),
+    );
+    return () => {
+      alive = false;
+    };
+  }, []);
   // Null outside a call provider (e.g. a standalone render); the row just shows off.
   const callCtx = useCallMaybe();
   const lockDuringPip = callCtx?.lockDuringPip ?? false;
@@ -287,13 +301,14 @@ export default function HubSettingsScreen({ navigation }) {
           <Text style={styles.fontHint}>The colours of your profile header. A separate choice from your chat vibe, and the BOA wordmark never changes.</Text>
           <VibePicker value={profileVibe.id} onChange={pickProfileVibe} customColor={profileCustom} onCustomColor={pickProfileCustom} />
 
-          {/* App typeface: a curated headline face, saved as soon as it's picked. Part of the vibe section. */}
+          {/* Typeface: dresses the chat, your profile and these settings, and nothing else. Saved as soon as it's picked. */}
           <Slate style={styles.section}>Typeface</Slate>
           <View style={styles.chips}>
             {appFont.options.map((f) => (
               <Chip
                 key={f.id}
                 label={f.label}
+                family={faces[f.id] ? f.weights.semibold : undefined}
                 selected={appFont.fontId === f.id}
                 onPress={() => {
                   haptics.selection();
@@ -303,7 +318,11 @@ export default function HubSettingsScreen({ navigation }) {
               />
             ))}
           </View>
-          <Text style={styles.fontHint}>Sets the headline face for your profile name and section titles. The BOA wordmark and slate labels stay exactly as they are.</Text>
+          <View style={styles.fontSample} testID="hub-font-sample">
+            <Text style={styles.fontSampleName}>{appFont.font.label}</Text>
+            <Text style={styles.fontSampleText}>The quick brown fox jumps over the lazy dog. 0123456789</Text>
+          </View>
+          <Text style={styles.fontHint}>Changes the text in your chats, on your profile and on this page. The rest of BOA, including BOA Originals, keeps the house face, and the wordmark and slate labels never change.</Text>
 
           <Slate style={styles.section}>Make it yours</Slate>
           <View style={styles.group}>
@@ -396,8 +415,20 @@ const styles = StyleSheet.create({
   photoRow: { flexDirection: 'row', alignItems: 'center', gap: space.lg },
   section: { marginTop: space.xl, marginBottom: space.md },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
+  fontSample: { marginTop: space.md, padding: space.lg, borderRadius: radius.lg, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, backgroundColor: 'rgba(243,239,232,0.04)', gap: 4 },
+  fontSampleName: { fontFamily: fonts.semibold, fontSize: 20, lineHeight: 28, color: colors.text },
+  fontSampleText: { fontFamily: fonts.regular, fontSize: 15, lineHeight: 22, color: colors.textMuted },
   fontHint: { fontFamily: fonts.regular, fontSize: 12.5, lineHeight: 18, color: colors.textMuted, marginTop: space.md },
   themeDot: { width: 18, height: 18, borderRadius: 9, borderWidth: 1, borderColor: 'rgba(255,255,255,0.4)' },
   group: { borderRadius: radius.lg, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
   credit: { fontFamily: fonts.regular, fontSize: 11, lineHeight: 16, color: colors.textFaint, marginTop: space.sm },
 });
+
+/** The member's chosen typeface dresses this page (and the other scoped pages), nothing else. */
+export default function HubSettingsScreen(props) {
+  return (
+    <FontScope>
+      <HubSettingsScreenBody {...props} />
+    </FontScope>
+  );
+}

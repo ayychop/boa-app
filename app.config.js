@@ -38,5 +38,9 @@ module.exports = ({ config }) => {
   if (process.env.BOA_AUTOMOTIVE === '1') out = { ...out, plugins: [...(out.plugins ?? []), './plugins/withAutomotiveVideo'] };
   const banuba = (process.env.BANUBA_CLIENT_TOKEN || process.env.BANBUBA_CLIENT_TOKEN)?.trim();
   if (banuba) out = { ...out, plugins: [...(out.plugins ?? []), './plugins/withBanuba'], extra: { ...out.extra, banubaToken: banuba } };
+  // GIPHY_API_KEY (an EAS variable; Giphy keys are public by design) turns on
+  // the GIF picker in chat (src/chat/gifs.js).
+  const giphy = process.env.GIPHY_API_KEY?.trim();
+  if (giphy) out = { ...out, extra: { ...out.extra, giphyApiKey: giphy } };
   return out;
 };

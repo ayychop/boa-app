@@ -1,4 +1,5 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
+import Text from '../ScopedText';
 import { Ionicons } from '@expo/vector-icons';
 import { useHub } from '../../context/HubContext';
 import useChatVibe, { isPremiumVibe, MOTION, STATIC } from '../../chat/vibes';

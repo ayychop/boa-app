@@ -23,6 +23,14 @@
 //
 // Every strength is capped (the MAX_ values) inside Agora's range, so no
 // preset or slider position can wash a face out or turn it plastic.
+//
+// Enhance is a second mode beside the presets: one intensity slider for a
+// glass-clear, flawless skin look. It is tuned for deeper skin tones first:
+// heavy smoothing, but almost no lightening (lightening is what turns dark
+// skin ashy), a warm flush instead, high-contrast lightening so the face
+// keeps its depth, and the 'enhance' grade (src/calls/luts.js), which lifts
+// light only on the upper mid-tones and holds each pixel's hue and richness.
+// Presets and Enhance are one or the other: `mode` says which is on.
 
 export const PRESETS = [
   {
@@ -108,7 +116,9 @@ export const PRESETS = [
 export const presetById = (id) => PRESETS.find((p) => p.id === id) ?? PRESETS[0];
 
 // Brightness 0.5 is Auto: the camera's own exposure. Contrast 0.5 is the camera's own.
-export const DEFAULT_BEAUTY = Object.freeze({ preset: 'natural', brightness: 0.5, contrast: 0.5, enabled: true });
+export const MODES = ['filters', 'enhance'];
+export const DEFAULT_ENHANCE = 0.55;
+export const DEFAULT_BEAUTY = Object.freeze({ preset: 'natural', brightness: 0.5, contrast: 0.5, enabled: true, mode: 'filters', enhance: DEFAULT_ENHANCE });
 // Saved settings carry this; before it, brightness meant lightening, not exposure.
 export const BEAUTY_VERSION = 2;
 
@@ -143,6 +153,8 @@ export function fromStored(raw) {
   if (saved.v === BEAUTY_VERSION && saved.brightness != null) next.brightness = unit(saved.brightness);
   if (saved.contrast != null) next.contrast = unit(saved.contrast);
   if (typeof saved.enabled === 'boolean') next.enabled = saved.enabled;
+  if (MODES.includes(saved.mode)) next.mode = saved.mode;
+  if (saved.enhance != null) next.enhance = unit(saved.enhance);
   return next;
 }
 
@@ -152,6 +164,8 @@ export const toStored = (beauty) => ({
   brightness: beauty.brightness,
   contrast: beauty.contrast ?? DEFAULT_BEAUTY.contrast,
   enabled: beauty.enabled,
+  mode: MODES.includes(beauty.mode) ? beauty.mode : DEFAULT_BEAUTY.mode,
+  enhance: beauty.enhance ?? DEFAULT_BEAUTY.enhance,
   v: BEAUTY_VERSION,
 });
 
@@ -195,6 +209,37 @@ export function toneOf({ brightness = DEFAULT_BEAUTY.brightness, contrast = DEFA
   return { brightness: step(brightness), contrast: step(contrast) };
 }
 
+// Enhance at its most (slider at 100%), in Agora's units. Smoothing is the
+// big one, and well past the presets' cap: a clear, poreless finish is the
+// point. Lightening stays tiny on purpose (it greys deep skin), and the
+// warm flush and the colour boost keep skin rich as it smooths.
+export const ENHANCE_MAX = Object.freeze({ smooth: 0.92, lift: 0.08, flush: 0.14, sharp: 0.3, colour: 0.3 });
+
+/**
+ * The slider (0..1) as a response curve: steep at the start, so the very first
+ * touch is already visible, and easing into the top end.
+ */
+export const enhanceCurve = (level) => 1 - Math.pow(1 - unit(level), 1.6);
+
+/** What Enhance does at a slider position, in Agora's units. */
+export function enhanceOf(level = DEFAULT_ENHANCE) {
+  const e = enhanceCurve(level);
+  return {
+    on: unit(level) > 0,
+    smoothnessLevel: round(e * ENHANCE_MAX.smooth),
+    lighteningLevel: round(e * ENHANCE_MAX.lift),
+    // High-contrast lightening from the middle up: the face keeps its depth.
+    lighteningContrastLevel: unit(level) >= 0.5 ? 2 : 1,
+    rednessLevel: round(e * ENHANCE_MAX.flush),
+    sharpnessLevel: round(e * ENHANCE_MAX.sharp),
+    colourLevel: round(e * ENHANCE_MAX.colour),
+    gradeStrength: round(e),
+  };
+}
+
+/** "55%": Enhance as the slider shows it. */
+export const enhanceLabel = (level = DEFAULT_ENHANCE) => `${Math.round(unit(level) * 100)}%`;
+
 /**
  * Agora's options for a look: { beauty, colorEnhance, filter, exposure, tone }.
  * tone (toneOf) is drawn into the LUT with the grade, filters on or off.
@@ -202,7 +247,26 @@ export function toneOf({ brightness = DEFAULT_BEAUTY.brightness, contrast = DEFA
  * left it: it's the camera's exposure, not a filter. Skin protection is always full. exposure: false (a camera that can't
  * take an exposure setting) moves Brightness into the lightening instead.
  */
-export function toAgora({ preset, brightness = DEFAULT_BEAUTY.brightness, contrast = DEFAULT_BEAUTY.contrast, enabled = true } = {}, { os = 'android', exposure = true } = {}) {
+export function toAgora({ preset, brightness = DEFAULT_BEAUTY.brightness, contrast = DEFAULT_BEAUTY.contrast, enabled = true, mode = 'filters', enhance = DEFAULT_ENHANCE } = {}, { os = 'android', exposure = true } = {}) {
+  if (mode === 'enhance') {
+    // One slider does it all: the camera stays on its own exposure and
+    // there is no tone curve, so the one control has one predictable look.
+    const e = enhanceOf(enhance);
+    return {
+      tone: { brightness: 0, contrast: 0 },
+      exposure: { factor: 0 },
+      beauty: {
+        enabled: e.on,
+        lighteningContrastLevel: e.lighteningContrastLevel,
+        lighteningLevel: e.lighteningLevel,
+        smoothnessLevel: e.smoothnessLevel,
+        rednessLevel: e.rednessLevel,
+        sharpnessLevel: e.sharpnessLevel,
+      },
+      colorEnhance: { enabled: e.on, strengthLevel: e.colourLevel, skinProtectLevel: 1.0 },
+      filter: e.on ? { enabled: true, lut: 'enhance', strength: e.gradeStrength } : { enabled: false, lut: null, strength: 0 },
+    };
+  }
   const p = presetById(preset);
   const on = !!enabled;
   // Without exposure, Brightness above Auto becomes lightening: on top of
@@ -246,6 +310,7 @@ export function describe(beauty) {
 
 /** The same as chips: the preset, Brightness, then Contrast once it's moved. */
 export function describeParts(beauty) {
+  if (beauty?.mode === 'enhance') return [{ id: 'enhance', label: 'Enhance', value: enhanceLabel(beauty.enhance) }];
   if (!beauty?.enabled) return [{ id: 'off', label: 'Filters off', value: null }];
   const parts = [
     { id: 'preset', label: presetById(beauty.preset).label, value: null },

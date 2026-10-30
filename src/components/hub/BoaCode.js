@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
-import { Share, StyleSheet, Text, View } from 'react-native';
+import { Share, StyleSheet, View } from 'react-native';
+import Text from '../ScopedText';
 import Svg, { Rect } from 'react-native-svg';
 import QRCode from 'qrcode/lib/core/qrcode';
 import BottomSheet from '../BottomSheet';

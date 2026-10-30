@@ -15,7 +15,7 @@ afterEach(() => {
   jest.restoreAllMocks();
 });
 
-test('the screensaver is signed with a faint BOA mark under the clock; the Zen page is not', async () => {
+test('the screensaver is signed with a bright, glowing BOA mark under the clock; the Zen page is not', async () => {
   const user = userEvent.setup();
   await bootIntoTabs(user);
   await openTab(user, 'Zen');
@@ -27,5 +27,6 @@ test('the screensaver is signed with a faint BOA mark under the clock; the Zen p
   expect(screen.getByTestId('zen-screensaver')).toBeOnTheScreen();
   const mark = screen.getByTestId('zen-logo');
   expect(mark).toBeOnTheScreen();
-  expect(mark).toHaveStyle({ opacity: 0.42 });
+  expect(mark).toHaveStyle({ opacity: 0.96 });
+  expect(screen.getByTestId('zen-logo-glow')).toBeOnTheScreen();
 });

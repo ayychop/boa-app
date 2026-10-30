@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
-import { BackHandler, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { BackHandler, Image, Pressable, StyleSheet, View } from 'react-native';
+import Text from '../ScopedText';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useVideoPlayer, VideoView } from 'expo-video';
