@@ -35,9 +35,13 @@ describe('lettering is never clipped', () => {
   });
   test('the talent card lifts its initials clear of the name plate', () => {
     const src = read('src/components/Headshot.js');
-    expect(src).toMatch(/PLATE_GAP = 18/);
+    // Clear air under the letters: our own plate, or `reserve` px for a caller's text.
+    expect(src).toMatch(/PLATE_GAP = 22/);
+    expect(src).toMatch(/reserve = 0/);
     expect(src).toMatch(/lift=\{/);
     expect(src).toMatch(/- lift;/);
+    // The Chat "Featured talent" card (the one whose name sat over the initials) reserves its text.
+    expect(read('src/screens/hub/ChatHome.js')).toMatch(/reserve=\{TALENT_TEXT\}/);
   });
 });
 
@@ -89,14 +93,17 @@ describe('Zen screensaver', () => {
     expect(src).toMatch(/bottom: ambient \? Math\.max\(top,/);
   });
 
-  test('five styles, saved, with the choice shared', () => {
+  test('seven styles (the two original videos first), saved, with the choice shared', () => {
     const store = require('../src/data/screensavers');
-    expect(store.SCREENSAVERS.map((s) => s.id)).toEqual(['room', 'aurora', 'halo', 'ember', 'midnight']);
-    expect(store.getScreensaver()).toBe('room');
+    expect(store.SCREENSAVERS.map((s) => s.id)).toEqual(['night', 'rain', 'room', 'aurora', 'halo', 'ember', 'midnight']);
+    // The originals: Starry Night and Rainy Window play their own scene's video, and the first is the default.
+    expect(store.SCREENSAVERS.slice(0, 2).map((s) => s.scene)).toEqual(['night', 'rain']);
+    expect(store.DEFAULT_SCREENSAVER).toBe('night');
+    expect(store.getScreensaver()).toBe('night');
     store.setScreensaver('halo');
     expect(store.getScreensaver()).toBe('halo');
     store.setScreensaver('nonsense');
-    expect(store.getScreensaver()).toBe('room');
+    expect(store.getScreensaver()).toBe('night');
   });
 
   test('the picker lists them and picking one changes the saver', async () => {
@@ -104,7 +111,7 @@ describe('Zen screensaver', () => {
     const { ScreensaverPicker } = require('../src/components/zen/Screensavers');
     store.setScreensaver('room');
     await render(<ScreensaverPicker />);
-    expect(screen.getAllByRole('radio').length).toBe(5);
+    expect(screen.getAllByRole('radio').length).toBe(7);
     await fireEvent.press(screen.getByTestId('zen-saver-pick-midnight'));
     expect(store.getScreensaver()).toBe('midnight');
     await act(async () => {});
@@ -142,14 +149,17 @@ describe('round 2: Zen glow, section title, in-app Zen alignment', () => {
     await render(<TabGlow width={60} height={50} />);
   });
   test('"big screen": the section title has room for descenders', () => {
-    expect(read('src/components/ui.js')).toMatch(/sectionTitle: \{ marginTop: space\.md, lineHeight: 30, paddingBottom: 3 \}/);
+    expect(read('src/components/ui.js')).toMatch(/sectionTitle: \{ marginTop: space\.md, lineHeight: 34, paddingBottom: 8 \}/);
   });
-  test('the default screensaver is the original room again (original shade, only the warm pause added)', () => {
+  test('the screensaver: one even veil (no dark bands), the originals by scene, generative ones drawn', () => {
     const z = read('src/screens/ZenScreen.js');
     expect(z).toMatch(/'rgba\(5,5,6,0\.62\)', 'rgba\(5,5,6,0\.36\)', 'rgba\(5,5,6,0\.46\)', 'rgba\(5,5,6,0\.9\)'/);
     expect(z).not.toMatch(/<Vignette/);
     expect(z).toMatch(/roomMoving = focused && !isPlaying && !warm/);
-    expect(z).toMatch(/ambient && saver !== 'room'/);
+    // As the screensaver the scrim is a single even veil, not the controls' top and foot bands.
+    expect(z).toMatch(/testID="zen-veil"/);
+    expect(z).toMatch(/ambient && saverDef\.generative/);
+    expect(z).toMatch(/\(ambient && saverDef\.scene\) \|\| sceneId/);
   });
   test('the Zen page centres its date, time and status', () => {
     const z = read('src/screens/ZenScreen.js');

@@ -194,7 +194,7 @@ test('each scene loops its own video, muted, mixed with the app audio, from the 
   const nightUri = Platform.OS === 'ios' ? SCENES.night.video.ios : SCENES.night.video.uri;
   // Cached under the scene and a hash of its address, so a sharper video
   // replaces an old cached copy.
-  const cachedAs = (scene) => new RegExp(`^file:///cache/scenes/${scene}-[0-9a-z]+\\.${videoExt}$`);
+  const cachedAs = (scene) => new RegExp(`^file:///cache/scenes/${scene}-[0-9a-z]+-v2\\.${videoExt}$`);
   const nightDownload = File.downloadFileAsync.mock.calls.find(([u]) => u === nightUri);
   expect(nightDownload[1].uri).toMatch(cachedAs('night'));
   expect(nightDownload[2].headers).toBe(MEDIA_HEADERS);
@@ -205,7 +205,8 @@ test('each scene loops its own video, muted, mixed with the app audio, from the 
   expect(night.play).toHaveBeenCalled();
   // Rain brings the rain scene's video.
   await user.press(screen.getByRole('button', { name: 'Play Rain' }));
-  await advance(300);
+  // The new scene's video starts a moment after its photograph fades in.
+  await advance(1500);
   const rain = video.__players[video.__players.length - 1];
   expect(rain).not.toBe(night);
   expect(rain.source.uri).toMatch(cachedAs('rain'));

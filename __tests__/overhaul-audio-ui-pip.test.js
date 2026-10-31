@@ -176,6 +176,8 @@ describe('BOA Originals polish', () => {
     const src = read('App.js');
     expect(src).toMatch(/const premium = name === 'Originals'/);
     expect(src).toMatch(/tabGleam/);
-    expect(src).toMatch(/if \(!premium \|\| reduceMotion\) return/);
+    expect(src).toMatch(/if \(!premium \|\| reduceMotion\) \{/);
+    // A soft radial bloom with no edge, not a hard disc.
+    expect(src).toMatch(/tab-originals-orb/);
   });
 });

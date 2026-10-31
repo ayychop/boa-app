@@ -134,7 +134,8 @@ test('while the radio plays, the whole Zen background freezes, and moves again o
   expect(engine.pause).not.toHaveBeenCalled();
 
   await user.press(screen.getByRole('button', { name: 'Pause radio' }));
-  await advance(300);
+  // The video starts a moment after the room opens (once the tab's transition is over).
+  await advance(1500);
   expect(running).toBeGreaterThanOrEqual(5);
   expect(screen.getByTestId('zen-video-night')).toBeOnTheScreen();
   expect(scene().playing).toBe(true);
