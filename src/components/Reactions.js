@@ -5,13 +5,13 @@ import Animated, {
   FadeIn,
   FadeOut,
   useAnimatedStyle,
-  useReducedMotion,
   useSharedValue,
   withDelay,
   withSequence,
   withSpring,
-  withTiming,
+  withTiming
 } from 'react-native-reanimated';
+import useReducedMotion from '../hooks/useReducedMotion';
 import { BlurView } from 'expo-blur';
 import { haptics } from '../utils/haptics';
 import { colors } from '../theme';

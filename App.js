@@ -9,7 +9,7 @@ import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-cont
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, { Easing, FadeIn, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import useReducedMotion from './src/hooks/useReducedMotion';
-import TabGlyph from './src/components/TabGlyph';
+import TabGlyph, { TabGlow } from './src/components/TabGlyph';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as SplashScreen from 'expo-splash-screen';
@@ -161,20 +161,24 @@ function TabIcon({ name, focused, color, size, slot }) {
     );
   }, [premium, reduceMotion, gleam]);
   const gleamStyle = useAnimatedStyle(() => ({ opacity: gleam.value * 0.7 }));
-  const capsuleW = Math.round(Math.min(size * 1.95, Math.max(size + 8, (slot ?? size * 2) - 6)));
-  const capsuleH = Math.round(size * 1.38);
+  const capsuleW = Math.round(Math.min(size * 2.2, Math.max(size + 8, (slot ?? size * 2) - 2)));
+  const capsuleH = Math.round(size * 1.75);
   return (
     <View style={styles.tabIconBox}>
+      {/* The active tab's golden glow: a soft radial bloom with no edge, no
+          border and no outline, so the icon itself is the only shape. */}
       <Animated.View
         pointerEvents="none"
         testID={focused ? 'tab-active-glow' : undefined}
-        style={[styles.tabCapsule, { width: capsuleW, height: capsuleH, borderRadius: capsuleH / 2, left: (size - capsuleW) / 2, top: (size - capsuleH) / 2 }, capsule]}
-      />
+        style={[styles.tabCapsule, { width: capsuleW, height: capsuleH, left: (size - capsuleW) / 2, top: (size - capsuleH) / 2 }, capsule]}
+      >
+        <TabGlow width={capsuleW} height={capsuleH} />
+      </Animated.View>
       <Animated.View style={style}>
         {premium ? (
           <Animated.View pointerEvents="none" style={[styles.tabGleam, { width: size * 1.7, height: size * 1.7, borderRadius: size, left: -size * 0.35, top: -size * 0.35 }, gleamStyle]} />
         ) : null}
-        <View style={[{ width: size, height: size }, focused && styles.tabIconGlow]}>
+        <View style={{ width: size, height: size }}>
           <TabGlyph name={name} size={size} color={color} focused={focused} />
         </View>
       </Animated.View>
@@ -578,10 +582,9 @@ const styles = StyleSheet.create({
   tabLabel: { fontFamily: fonts.semibold, letterSpacing: -0.1, textAlign: 'center', maxWidth: '100%', paddingHorizontal: 1, marginTop: 4, paddingBottom: 2 },
   tabBarEdge: { position: 'absolute', top: 0, left: 0, right: 0, height: StyleSheet.hairlineWidth * 2 },
   tabIconBox: { alignItems: 'center', justifyContent: 'center' },
-  // The lit capsule under the active tab's icon: gold glass with a soft glow.
-  tabCapsule: { position: 'absolute', backgroundColor: 'rgba(226,168,75,0.16)', borderWidth: 1, borderColor: 'rgba(246,211,138,0.34)', boxShadow: '0px 0px 20px rgba(226,168,75,0.55)' },
-  // The active glyph glows (a soft halo, since a vector drawing has no text shadow).
-  tabIconGlow: { borderRadius: 999, boxShadow: '0px 0px 14px 1px rgba(246,211,138,0.42)' },
+  // The bloom under the active tab's icon. No background, border or shadow of
+  // its own (those drew a hard circle); the gradient inside is the glow.
+  tabCapsule: { position: 'absolute' },
   // The gold gleam behind the BOA Originals tab icon: a soft radial glow.
   tabGleam: { position: 'absolute', backgroundColor: 'rgba(226,168,75,0.5)', boxShadow: '0px 0px 14px rgba(226,168,75,0.85)' },
   crash: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 12, backgroundColor: colors.bg },

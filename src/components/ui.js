@@ -4,11 +4,11 @@ import { useEffect } from 'react';
 import Animated, {
   Easing,
   useAnimatedStyle,
-  useReducedMotion,
   useSharedValue,
   withRepeat,
-  withTiming,
+  withTiming
 } from 'react-native-reanimated';
+import useReducedMotion from '../hooks/useReducedMotion';
 import { Ionicons } from '@expo/vector-icons';
 import BoaLogo from './BoaLogo';
 import Smoke from './Smoke';
@@ -86,7 +86,9 @@ export function SectionHeader({ index, kicker, title, action, onAction, style })
       <View style={{ flex: 1 }}>
         <Slate lines={2}>{[index, kicker].filter(Boolean).join(' · ')}</Slate>
         {/* Room between the kicker (often a long genre list) and the title. */}
-        <Text style={[type.title, { marginTop: space.md }]}>{title}</Text>
+        {/* A line of 30 (not the title's 26) and a little under it: the loop of the g and
+            the tail of the p in "big screen" were cut by the line box. */}
+        <Text style={[type.title, styles.sectionTitle]}>{title}</Text>
       </View>
       {action && (
         <Pressable onPress={onAction} hitSlop={10} style={({ pressed }) => [styles.action, pressed && { opacity: 0.6 }]}>
@@ -124,6 +126,7 @@ const styles = StyleSheet.create({
     marginBottom: space.lg,
     gap: space.md,
   },
+  sectionTitle: { marginTop: space.md, lineHeight: 30, paddingBottom: 3 },
   action: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingBottom: 3 },
   actionText: { fontFamily: fonts.semibold, fontSize: 13, color: colors.gold },
 });

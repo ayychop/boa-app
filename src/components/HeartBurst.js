@@ -1,7 +1,8 @@
 import { forwardRef, useImperativeHandle, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withDelay, withSequence, withSpring, withTiming } from 'react-native-reanimated';
+import Animated, { Easing, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming } from 'react-native-reanimated';
+import useReducedMotion from '../hooks/useReducedMotion';
 import { haptics } from '../utils/haptics';
 import { colors } from '../theme';
 

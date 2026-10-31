@@ -8,11 +8,11 @@ import Animated, {
   Easing,
   FadeInDown,
   useAnimatedStyle,
-  useReducedMotion,
   useSharedValue,
   withRepeat,
-  withTiming,
+  withTiming
 } from 'react-native-reanimated';
+import useReducedMotion from '../hooks/useReducedMotion';
 import { useAlarms } from '../context/AlarmContext';
 import { formatTime, SNOOZE_MINUTES } from '../data/alarms';
 import BoaLogo from '../components/BoaLogo';

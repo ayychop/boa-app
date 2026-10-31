@@ -75,7 +75,7 @@ describe('heat pauses the app\'s animations', () => {
     }
   });
   test('the Zen room stops moving when warm', () => {
-    expect(read('src/screens/ZenScreen.js')).toMatch(/roomMoving = focused && !isPlaying && !reduceMotion/);
+    expect(read('src/screens/ZenScreen.js')).toMatch(/roomMoving = focused && !isPlaying && !warm/);
   });
 });
 
@@ -85,7 +85,6 @@ describe('Zen screensaver', () => {
     expect(src).toMatch(/radioCardBare: \{ backgroundColor: 'transparent', borderWidth: 0 \}/);
     expect(src).toMatch(/soundChipBare: \{ backgroundColor: 'transparent', borderWidth: 0 \}/);
     expect(src).toMatch(/<RadioCard bare \/>/);
-    expect(src).toMatch(/\{ambient \? \(\s*<Vignette \/>/);
     // The clock is centred on the screen: the same room above and below.
     expect(src).toMatch(/bottom: ambient \? Math\.max\(top,/);
   });
@@ -118,5 +117,47 @@ describe('Zen screensaver', () => {
       await render(<SaverBackdrop id={id} width={400} height={800} running />);
       expect(screen.getByTestId(`zen-saver-${id}`, { includeHiddenElements: true })).toBeTruthy();
     }
+  });
+});
+
+describe('round 2: Zen glow, section title, in-app Zen alignment', () => {
+  test('the active tab has no circle: no boxShadow ring on the icon, no border on the glow', () => {
+    const app = read('App.js');
+    expect(app).not.toMatch(/tabIconGlow/);
+    expect(app).toMatch(/tabCapsule: \{ position: 'absolute' \}/);
+    expect(app).toMatch(/<TabGlow /);
+  });
+  test('the glyph glow follows the drawing (halo passes), and the bloom is a gradient', () => {
+    const src = read('src/components/TabGlyph.js');
+    expect(src).toMatch(/glyph\('none', true\)/);
+    expect(src).toMatch(/RadialGradient/);
+  });
+  test('the glyphs and the glow render focused for every tab', async () => {
+    const TabGlyph = require('../src/components/TabGlyph').default;
+    const { TabGlow, TAB_GLYPHS } = require('../src/components/TabGlyph');
+    for (const name of TAB_GLYPHS) {
+      await render(<TabGlyph name={name} color="#F6D38A" focused />);
+      expect(screen.getByTestId(`tab-glyph-halo-${name}`, { includeHiddenElements: true })).toBeTruthy();
+    }
+    await render(<TabGlow width={60} height={50} />);
+  });
+  test('"big screen": the section title has room for descenders', () => {
+    expect(read('src/components/ui.js')).toMatch(/sectionTitle: \{ marginTop: space\.md, lineHeight: 30, paddingBottom: 3 \}/);
+  });
+  test('the default screensaver is the original room again (original shade, only the warm pause added)', () => {
+    const z = read('src/screens/ZenScreen.js');
+    expect(z).toMatch(/'rgba\(5,5,6,0\.62\)', 'rgba\(5,5,6,0\.36\)', 'rgba\(5,5,6,0\.46\)', 'rgba\(5,5,6,0\.9\)'/);
+    expect(z).not.toMatch(/<Vignette/);
+    expect(z).toMatch(/roomMoving = focused && !isPlaying && !warm/);
+    expect(z).toMatch(/ambient && saver !== 'room'/);
+  });
+  test('the Zen page centres its date, time and status', () => {
+    const z = read('src/screens/ZenScreen.js');
+    expect(z).toMatch(/dateSlate: \{ paddingLeft: 2\.3 \}/);
+    expect(z).toMatch(/marginHorizontal: -size \* 0\.0175/);
+    expect(z).not.toMatch(/letterSpacing: -size \* 0\.035/);
+    expect(z).toMatch(/const sway = signed \? DRIFT : 0/);
+    expect(z).toMatch(/translateX: Math\.sin\(a\) \* sway/);
+    expect(z).toMatch(/nowTextCentred: \{ textAlign: 'center' \}/);
   });
 });

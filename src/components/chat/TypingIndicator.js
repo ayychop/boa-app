@@ -8,11 +8,11 @@ import Animated, {
   FadeOut,
   interpolate,
   useAnimatedStyle,
-  useReducedMotion,
   useSharedValue,
   withRepeat,
-  withTiming,
+  withTiming
 } from 'react-native-reanimated';
+import useReducedMotion from '../../hooks/useReducedMotion';
 import { colors, radius, space } from '../../theme';
 
 // One bounce of all three dots, each a third of a beat behind the last.

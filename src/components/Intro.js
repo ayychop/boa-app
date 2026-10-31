@@ -4,12 +4,12 @@ import Animated, {
   cancelAnimation,
   Easing,
   useAnimatedStyle,
-  useReducedMotion,
   useSharedValue,
   withDelay,
   withRepeat,
-  withTiming,
+  withTiming
 } from 'react-native-reanimated';
+import useReducedMotion from '../hooks/useReducedMotion';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
 import * as SplashScreen from 'expo-splash-screen';

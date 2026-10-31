@@ -3,7 +3,8 @@ import { Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import Animated, { Easing, FadeIn, FadeInDown, interpolateColor, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, { Easing, FadeIn, FadeInDown, interpolateColor, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import useReducedMotion from '../hooks/useReducedMotion';
 import { useWeather } from '../context/WeatherContext';
 import { hourLabel } from '../api/weather';
 import WeatherGlyph, { SKY } from '../components/weather/WeatherGlyph';

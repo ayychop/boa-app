@@ -5,13 +5,13 @@ import Animated, {
   Easing,
   FadeIn,
   useAnimatedStyle,
-  useReducedMotion,
   useSharedValue,
   withRepeat,
   withSequence,
   withSpring,
-  withTiming,
+  withTiming
 } from 'react-native-reanimated';
+import useReducedMotion from '../hooks/useReducedMotion';
 import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '../context/UserContext';

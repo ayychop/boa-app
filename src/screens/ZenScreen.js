@@ -23,7 +23,7 @@ import Animated, {
   withSequence,
   withTiming,
 } from 'react-native-reanimated';
-import useReducedMotion from '../hooks/useReducedMotion';
+import useReducedMotion, { useWarm } from '../hooks/useReducedMotion';
 import { usePlayer } from '../context/PlayerContext';
 import { formatRemaining, useSleepRemaining, useSleepTimer } from '../context/SleepTimerContext';
 import { useZen } from '../context/ZenContext';
@@ -46,7 +46,7 @@ import { colors, fonts, radius, space } from '../theme';
 import BoaLogo from '../components/BoaLogo';
 import { LoadingDots } from '../components/Skeleton';
 import Panel, { panelEntering } from '../components/Panel';
-import { SaverBackdrop, ScreensaverPicker, Vignette } from '../components/zen/Screensavers';
+import { SaverBackdrop, ScreensaverPicker } from '../components/zen/Screensavers';
 import { useScreensaver } from '../data/screensavers';
 
 // Fades: slow and soft, like a room's lights dimming.
@@ -295,7 +295,7 @@ function SceneVideo({ scene, running }) {
  * that, drifting smoke, film grain, and a deep shade so text reads and the
  * screen stays dim enough to sleep by.
  */
-function Atmosphere({ sceneId, width, height, running, withVideo = true, ambient = false }) {
+function Atmosphere({ sceneId, width, height, running, withVideo = true }) {
   const scene = SCENES[sceneId] ?? SCENES.night;
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
@@ -306,14 +306,7 @@ function Atmosphere({ sceneId, width, height, running, withVideo = true, ambient
       </Animated.View>
       <DriftingFog width={width} height={height} opacity={0.45} running={running} />
       <Grain width={width} height={height} opacity={0.05} running={running} />
-      {/* The controls need a deep shade at the foot for the panel to read on.
-          The screensaver has no panel and no bar: an even, symmetric vignette,
-          so nothing dark sits under the clock and the BOA mark. */}
-      {ambient ? (
-        <Vignette />
-      ) : (
-        <LinearGradient colors={['rgba(5,5,6,0.62)', 'rgba(5,5,6,0.36)', 'rgba(5,5,6,0.46)', 'rgba(5,5,6,0.9)']} locations={[0, 0.32, 0.6, 1]} style={StyleSheet.absoluteFill} />
-      )}
+      <LinearGradient colors={['rgba(5,5,6,0.62)', 'rgba(5,5,6,0.36)', 'rgba(5,5,6,0.46)', 'rgba(5,5,6,0.9)']} locations={[0, 0.32, 0.6, 1]} style={StyleSheet.absoluteFill} />
     </View>
   );
 }
@@ -346,7 +339,10 @@ function Digits({ time, size, lineHeight }) {
     <View style={styles.digits}>
       {time.split('').map((ch, i) => (
         <Animated.View key={`${i}-${ch}`} entering={FadeInDown.duration(700)}>
-          <Text style={[styles.clock, { fontSize: size, lineHeight, letterSpacing: -size * 0.035 }]}>{ch}</Text>
+          {/* Tight tracking as a margin on both sides of each digit, not as
+              negative letterSpacing: that trails after the last glyph and
+              pushed the whole time a few points to the right. */}
+          <Text style={[styles.clock, { fontSize: size, lineHeight, marginHorizontal: -size * 0.0175 }]}>{ch}</Text>
         </Animated.View>
       ))}
     </View>
@@ -379,6 +375,9 @@ function Equalizer({ color = colors.gold }) {
 // the screensaver (`signed`) a small, faint BOA wordmark sits under the
 // sweep, like a maker's mark on a watch dial, and drifts with it.
 function Clock({ width, height, compact, signed = false }) {
+  // Only the screensaver wanders sideways (against burn-in). The Zen page keeps
+  // its date and time dead centre and just breathes up and down.
+  const sway = signed ? DRIFT : 0;
   const reduceMotion = useReducedMotion();
   const now = useMinute();
   const { time, period } = clockParts(now);
@@ -392,11 +391,12 @@ function Clock({ width, height, compact, signed = false }) {
   }, [reduceMotion, drift]);
   const driftStyle = useAnimatedStyle(() => {
     const a = drift.value * Math.PI * 2;
-    return { transform: [{ translateX: Math.sin(a) * DRIFT }, { translateY: Math.sin(a * 2) * DRIFT * 0.6 }] };
+    return { transform: [{ translateX: Math.sin(a) * sway }, { translateY: Math.sin(a * 2) * DRIFT * 0.6 }] };
   });
   return (
     <Animated.View pointerEvents="none" style={[styles.clockGroup, driftStyle]}>
-      <Slate>{dateLine(now)}</Slate>
+      {/* paddingLeft = the slate's letterSpacing, which trails the last letter. */}
+      <Slate style={styles.dateSlate}>{dateLine(now)}</Slate>
       <View style={{ marginTop: space.sm }} accessibilityRole="timer" accessibilityLabel={`${time}${period ? ` ${period}` : ''}`} accessible>
         <Digits time={time} size={clockSize} lineHeight={lineHeight} />
         {period ? <Text style={[styles.period, { fontSize: Math.round(clockSize * 0.24), bottom: Math.round(lineHeight * 0.16) }]}>{period}</Text> : null}
@@ -455,9 +455,11 @@ function NowLine({ sound, withRadio = true, onOpenSound }) {
       {lines.length > 0 && (
         <View style={styles.nowRow}>
           <PulseDot color={(withRadio && status === 'playing') || sound.status === 'playing' ? colors.live : colors.gold} size={7} />
-          <Text style={styles.nowText} numberOfLines={1}>
+          <Text style={[styles.nowText, styles.nowTextCentred]} numberOfLines={1}>
             {lines.join('  +  ')}
           </Text>
+          {/* As wide as the dot, so the words (not dot plus words) are what's centred. */}
+          <View style={{ width: 7 }} />
         </View>
       )}
       {remaining ? <Text style={styles.fadeText}>Fades out in {formatRemaining(remaining)}</Text> : null}
@@ -747,8 +749,10 @@ function ZenRoom() {
   // The room only moves while you're here and the radio is off: when the
   // radio takes over, every layer (mesh, photo, video, smoke, grain)
   // freezes where it is, and carries on from there once the radio stops.
-  // (And it holds still when the phone runs warm: reduceMotion includes that.)
-  const roomMoving = focused && !isPlaying && !reduceMotion;
+  // The one addition: it also holds still while the phone runs warm. Nothing
+  // else about the default room has changed.
+  const warm = useWarm();
+  const roomMoving = focused && !isPlaying && !warm;
   const short = height < 500;
   const top = Math.max(insets.top, space.lg);
   // Controls sit above the tab bar (and mini player); the screensaver has
@@ -780,7 +784,7 @@ function ZenRoom() {
       {ambient && saver !== 'room' ? (
         <SaverBackdrop id={saver} width={width} height={height} running={roomMoving} />
       ) : (
-        <Atmosphere sceneId={sceneId} width={width} height={height} running={roomMoving} withVideo={!isPlaying} ambient={ambient} />
+        <Atmosphere sceneId={sceneId} width={width} height={height} running={roomMoving} withVideo={!isPlaying} />
       )}
       {ambient && (
         <Pressable
@@ -920,6 +924,7 @@ const styles = StyleSheet.create({
   retryText: { fontFamily: fonts.semibold, color: colors.bg },
   clockArea: { position: 'absolute', alignItems: 'center', justifyContent: 'center' },
   clockGroup: { alignItems: 'center' },
+  dateSlate: { paddingLeft: 2.3 },
   digits: { flexDirection: 'row', justifyContent: 'center' },
   clock: { fontFamily: fonts.extralight, color: colors.text, fontVariant: ['tabular-nums'], textAlign: 'center' },
   period: { position: 'absolute', left: '100%', marginLeft: space.sm, fontFamily: fonts.serif, color: colors.gold },
@@ -949,8 +954,9 @@ const styles = StyleSheet.create({
   // pill behind it (that read as a black bar across the screen).
   soundChipBare: { backgroundColor: 'transparent', borderWidth: 0 },
   nowRow: { flexDirection: 'row', alignItems: 'center', gap: 8, maxWidth: 560 },
-  nowText: { fontFamily: fonts.semibold, fontSize: 15, color: colors.text, letterSpacing: -0.2, flexShrink: 1 },
-  fadeText: { fontFamily: fonts.mono, fontSize: 11, letterSpacing: 1.6, textTransform: 'uppercase', color: colors.gold },
+  nowText: { fontFamily: fonts.semibold, fontSize: 15, lineHeight: 20, color: colors.text, letterSpacing: -0.2, flexShrink: 1 },
+  nowTextCentred: { textAlign: 'center' },
+  fadeText: { fontFamily: fonts.mono, fontSize: 11, lineHeight: 16, paddingLeft: 1.6, textAlign: 'center', letterSpacing: 1.6, textTransform: 'uppercase', color: colors.gold },
   topBar: { position: 'absolute', flexDirection: 'row', alignItems: 'center', height: 44 },
   panel: {
     position: 'absolute',
