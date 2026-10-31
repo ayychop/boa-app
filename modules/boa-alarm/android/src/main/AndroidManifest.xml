@@ -1,0 +1,42 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <!-- An alarm at an exact minute. Android 14+ turns it off for new installs;
+       the app asks (Alarm Settings) and AlarmManager.setAlarmClock needs it. -->
+  <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+  <!-- Alarms are set again after a restart, an update or a clock change. -->
+  <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+  <!-- The radio plays from a foreground service (mediaPlayback) so the phone
+       stays awake and Android doesn't stop it. -->
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+  <uses-permission android:name="android.permission.WAKE_LOCK" />
+  <uses-permission android:name="android.permission.TURN_SCREEN_ON" />
+  <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+  <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+  <uses-permission android:name="android.permission.INTERNET" />
+  <application>
+    <receiver android:name="expo.modules.boaalarm.AlarmReceiver" android:exported="false" />
+    <receiver android:name="expo.modules.boaalarm.AlarmBootReceiver" android:exported="true">
+      <intent-filter>
+        <action android:name="android.intent.action.BOOT_COMPLETED" />
+        <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+        <action android:name="android.intent.action.TIME_SET" />
+        <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+      </intent-filter>
+    </receiver>
+    <service
+      android:name="expo.modules.boaalarm.AlarmService"
+      android:exported="false"
+      android:foregroundServiceType="mediaPlayback" />
+    <!-- The alarm page: over the lock screen, screen on, in a task of its own. -->
+    <activity
+      android:name="expo.modules.boaalarm.AlarmActivity"
+      android:exported="false"
+      android:showWhenLocked="true"
+      android:turnScreenOn="true"
+      android:launchMode="singleTop"
+      android:taskAffinity="${applicationId}.alarm"
+      android:excludeFromRecents="true"
+      android:theme="@android:style/Theme.DeviceDefault.NoActionBar"
+      android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden" />
+  </application>
+</manifest>

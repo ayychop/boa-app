@@ -16,6 +16,7 @@ import { Field, PageHeader, Toggle } from '../components/kit';
 import { Button, Fog, Slate } from '../components/ui';
 import { haptics } from '../utils/haptics';
 import { colors, fonts, radius, space, type } from '../theme';
+import * as BoaAlarm from '../../modules/boa-alarm';
 
 // Stations to wake up to: your library first, then two picks per genre.
 function useWakeStations() {
@@ -289,7 +290,7 @@ function Editor({ initial, onDone, onDelete, isNew }) {
  */
 export default function AlarmSettingsScreen({ navigation }) {
   const insets = useSafeAreaInsets();
-  const { alarms, toggle, remove, permission, askPermission } = useAlarms();
+  const { alarms, toggle, remove, permission, askPermission, exact, askExact } = useAlarms();
   const [editing, setEditing] = useState(null); // { alarm, isNew }
 
   if (editing) {
@@ -334,6 +335,19 @@ export default function AlarmSettingsScreen({ navigation }) {
           <Pressable onPress={askPermission} style={styles.warn} accessibilityRole="button">
             <Ionicons name="notifications-off-outline" size={18} color={colors.gold} />
             <Text style={styles.warnText}>Notifications are off, so alarms only ring while BOA is open. Turn them on in Settings.</Text>
+          </Pressable>
+        )}
+        {/* Android 14+ keeps alarms approximate until this is allowed. */}
+        {exact === 'denied' && (
+          <Pressable onPress={askExact} style={styles.warn} accessibilityRole="button" testID="alarm-exact-warning">
+            <Ionicons name="alarm-outline" size={18} color={colors.gold} />
+            <Text style={styles.warnText}>Android needs your OK to ring alarms at the exact minute. Tap to allow Alarms & reminders for BOA.</Text>
+          </Pressable>
+        )}
+        {BoaAlarm.isAvailable && sorted.some((a) => a.enabled && a.sound?.type === 'station') && (
+          <Pressable onPress={() => BoaAlarm.openBatterySettings()} style={styles.warn} accessibilityRole="button" testID="alarm-battery-tip">
+            <Ionicons name="battery-charging-outline" size={18} color={colors.gold} />
+            <Text style={styles.warnText}>For the surest wake-up, open BOA's battery settings and choose Unrestricted, so the phone never puts BOA to sleep.</Text>
           </Pressable>
         )}
         {sorted.length ? (

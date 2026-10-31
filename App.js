@@ -10,6 +10,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, { Easing, FadeIn, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import useReducedMotion from './src/hooks/useReducedMotion';
 import TabGlyph, { TabGlow } from './src/components/TabGlyph';
+import EdgeLighting from './src/components/EdgeLighting';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as SplashScreen from 'expo-splash-screen';
@@ -560,6 +561,8 @@ function Root() {
                               <CallWakeUpPrompt />
                               <CallProvider>
                                 <FormsProvider>{booted ? <Gate /> : <Intro onDone={finishBoot} />}</FormsProvider>
+                              {/* Edge Lighting, over everything (Profile > Edge Lighting). */}
+                              <EdgeLighting />
                               </CallProvider>
                             </PremiumProvider>
                           </HubProvider>

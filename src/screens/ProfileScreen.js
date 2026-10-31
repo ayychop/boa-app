@@ -22,10 +22,11 @@ import CreditsSheet from '../components/zen/CreditsSheet';
 import { colors, fonts, radius, space, type } from '../theme';
 import { useOpenHub } from '../components/hub/hubNav';
 import { useHub } from '../context/HubContext';
-import { Avatar, BoaStarBadge } from '../components/kit';
+import { Avatar, BoaStarBadge, Toggle } from '../components/kit';
 import DailySpark from '../components/DailySpark';
 import { replayTour } from '../api/onboarding';
 import { useLastLiked } from '../audio/liked';
+import { pulseEdgeLighting, setEdgeLighting, useEdgeLighting } from '../data/edgeLighting';
 
 // Until you sign in, the profile card has a placeholder name.
 const LISTENER_NAME = 'BOA Listener';
@@ -74,6 +75,7 @@ export default function ProfileScreen({ navigation }) {
   const [widgetOpen, setWidgetOpen] = useState(false);
   const [creditsOpen, setCreditsOpen] = useState(false);
   const [carOpen, setCarOpen] = useState(false);
+  const edgeOn = useEdgeLighting();
   const lastLoved = useLastLiked();
   const inner = Math.min(width, 1100) - space.xl * 2;
   const columns = inner >= 960 ? 3 : 2;
@@ -318,6 +320,27 @@ export default function ProfileScreen({ navigation }) {
             </View>
             <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
           </Pressable>
+        </View>
+
+        <Slate style={{ marginTop: space.xxl, marginBottom: space.md }}>Edge Lighting</Slate>
+        <View style={list}>
+          <View style={row} testID="profile-edge-lighting">
+            <Ionicons name="sunny-outline" size={19} color={colors.gold} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.linkText}>Edge Lighting</Text>
+              <Text style={styles.linkDetail}>A golden light runs around the screen's edge when a notification arrives while BOA is open</Text>
+            </View>
+            <Toggle
+              value={edgeOn}
+              label="Edge Lighting"
+              testID="edge-lighting-toggle"
+              onChange={(on) => {
+                setEdgeLighting(on);
+                // Turning it on shows it once, so you know what it does.
+                if (on) setTimeout(pulseEdgeLighting, 250);
+              }}
+            />
+          </View>
         </View>
 
         {forms.submissions.length > 0 && (

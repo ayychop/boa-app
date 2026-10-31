@@ -373,9 +373,37 @@ jest.mock('expo-notifications', () => {
     requestPermissionsAsync: jest.fn(() => Promise.resolve({ granted: true })),
     scheduleNotificationAsync: jest.fn(() => Promise.resolve('notification-id')),
     cancelScheduledNotificationAsync: jest.fn(() => Promise.resolve()),
+    getExactAlarmPermissionsAsync: jest.fn(() => Promise.resolve({ granted: true, canAskAgain: true })),
+    requestExactAlarmPermissionsAsync: jest.fn(() => Promise.resolve({ granted: true, canAskAgain: true })),
     addNotificationReceivedListener: jest.fn(sub),
     addNotificationResponseReceivedListener: jest.fn(sub),
   };
+});
+
+// Radio alarms the phone rings itself (an Android native module in the app).
+// Off by default: tests set __available to take that path, and __emit fires
+// its events.
+jest.mock('./modules/boa-alarm', () => {
+  const listeners = new Set();
+  const mock = {
+    __available: false,
+    get isAvailable() {
+      return mock.__available;
+    },
+    canScheduleExact: jest.fn(() => true),
+    sync: jest.fn(() => 0),
+    takeFired: jest.fn(() => []),
+    current: jest.fn(() => null),
+    stop: jest.fn(),
+    snooze: jest.fn(),
+    openBatterySettings: jest.fn(() => true),
+    addAlarmListener: jest.fn((fn) => {
+      listeners.add(fn);
+      return () => listeners.delete(fn);
+    }),
+    __emit: (e) => listeners.forEach((fn) => fn(e)),
+  };
+  return mock;
 });
 
 // Weather: location never granted unless a test says so.

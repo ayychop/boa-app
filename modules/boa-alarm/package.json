@@ -1,0 +1,7 @@
+{
+  "name": "boa-alarm",
+  "version": "1.0.0",
+  "private": true,
+  "main": "index.js",
+  "description": "Radio alarms that ring with the app closed: an exact system alarm, a foreground service that plays the stream, and a lock-screen alarm page."
+}
