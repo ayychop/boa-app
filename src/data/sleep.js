@@ -84,6 +84,74 @@ export const SCENES = {
     license: 'CC0 1.0',
     source: 'https://commons.wikimedia.org/wiki/File:Glowing_Embers_(Unsplash).jpg',
   },
+  // Four more night skies for the Zen screensaver (screensavers.js), each in
+  // the same spirit as the two originals: dark, unhurried time-lapse, stars
+  // over a black horizon, nothing bright, nothing with writing on it. Their
+  // photograph is the video's own first frame, so the hand-over is seamless.
+  milkyway: {
+    id: 'milkyway',
+    video: {
+      uri: 'https://upload.wikimedia.org/wikipedia/commons/transcoded/d/d2/Milky_Way_Time-Lapse_Rework.webm/Milky_Way_Time-Lapse_Rework.webm.1080p.vp9.webm',
+      ios: 'https://upload.wikimedia.org/wikipedia/commons/transcoded/d/d2/Milky_Way_Time-Lapse_Rework.webm/Milky_Way_Time-Lapse_Rework.webm.360p.mpeg4.mov',
+      title: 'Milky Way Time-Lapse Rework',
+      author: 'GaryP',
+      license: 'CC BY 3.0',
+      source: 'https://commons.wikimedia.org/wiki/File:Milky_Way_Time-Lapse_Rework.webm',
+    },
+    uri: 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d2/Milky_Way_Time-Lapse_Rework.webm/1280px--Milky_Way_Time-Lapse_Rework.webm.jpg',
+    title: 'Milky Way Time-Lapse Rework (first frame)',
+    author: 'GaryP',
+    license: 'CC BY 3.0',
+    source: 'https://commons.wikimedia.org/wiki/File:Milky_Way_Time-Lapse_Rework.webm',
+  },
+  joshua: {
+    id: 'joshua',
+    video: {
+      uri: 'https://upload.wikimedia.org/wikipedia/commons/9/92/Milky_Way_over_a_Joshua_tree_%2830865856965%29.webm',
+      ios: 'https://upload.wikimedia.org/wikipedia/commons/transcoded/9/92/Milky_Way_over_a_Joshua_tree_%2830865856965%29.webm/Milky_Way_over_a_Joshua_tree_%2830865856965%29.webm.360p.mpeg4.mov',
+      title: 'Milky Way over a Joshua tree',
+      author: 'Joshua Tree National Park',
+      license: 'Public domain',
+      source: 'https://commons.wikimedia.org/wiki/File:Milky_Way_over_a_Joshua_tree_(30865856965).webm',
+    },
+    uri: 'https://upload.wikimedia.org/wikipedia/commons/thumb/9/92/Milky_Way_over_a_Joshua_tree_%2830865856965%29.webm/1280px--Milky_Way_over_a_Joshua_tree_%2830865856965%29.webm.jpg',
+    title: 'Milky Way over a Joshua tree (first frame)',
+    author: 'Joshua Tree National Park',
+    license: 'Public domain',
+    source: 'https://commons.wikimedia.org/wiki/File:Milky_Way_over_a_Joshua_tree_(30865856965).webm',
+  },
+  desert: {
+    id: 'desert',
+    video: {
+      uri: 'https://upload.wikimedia.org/wikipedia/commons/transcoded/5/57/Skull_Rock_Trail_at_night_%2830230498613%29.webm/Skull_Rock_Trail_at_night_%2830230498613%29.webm.1080p.vp9.webm',
+      ios: 'https://upload.wikimedia.org/wikipedia/commons/transcoded/5/57/Skull_Rock_Trail_at_night_%2830230498613%29.webm/Skull_Rock_Trail_at_night_%2830230498613%29.webm.360p.mpeg4.mov',
+      title: 'Skull Rock Trail at night',
+      author: 'Joshua Tree National Park',
+      license: 'Public domain',
+      source: 'https://commons.wikimedia.org/wiki/File:Skull_Rock_Trail_at_night_(30230498613).webm',
+    },
+    uri: 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/57/Skull_Rock_Trail_at_night_%2830230498613%29.webm/1280px--Skull_Rock_Trail_at_night_%2830230498613%29.webm.jpg',
+    title: 'Skull Rock Trail at night (first frame)',
+    author: 'Joshua Tree National Park',
+    license: 'Public domain',
+    source: 'https://commons.wikimedia.org/wiki/File:Skull_Rock_Trail_at_night_(30230498613).webm',
+  },
+  startrails: {
+    id: 'startrails',
+    video: {
+      uri: 'https://upload.wikimedia.org/wikipedia/commons/transcoded/6/64/Monument_Valley_Star_Trails_%28Video%29.webm/Monument_Valley_Star_Trails_%28Video%29.webm.1080p.vp9.webm',
+      ios: 'https://upload.wikimedia.org/wikipedia/commons/transcoded/6/64/Monument_Valley_Star_Trails_%28Video%29.webm/Monument_Valley_Star_Trails_%28Video%29.webm.360p.mpeg4.mov',
+      title: 'Monument Valley Star Trails',
+      author: 'Eric Kilby',
+      license: 'CC BY-SA 2.0',
+      source: 'https://commons.wikimedia.org/wiki/File:Monument_Valley_Star_Trails_(Video).webm',
+    },
+    uri: 'https://upload.wikimedia.org/wikipedia/commons/thumb/6/64/Monument_Valley_Star_Trails_%28Video%29.webm/1280px--Monument_Valley_Star_Trails_%28Video%29.webm.jpg',
+    title: 'Monument Valley Star Trails (first frame)',
+    author: 'Eric Kilby',
+    license: 'CC BY-SA 2.0',
+    source: 'https://commons.wikimedia.org/wiki/File:Monument_Valley_Star_Trails_(Video).webm',
+  },
 };
 
 // Four kinds of sound, six sounds each. Tapping a kind plays its first

@@ -62,6 +62,22 @@ async function download(folderDir, file, name, uri) {
   }
 }
 
+/**
+ * Deletes one cached file (and any half-written copy): for a file a decoder
+ * has refused, so the next time fetches a clean one instead of failing on the
+ * same bytes for ever. Best effort.
+ */
+export function discard(folder, name) {
+  if (Platform.OS === 'web') return;
+  try {
+    const d = dir(folder);
+    for (const n of [name, `${name}.part`]) {
+      const f = new File(d, n);
+      if (f.exists) f.delete();
+    }
+  } catch {}
+}
+
 /** Removes files from the cache folder that fail `keep(name)`: old, unverified downloads. Best effort. */
 export function sweep(folder, keep) {
   if (Platform.OS === 'web') return;

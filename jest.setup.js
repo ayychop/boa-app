@@ -200,6 +200,13 @@ jest.mock('expo-video', () => {
       pause: jest.fn(() => {
         p.playing = false;
       }),
+      // Events: tests fire one with player.__emit('statusChange', { status: 'error' }).
+      addListener: jest.fn((name, fn) => {
+        (p.__listeners[name] ??= new Set()).add(fn);
+        return { remove: jest.fn(() => p.__listeners[name].delete(fn)) };
+      }),
+      __listeners: {},
+      __emit: (name, payload) => (p.__listeners[name] ?? new Set()).forEach((fn) => fn(payload)),
     };
     players.push(p);
     return p;
@@ -289,12 +296,17 @@ jest.mock('expo-font', () => ({
 // fire it with __emit('off' | 'on').
 jest.mock('./modules/boa-screen', () => {
   const listeners = new Set();
+  let screenOn = true;
   return {
     isAvailable: true,
     addScreenListener: jest.fn((fn) => {
       listeners.add(fn);
       return () => listeners.delete(fn);
     }),
+    // The screen is on unless a test says otherwise; the navigation bar
+    // (setImmersive) is hidden over the screensaver.
+    isScreenOn: jest.fn(() => screenOn),
+    setImmersive: jest.fn(async () => true),
     // The lock screen: unlocked unless a test says otherwise.
     isLocked: jest.fn(() => false),
     showOverLock: jest.fn(async () => true),
@@ -302,7 +314,15 @@ jest.mock('./modules/boa-screen', () => {
     clearOverLock: jest.fn(async () => {}),
     // FLAG_SECURE (screenshots blocked) for view-once media.
     setSecure: jest.fn(async () => true),
-    __emit: (state) => listeners.forEach((fn) => fn(state)),
+    // Back to a lit screen, for the start of a test.
+    __reset: () => {
+      screenOn = true;
+    },
+    __emit: (state) => {
+      if (state === 'off') screenOn = false;
+      else if (state === 'on' || state === 'unlocked') screenOn = true;
+      listeners.forEach((fn) => fn(state));
+    },
   };
 });
 

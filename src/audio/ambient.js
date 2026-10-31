@@ -4,6 +4,7 @@ import { categoryById, MEDIA_HEADERS, SOUNDSCAPES, soundscapeById } from '../dat
 import { cachedSource, cachedUri, prefetch } from '../utils/mediaCache';
 import * as focus from './focus';
 import { ensureAudioSession } from './session';
+import { guarded, safely } from '../utils/safely';
 
 // Soundscape engine for the Sleep & Meditation Hub: one looping expo-audio
 // player, separate from the radio's. Like the radio it keeps playing with
@@ -35,7 +36,7 @@ focus.register('zen', () => {
 
 function emit(patch) {
   state = { ...state, ...patch };
-  listeners.forEach((fn) => fn(state));
+  listeners.forEach((fn) => safely('zen listener', () => fn(state)));
 }
 
 /** A local copy of the soundscape, downloading it the first time. */
@@ -67,9 +68,17 @@ export function warmUp() {
   return warming;
 }
 
+// Resolves the fade-out in progress, if any. A fade cut short (the sound was
+// paused, played again, or stopped) must still let whoever is waiting on it
+// carry on, not leave them waiting for ever.
+let fadeDone = null;
+
 function stopFade() {
   clearInterval(fadeTimer);
   fadeTimer = null;
+  const done = fadeDone;
+  fadeDone = null;
+  done?.();
 }
 
 // The sound last chosen in each kind, so tapping the kind again plays it.
@@ -122,8 +131,17 @@ export async function play(id) {
   await ensureAudioSession();
   if (mine !== ticket) return;
   if (state.id === id && player && state.status !== 'error') {
-    player.volume = state.volume;
-    player.play();
+    try {
+      player.volume = state.volume;
+      player.play();
+    } catch (err) {
+      // The system released the player (an interruption while paused):
+      // build a fresh one below instead of dying here.
+      console.warn(`[ambient] player gone, rebuilding for ${id}`, err?.message ?? err);
+      safely('zen player remove', () => player?.remove?.());
+      player = null;
+      return play(id);
+    }
     showOnLockScreen(soundscape);
     return emit({ status: 'playing' });
   }
@@ -133,9 +151,12 @@ export async function play(id) {
     const source = instantSource(soundscape);
     if (!player) {
       player = createAudioPlayer(source, { updateInterval: 1000 });
-      player.addListener('playbackStatusUpdate', (s) => {
-        if (s.error && state.status !== 'idle') emit({ status: 'error' });
-      });
+      player.addListener(
+        'playbackStatusUpdate',
+        guarded('zen status', (s) => {
+          if (s.error && state.status !== 'idle') emit({ status: 'error' });
+        }),
+      );
     } else {
       player.replace(source);
     }
@@ -153,7 +174,7 @@ export async function play(id) {
 export function pause() {
   ticket += 1;
   stopFade();
-  player?.pause();
+  safely('zen pause', () => player?.pause());
   if (state.id) emit({ status: 'paused' });
 }
 
@@ -167,7 +188,7 @@ export function stop() {
   gen += 1;
   ticket += 1;
   stopFade();
-  player?.pause();
+  safely('zen stop', () => player?.pause());
   emit({ id: null, status: 'idle' });
   focus.release('zen');
   try {
@@ -177,7 +198,9 @@ export function stop() {
 
 export function setVolume(volume) {
   const v = Math.max(0, Math.min(1, volume));
-  if (player) player.volume = v;
+  safely('zen volume', () => {
+    if (player) player.volume = v;
+  });
   emit({ volume: v });
 }
 
@@ -192,13 +215,22 @@ export function fadeOut(ms = 30000) {
   const from = state.volume;
   const started = Date.now();
   return new Promise((resolve) => {
+    fadeDone = resolve;
+    // A timer callback that throws is a crash: if the player has gone, the
+    // fade just ends.
     fadeTimer = setInterval(() => {
-      const t = Math.min(1, (Date.now() - started) / ms);
-      player.volume = from * (1 - t) * (1 - t);
-      if (t < 1) return;
-      stopFade();
-      player.pause();
-      player.volume = from;
+      try {
+        const t = Math.min(1, (Date.now() - started) / ms);
+        if (player) player.volume = from * (1 - t) * (1 - t);
+        if (t < 1) return;
+        stopFade();
+        player?.pause();
+        if (player) player.volume = from;
+      } catch (err) {
+        console.warn('[ambient] fade out ended early', err?.message ?? err);
+        stopFade();
+      }
+      if (fadeTimer) return;
       emit({ status: 'paused' });
       resolve();
     }, 100);
@@ -207,7 +239,7 @@ export function fadeOut(ms = 30000) {
 
 export function subscribe(fn) {
   listeners.add(fn);
-  fn(state);
+  safely('zen listener', () => fn(state));
   return () => listeners.delete(fn);
 }
 

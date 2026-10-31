@@ -11,6 +11,8 @@ import android.os.Build
 import android.view.Choreographer
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowInsets
+import android.view.WindowInsetsController
 import android.view.WindowManager
 import expo.modules.kotlin.Promise
 import expo.modules.kotlin.functions.Queues
@@ -102,6 +104,39 @@ class BoaScreenModule : Module() {
     return applySecure()
   }
 
+  // Whether the system navigation bar should be hidden right now (the Zen
+  // screensaver is the whole screen). Kept so it can be put back after the
+  // activity returns to the foreground, which can show the bars again.
+  private var immersive = false
+
+  /**
+   * Hides or shows the system navigation bar. Hidden, a swipe from the edge
+   * shows it for a moment and it goes away again (sticky immersive). Never
+   * throws: a window that is going away just reports false.
+   */
+  @Suppress("DEPRECATION")
+  private fun applyImmersive(on: Boolean): Boolean {
+    val window = hostActivity?.window ?: return false
+    return try {
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+        val controller = window.insetsController ?: return false
+        if (on) {
+          controller.systemBarsBehavior = WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+          controller.hide(WindowInsets.Type.navigationBars())
+        } else {
+          controller.show(WindowInsets.Type.navigationBars())
+        }
+      } else {
+        val decor = window.decorView
+        val flags = View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+        decor.systemUiVisibility = if (on) decor.systemUiVisibility or flags else decor.systemUiVisibility and flags.inv()
+      }
+      true
+    } catch (e: Throwable) {
+      false
+    }
+  }
+
   private fun clearOverLock() {
     overLock = false
     hostActivity?.let { setShowWhenLocked(it, false) }
@@ -150,6 +185,21 @@ class BoaScreenModule : Module() {
     Function("isLocked") {
       keyguard?.isKeyguardLocked == true
     }
+
+    /** Whether the screen is on (interactive). True when the system can't say. */
+    Function("isInteractive") {
+      (context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager)?.isInteractive != false
+    }
+
+    /**
+     * Hides the system navigation bar while the Zen screensaver is up (its
+     * translucent dark scrim reads as a black bar across the foot of the
+     * picture), and brings it back after.
+     */
+    AsyncFunction("setImmersive") { on: Boolean ->
+      immersive = on
+      applyImmersive(on)
+    }.runOnQueue(Queues.MAIN)
 
     /** Shows the activity (now the Zen screensaver) over the lock screen. */
     AsyncFunction("showOverLock") {
@@ -221,11 +271,13 @@ class BoaScreenModule : Module() {
     OnActivityEntersForeground {
       if (cover != null) hostActivity?.runOnUiThread { revealCover() }
       hostActivity?.runOnUiThread { applySecure() }
+      if (immersive) hostActivity?.runOnUiThread { applyImmersive(true) }
     }
 
     OnActivityDestroys {
       cover = null
       overLock = false
+      immersive = false
     }
   }
 

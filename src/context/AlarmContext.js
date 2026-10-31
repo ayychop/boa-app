@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, Platform } from 'react-native';
+import { guarded } from '../utils/safely';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import { createAudioPlayer } from 'expo-audio';
@@ -307,13 +308,16 @@ export function AlarmProvider({ children }) {
   useEffect(() => {
     if (Platform.OS !== 'android') return undefined;
     checkExact();
-    const sub = AppState.addEventListener('change', (state) => {
-      if (state !== 'active') return;
-      checkExact();
-      // Once-only alarms the phone rang while the app was in the background.
-      const fired = BoaAlarm.takeFired();
-      if (fired.length) setAlarms((list) => list.map((a) => (fired.includes(a.id) && !a.days?.length ? { ...a, enabled: false } : a)));
-    });
+    const sub = AppState.addEventListener(
+      'change',
+      guarded('alarm app state', (state) => {
+        if (state !== 'active') return;
+        checkExact();
+        // Once-only alarms the phone rang while the app was in the background.
+        const fired = BoaAlarm.takeFired();
+        if (fired.length) setAlarms((list) => list.map((a) => (fired.includes(a.id) && !a.days?.length ? { ...a, enabled: false } : a)));
+      }),
+    );
     return () => sub.remove();
   }, [checkExact]);
 

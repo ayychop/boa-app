@@ -6,7 +6,7 @@ import Animated, { Easing, useAnimatedStyle, useSharedValue } from 'react-native
 import useReducedMotion from '../../hooks/useReducedMotion';
 import { startLoop } from '../../utils/loop';
 import { haptics } from '../../utils/haptics';
-import { SCENES } from '../../data/sleep';
+import { MEDIA_HEADERS, SCENES } from '../../data/sleep';
 import { SCREENSAVERS, setScreensaver, useScreensaver } from '../../data/screensavers';
 import { colors, fonts, radius, space } from '../../theme';
 
@@ -178,8 +178,8 @@ export function ScreensaverPicker() {
             >
               <View style={styles.swatch}>
                 <LinearGradient colors={s.swatch} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
-                {/* The two originals show their photograph; if it can't load, the swatch stays. */}
-                {s.scene && SCENES[s.scene]?.uri ? <Image source={{ uri: SCENES[s.scene].uri }} resizeMode="cover" style={StyleSheet.absoluteFill} fadeDuration={200} /> : null}
+                {/* The video screensavers show their photograph; if it can't load, the swatch stays. */}
+                {s.scene && SCENES[s.scene]?.uri ? <Image source={{ uri: SCENES[s.scene].uri, headers: MEDIA_HEADERS }} resizeMode="cover" style={StyleSheet.absoluteFill} fadeDuration={200} /> : null}
               </View>
               <Text style={[styles.tileName, on && { color: colors.gold }]} numberOfLines={1}>
                 {s.name}

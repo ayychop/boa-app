@@ -14,6 +14,32 @@ export function addScreenListener(fn) {
   return () => sub.remove();
 }
 
+/**
+ * Whether the screen is on. True where it can't be known (iOS, the web, a
+ * build without the native module, or one from before this was added).
+ */
+export function isScreenOn() {
+  try {
+    return native?.isInteractive ? !!native.isInteractive() : true;
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * Hides (true) or brings back (false) the system navigation bar: the Zen
+ * screensaver is the whole screen, with no dark bar across its foot. False
+ * where it isn't available. Never throws.
+ */
+export async function setImmersive(on) {
+  if (!native?.setImmersive) return false;
+  try {
+    return await native.setImmersive(!!on);
+  } catch {
+    return false;
+  }
+}
+
 /** Whether the system lock screen is up. */
 export function isLocked() {
   try {

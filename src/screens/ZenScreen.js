@@ -33,7 +33,11 @@ import { podcastById } from '../data/podcasts';
 import { categoryOf, MEDIA_HEADERS, SCENES, SLEEP_TIMERS, soundscapeById, ZEN_CATEGORIES } from '../data/sleep';
 import useActiveAudio from '../hooks/useActiveAudio';
 import * as ambientAudio from '../audio/ambient';
-import { cachedSource, sweep } from '../utils/mediaCache';
+import { cachedSource, discard, sweep } from '../utils/mediaCache';
+import { safely } from '../utils/safely';
+import useScreenAwake from '../hooks/useScreenAwake';
+import useSettled from '../hooks/useSettled';
+import { setImmersive } from '../../modules/boa-screen';
 import { haptics } from '../utils/haptics';
 import { shiftHex, withAlpha } from '../utils/color';
 import { startLoop } from '../utils/loop';
@@ -67,7 +71,7 @@ const DRIFT_LOOP = 180000;
 const KEEP_AWAKE_TAG = 'boa-zen';
 // The screensaver's radio card, and what each tab is called on its button.
 const RADIO_CARD = 72;
-const TAB_TITLES = { Originals: 'BOA Originals' };
+const WAKE_HINT = 'Tap to go back to BOA HUB';
 
 // Re-renders on the minute, not every second: the sweep under the clock
 // shows the seconds, on the UI thread.
@@ -253,6 +257,38 @@ class LayerBoundary extends Component {
   }
 }
 
+// How long the video takes to fade in over the photograph, and how long the
+// layers beneath it keep moving while it does (then they hold still: nothing
+// under a full-screen video needs animating, and every frame saved is a
+// smoother one).
+const VIDEO_FADE_MS = 1800;
+// The radio's play and pause tapped quickly never builds a decoder: the room
+// only gets its video once the radio has stayed off this long.
+const VIDEO_SETTLE_MS = 500;
+
+/**
+ * Playback settings, one at a time and each guarded, so a property the
+ * platform doesn't have can't stop the ones after it. The first three come
+ * first: silent and mixing, the player never asks for the audio focus (which
+ * would pause the radio or a soundscape). It never plays on in the
+ * background and never holds the screen awake (Zen decides that itself, from
+ * what is audibly playing).
+ */
+function configureVideoPlayer(p) {
+  const set = (key, value) =>
+    safely(`video ${key}`, () => {
+      p[key] = value;
+    });
+  set('audioMixingMode', 'mixWithOthers');
+  set('muted', true);
+  set('volume', 0);
+  set('loop', true);
+  set('staysActiveInBackground', false);
+  set('showNowPlayingNotification', false);
+  set('keepScreenOnWhilePlaying', false);
+  set('playbackRate', 1);
+}
+
 /**
  * The scene's looping video, muted and mixed with the app's audio (so it
  * never takes audio focus from a soundscape or the radio), played from the
@@ -260,22 +296,32 @@ class LayerBoundary extends Component {
  * while the Zen tab is on screen. On a warm phone it still draws its first
  * frame (so the room isn't left without its picture) and then holds there.
  * It starts a moment after the tab opens, once the transition is over.
+ *
+ * Built to be thrown away at any instant: the screen going off, the app
+ * leaving the front, a quick tap on the radio or a change of scene can each
+ * unmount it while a download, a `replace` or a first frame is still in
+ * flight. Every native call is guarded, everything that arrives late checks
+ * it is still mounted, and a video the decoder refuses is dropped (and its
+ * cached file deleted) so the photograph carries on and the next try starts
+ * from a clean copy.
  */
-function SceneVideo({ scene, running }) {
+function SceneVideo({ scene, running, onShown }) {
   const shown = useSharedValue(0);
-  const player = useVideoPlayer(null, (p) => {
-    p.loop = true;
-    // Set before it ever plays: silent and mixing, it never asks Android
-    // for the audio focus.
-    p.audioMixingMode = 'mixWithOthers';
-    p.muted = true;
-    p.volume = 0;
-  });
+  const alive = useRef(true);
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+    };
+  }, []);
+  const player = useVideoPlayer(null, (p) => safely('video player setup', () => configureVideoPlayer(p)));
   const [armed, setArmed] = useState(false);
   const [source, setSource] = useState(null);
+  const [failed, setFailed] = useState(false);
   const runningRef = useRef(running);
   runningRef.current = running;
   const framed = useRef(false);
+  const cachedName = useRef(null);
 
   useEffect(() => {
     const id = setTimeout(() => setArmed(true), VIDEO_DELAY_MS);
@@ -284,38 +330,66 @@ function SceneVideo({ scene, running }) {
 
   useEffect(() => {
     if (!armed) return undefined;
-    let alive = true;
+    let live = true;
     sweepOldVideos();
     const uri = Platform.OS === 'ios' ? scene.video.ios : scene.video.uri;
     const ext = Platform.OS === 'ios' ? 'mov' : 'webm';
     // Named after the address too, so a new (sharper) video for a scene is
     // downloaded rather than the old cached one played.
-    cachedSource('scenes', `${scene.id}-${shortHash(uri)}-${VIDEO_TAG}.${ext}`, uri).then((s) => alive && setSource(s));
+    const name = `${scene.id}-${shortHash(uri)}-${VIDEO_TAG}.${ext}`;
+    cachedName.current = name;
+    cachedSource('scenes', name, uri)
+      .then((s) => live && alive.current && setSource(s))
+      .catch((err) => console.warn(`[zen] video ${scene.id} unavailable`, err?.message ?? err));
     return () => {
-      alive = false;
+      live = false;
     };
   }, [armed, scene]);
 
+  // A decoder that refuses the file: drop the video, keep the photograph,
+  // and delete the cached copy so a bad download isn't replayed for ever.
   useEffect(() => {
-    if (!source) return;
-    framed.current = false;
-    try {
-      player.replace(source);
-    } catch (err) {
-      console.warn(`[zen] video ${scene.id} failed`, err?.message ?? err);
-    }
-  }, [player, source, scene.id]);
+    const sub = safely('video status listener', () =>
+      player.addListener('statusChange', (e) => {
+        if (e?.status !== 'error' || !alive.current) return;
+        console.warn(`[zen] video ${scene.id} was refused by the decoder`, e?.error?.message ?? '');
+        if (cachedName.current) discard('scenes', cachedName.current);
+        setFailed(true);
+      }),
+    );
+    return () => {
+      safely('video status listener remove', () => sub?.remove?.());
+    };
+  }, [player, scene.id]);
 
   useEffect(() => {
-    if (!source) return;
-    try {
-      // Held (warm phone): play until the first frame is up, which pauses it.
+    if (!source || failed) return;
+    framed.current = false;
+    safely(`video ${scene.id} replace`, () => player.replace(source));
+  }, [player, source, scene.id, failed]);
+
+  useEffect(() => {
+    if (!source || failed) return;
+    // Held (warm phone): play until the first frame is up, which pauses it.
+    safely(`video ${scene.id} play/pause`, () => {
       if (running || !framed.current) player.play();
       else player.pause();
-    } catch {}
-  }, [player, source, running]);
+    });
+  }, [player, source, running, scene.id, failed]);
+
+  // Once the fade has finished, whatever is beneath can stop moving.
+  const coverTimer = useRef(null);
+  useEffect(
+    () => () => {
+      clearTimeout(coverTimer.current);
+      onShown?.(false);
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
 
   const style = useAnimatedStyle(() => ({ opacity: shown.value }));
+  if (failed) return null;
   return (
     <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, style]} testID={`zen-video-${scene.id}`}>
       <LayerBoundary>
@@ -325,17 +399,19 @@ function SceneVideo({ scene, running }) {
           contentFit="cover"
           nativeControls={false}
           allowsPictureInPicture={false}
+          startsPictureInPictureAutomatically={false}
+          allowsVideoFrameAnalysis={false}
+          useExoShutter={false}
           // A TextureView, so the fade and the overlays above it composite
           // like any other view (a SurfaceView ignores parent opacity).
           surfaceType="textureView"
           onFirstFrameRender={() => {
+            if (!alive.current) return;
             framed.current = true;
-            shown.value = withTiming(1, { duration: 1800, easing: DIM });
-            if (!runningRef.current) {
-              try {
-                player.pause();
-              } catch {}
-            }
+            shown.value = withTiming(1, { duration: VIDEO_FADE_MS, easing: DIM });
+            clearTimeout(coverTimer.current);
+            coverTimer.current = setTimeout(() => alive.current && onShown?.(true), VIDEO_FADE_MS + 100);
+            if (!runningRef.current) safely(`video ${scene.id} hold`, () => player.pause());
           }}
         />
       </LayerBoundary>
@@ -354,22 +430,29 @@ const SCENE_FADE_MS = 1400;
  * kept alive to animate its own removal is exactly what could still be
  * mid-flight when the tab is left.
  */
-function SceneLayer({ scene, newest, width, height, running, withVideo }) {
+function SceneLayer({ scene, newest, width, height, running, withVideo, onCovered }) {
   const o = useSharedValue(0);
+  // The video is up and opaque: the photograph under it holds still.
+  const [covered, setCovered] = useState(false);
   useEffect(() => {
     o.value = withTiming(newest ? 1 : 0, { duration: SCENE_FADE_MS, easing: DIM });
   }, [newest, o]);
+  const showing = withVideo && newest;
+  const cover = (on) => {
+    setCovered(on);
+    if (newest) onCovered?.(on);
+  };
   const style = useAnimatedStyle(() => ({ opacity: o.value }));
   return (
     <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, style]}>
-      <ScenePhoto scene={scene} width={width} height={height} running={running} />
-      {withVideo && newest && <SceneVideo scene={scene} running={running} />}
+      <ScenePhoto scene={scene} width={width} height={height} running={running && !(covered && showing)} />
+      {showing && <SceneVideo scene={scene} running={running} onShown={cover} />}
     </Animated.View>
   );
 }
 
 /** The scenes on screen: the current one, and the one it is replacing until that has faded. */
-function SceneStack({ scene, width, height, running, withVideo }) {
+function SceneStack({ scene, width, height, running, withVideo, onCovered }) {
   const [layers, setLayers] = useState([scene]);
   useEffect(() => {
     setLayers((l) => (l[l.length - 1].id === scene.id ? l : [l[l.length - 1], scene]));
@@ -383,7 +466,7 @@ function SceneStack({ scene, width, height, running, withVideo }) {
   return (
     <>
       {layers.map((l, i) => (
-        <SceneLayer key={l.id} scene={l} newest={i === layers.length - 1} width={width} height={height} running={running} withVideo={withVideo} />
+        <SceneLayer key={l.id} scene={l} newest={i === layers.length - 1} width={width} height={height} running={running} withVideo={withVideo} onCovered={onCovered} />
       ))}
     </>
   );
@@ -397,10 +480,12 @@ function SceneStack({ scene, width, height, running, withVideo }) {
  */
 function Atmosphere({ sceneId, width, height, running, withVideo = true, ambient = false }) {
   const scene = SCENES[sceneId] ?? SCENES.night;
+  // A full-screen video hides the amber mesh completely: it stops drawing.
+  const [covered, setCovered] = useState(false);
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-      <MeshGradient width={width} height={height} running={running} />
-      <SceneStack scene={scene} width={width} height={height} running={running} withVideo={withVideo} />
+      <MeshGradient width={width} height={height} running={running && !(covered && withVideo)} />
+      <SceneStack scene={scene} width={width} height={height} running={running} withVideo={withVideo} onCovered={setCovered} />
       <DriftingFog width={width} height={height} opacity={0.45} running={running} />
       <Grain width={width} height={height} opacity={0.05} running={running} />
       {ambient ? (
@@ -813,6 +898,18 @@ function ZenRoom() {
     return () => cancelAnimation(hint);
   }, [ambient, hint]);
 
+  // The screensaver is the whole screen: the system navigation bar (whose
+  // dark translucent scrim is the "bar" across the foot of the picture) goes
+  // too, and comes back the moment the screensaver ends, the tab is left or
+  // this screen unmounts. Never throws.
+  useEffect(() => {
+    if (!focused || !ambient) return undefined;
+    setImmersive(true);
+    return () => {
+      setImmersive(false);
+    };
+  }, [focused, ambient]);
+
   // The screensaver hides the status bar.
   useEffect(() => {
     if (!focused || !ambient) return;
@@ -855,6 +952,13 @@ function ZenRoom() {
   // else about the default room has changed.
   const warm = useWarm();
   const roomMoving = focused && !isPlaying && !warm;
+  // The video decoder only exists while someone can see it: the app is in
+  // front, the screen is lit, this tab is up, the radio is off, and all of
+  // that has held for a moment. Pressing the power button, switching apps or
+  // tapping the radio's play and pause quickly tears it down (or never builds
+  // it); it is never started for a screen that is off.
+  const awake = useScreenAwake();
+  const videoOk = useSettled(focused && awake && !isPlaying, VIDEO_SETTLE_MS);
   const short = height < 500;
   const top = Math.max(insets.top, space.lg);
   // Controls sit above the tab bar (and mini player); the screensaver has
@@ -863,7 +967,7 @@ function ZenRoom() {
   const edge = { left: space.xl, right: space.xl };
   const panelBeside = !ambient && short;
   const radioCard = ambient && !!current && (isPlaying || radioShown);
-  const backTo = returnTab ? (TAB_TITLES[returnTab] ?? returnTab) : null;
+  const backTo = returnTab ? 'BOA HUB' : null;
   // Tall enough for the soundscapes, the timer and the radio's controls
   // without scrolling.
   const panelHeight = short ? 0 : sound.id ? 460 : 400;
@@ -886,7 +990,7 @@ function ZenRoom() {
       {ambient && saverDef.generative ? (
         <SaverBackdrop id={saver} width={width} height={height} running={roomMoving} />
       ) : (
-        <Atmosphere sceneId={(ambient && saverDef.scene) || sceneId} width={width} height={height} running={roomMoving} withVideo={!isPlaying} ambient={ambient} />
+        <Atmosphere sceneId={(ambient && saverDef.scene) || sceneId} width={width} height={height} running={roomMoving} withVideo={videoOk} ambient={ambient} />
       )}
       {ambient && (
         <Pressable
@@ -957,7 +1061,7 @@ function ZenRoom() {
 
       {ambient && !short && (
         <View pointerEvents="none" style={[styles.hintRow, edge, { bottom: bottom + space.md }]}>
-          <Animated.Text style={[styles.hint, hintStyle]}>{backTo ? `Tap to go back to ${backTo}` : 'Tap anywhere for controls'}</Animated.Text>
+          <Animated.Text style={[styles.hint, hintStyle]}>{backTo ? WAKE_HINT : 'Tap anywhere for controls'}</Animated.Text>
         </View>
       )}
     </View>

@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, StyleSheet, Text, View } from 'react-native';
+import { guarded } from '../utils/safely';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Animated, { FadeInDown, ZoomIn } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -85,7 +86,10 @@ export function PremiumProvider({ children }) {
 
   useEffect(() => {
     refresh();
-    const sub = AppState.addEventListener('change', (s) => s === 'active' && refresh());
+    const sub = AppState.addEventListener(
+      'change',
+      guarded('premium app state', (s) => s === 'active' && refresh()),
+    );
     return () => sub.remove();
   }, [refresh]);
 

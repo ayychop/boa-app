@@ -117,6 +117,9 @@ test('while the radio plays, the whole Zen background freezes, and moves again o
   await openTab(user, 'Zen');
   await advance(300);
   expect(running).toBeGreaterThanOrEqual(5);
+  // The video is built once the radio has stayed off for a moment (a quick
+  // tap on the radio's play and pause never builds a decoder).
+  await advance(2000);
   const scene = () => video.__players[video.__players.length - 1];
   expect(scene().playing).toBe(true);
 
@@ -134,8 +137,10 @@ test('while the radio plays, the whole Zen background freezes, and moves again o
   expect(engine.pause).not.toHaveBeenCalled();
 
   await user.press(screen.getByRole('button', { name: 'Pause radio' }));
-  // The video starts a moment after the room opens (once the tab's transition is over).
-  await advance(1500);
+  // The video starts a moment after the radio has stayed off (a settle
+  // time, then the tab's own delay: each stage starts once the render before
+  // it has committed, so time moves in steps).
+  for (let i = 0; i < 8; i++) await advance(250);
   expect(running).toBeGreaterThanOrEqual(5);
   expect(screen.getByTestId('zen-video-night')).toBeOnTheScreen();
   expect(scene().playing).toBe(true);

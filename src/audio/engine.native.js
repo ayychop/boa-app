@@ -4,6 +4,7 @@ import { ensureAudioSession } from './session';
 import { splitTrack } from '../utils/track';
 import * as focus from './focus';
 import * as eq from './eq';
+import { guarded, safely } from '../utils/safely';
 
 export { splitTrack };
 
@@ -81,7 +82,9 @@ const isLive = (item) => item?.kind !== 'podcast';
 
 function emit(patch) {
   state = { ...state, ...patch };
-  listeners.forEach((fn) => fn(state));
+  // One listener (a screen mid-teardown) throwing must not stop the others,
+  // or the engine that called emit.
+  listeners.forEach((fn) => safely('radio listener', () => fn(state)));
 }
 
 function clearTimers() {
@@ -169,25 +172,38 @@ function getPlayer() {
     ready = ensureAudioSession()
       .then(() => {
         player = createAudioPlayer(null, { updateInterval: 1000 });
-        player.addListener('playbackStatusUpdate', onStatus);
+        // Every native callback is guarded: one that throws (a player the
+        // system has just released, a screen that went off mid-update) must
+        // never reach the app as a crash.
+        player.addListener('playbackStatusUpdate', guarded('radio status', onStatus));
         // Next/previous from the lock screen, notification, headset or car.
-        player.addListener('remoteNextTrack', () => remote?.next?.());
-        player.addListener('remotePreviousTrack', () => remote?.previous?.());
+        player.addListener('remoteNextTrack', guarded('remote next', () => remote?.next?.()));
+        player.addListener('remotePreviousTrack', guarded('remote previous', () => remote?.previous?.()));
         // BOA Hi-Fi's bass, treble and spatial attach to this player's sound.
         // The session id is still 0 here (no playback yet); attachEq picks it
         // up the moment playback starts (onStatus).
         attachEq();
         // Back in the app while waiting to reconnect: try straight away.
-        AppState.addEventListener('change', (next) => {
-          if (next !== 'active') return;
-          if (pendingLockScreen && pendingLockScreen === current) showOnLockScreen(pendingLockScreen);
-          if (wantPlaying && retryTimer && current) {
-            clearTimeout(retryTimer);
-            retryTimer = null;
-            connect(current, { retry: true, resumeAt: isLive(current) ? 0 : state.position });
-          }
-        });
+        AppState.addEventListener(
+          'change',
+          guarded('radio app state', (next) => {
+            if (next !== 'active') return;
+            if (pendingLockScreen && pendingLockScreen === current) showOnLockScreen(pendingLockScreen);
+            if (wantPlaying && retryTimer && current) {
+              clearTimeout(retryTimer);
+              retryTimer = null;
+              connect(current, { retry: true, resumeAt: isLive(current) ? 0 : state.position });
+            }
+          }),
+        );
         return player;
+      })
+      .catch((err) => {
+        // Not remembered: the next play tries to build the player again
+        // instead of every later one failing with this same rejection.
+        ready = null;
+        player = null;
+        throw err;
       });
   }
   return ready;
@@ -216,7 +232,7 @@ function fail(attempt) {
   if (attempt !== gen || attempt === failedGen || !current || !wantPlaying) return;
   failedGen = attempt;
   clearTimers();
-  player?.pause();
+  safely('radio pause (fail)', () => player?.pause());
   if (established || attempts < MAX_RETRIES) {
     attempts += 1;
     emit({ status: 'loading', retry: attempts });
@@ -394,7 +410,7 @@ export async function pause() {
   wantPlaying = false;
   gen += 1;
   emit({ status: 'paused', retry: 0 });
-  player?.pause();
+  safely('radio pause', () => player?.pause());
 }
 
 /**
@@ -405,19 +421,31 @@ export function fadeOut(ms = 30000) {
   if (!player || !wantPlaying) return Promise.resolve(pause());
   const started = Date.now();
   return new Promise((resolve) => {
+    // A timer callback that throws is a crash, so this one can't: if the
+    // player has gone, the fade simply ends.
     const id = setInterval(() => {
-      const t = Math.min(1, (Date.now() - started) / ms);
-      if (!wantPlaying) {
+      try {
+        const t = Math.min(1, (Date.now() - started) / ms);
+        if (!wantPlaying) {
+          clearInterval(id);
+          safely('radio volume reset', () => {
+            if (player) player.volume = 1;
+          });
+          return resolve();
+        }
+        if (player) player.volume = (1 - t) * (1 - t);
+        if (t < 1) return;
         clearInterval(id);
-        player.volume = 1;
-        return resolve();
+        pause();
+        safely('radio volume reset', () => {
+          if (player) player.volume = 1;
+        });
+        resolve();
+      } catch (err) {
+        console.warn('[audio] fade out ended early', err?.message ?? err);
+        clearInterval(id);
+        resolve();
       }
-      player.volume = (1 - t) * (1 - t);
-      if (t < 1) return;
-      clearInterval(id);
-      pause();
-      player.volume = 1;
-      resolve();
     }, 100);
   });
 }
@@ -426,7 +454,11 @@ export async function seek(seconds) {
   if (!player || isLive(current)) return;
   const t = Math.max(0, Math.min(seconds, state.duration || seconds));
   emit({ position: t, ...(state.status === 'ended' && { status: 'paused' }) });
-  await player.seekTo(t);
+  try {
+    await player?.seekTo(t);
+  } catch (err) {
+    console.warn('[audio] seek failed', err?.message ?? err);
+  }
 }
 
 export function skip(delta) {
@@ -435,7 +467,7 @@ export function skip(delta) {
 
 export async function setRate(rate) {
   emit({ rate });
-  if (player && !isLive(current)) player.setPlaybackRate(rate);
+  if (player && !isLive(current)) safely('radio rate', () => player.setPlaybackRate(rate));
 }
 
 /** What's loaded (a station or an episode), or null. */
@@ -445,7 +477,7 @@ export function getCurrent() {
 
 export function subscribe(fn) {
   listeners.add(fn);
-  fn(state);
+  safely('radio listener', () => fn(state));
   return () => listeners.delete(fn);
 }
 

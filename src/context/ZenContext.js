@@ -3,6 +3,7 @@ import { AppState } from 'react-native';
 import { useUser } from './UserContext';
 import { currentTab, goToTab, navigationRef, TABS } from '../navigation/ref';
 import { addScreenListener, clearOverLock, showOverLock, unlock } from '../../modules/boa-screen';
+import { guarded, safely } from '../utils/safely';
 
 // The screen-off broadcast and the app going to the background arrive
 // within moments of each other, in either order; the app counts as having
@@ -99,19 +100,22 @@ export function ZenProvider({ children }) {
       if (!ok) return;
       overLock.current = false;
     }
-    leave(toControls);
+    safely('zen leave', () => leave(toControls));
   }, [leave]);
 
   // Whether the app is on screen, and when it last stopped being.
   const appActive = useRef(AppState.currentState !== 'background' && AppState.currentState !== 'inactive');
   const leftAt = useRef(0);
   useEffect(() => {
-    const sub = AppState.addEventListener('change', (next) => {
-      const active = next === 'active';
-      if (appActive.current && !active) leftAt.current = Date.now();
-      appActive.current = active;
-    });
-    return () => sub.remove();
+    const sub = AppState.addEventListener(
+      'change',
+      guarded('zen app state', (next) => {
+        const active = next === 'active';
+        if (appActive.current && !active) leftAt.current = Date.now();
+        appActive.current = active;
+      }),
+    );
+    return () => safely('zen app state remove', () => sub?.remove());
   }, []);
 
   // The lock: the screen turned off while the app was the one on screen.
@@ -121,18 +125,22 @@ export function ZenProvider({ children }) {
   // Unlocking with a fingerprint or face while it shows wakes it.
   useEffect(
     () =>
-      addScreenListener((state) => {
-        if (state === 'unlocked') {
-          if (overLock.current) wake();
-          return;
-        }
-        if (state !== 'off' || !onboardedRef.current) return;
-        const wasOnScreen = appActive.current || Date.now() - leftAt.current < LOCK_WINDOW_MS;
-        if (wasOnScreen && openScreensaver()) {
-          overLock.current = true;
-          showOverLock();
-        }
-      }),
+      // A native event: whatever goes wrong inside is logged, never thrown
+      // back into the native side.
+      addScreenListener(
+        guarded('zen screen event', (state) => {
+          if (state === 'unlocked') {
+            if (overLock.current) wake();
+            return;
+          }
+          if (state !== 'off' || !onboardedRef.current) return;
+          const wasOnScreen = appActive.current || Date.now() - leftAt.current < LOCK_WINDOW_MS;
+          if (wasOnScreen && openScreensaver()) {
+            overLock.current = true;
+            showOverLock();
+          }
+        }),
+      ),
     [openScreensaver, wake],
   );
 
@@ -144,17 +152,21 @@ export function ZenProvider({ children }) {
       const route = currentTab();
       if (route === 'Zen' || route === 'AlarmRinging') return;
       unlocking.current = true;
-      unlock().then((ok) => {
-        unlocking.current = false;
-        if (ok) {
-          overLock.current = false;
-          setAmbient(false);
-          returnTo.current = null;
-          setReturnTab(null);
-        } else {
-          goToTab('Zen');
-        }
-      });
+      unlock()
+        .then((ok) => {
+          unlocking.current = false;
+          if (ok) {
+            overLock.current = false;
+            setAmbient(false);
+            returnTo.current = null;
+            setReturnTab(null);
+          } else {
+            goToTab('Zen');
+          }
+        })
+        .catch(() => {
+          unlocking.current = false;
+        });
     });
     return () => unsub?.();
   }, []);

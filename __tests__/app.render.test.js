@@ -151,7 +151,7 @@ test('the screensaver shows the radio with its controls while it plays, and Back
   await probe.unlock();
   await advance(400);
   expect(screen.getByTestId('zen-screensaver')).toBeOnTheScreen();
-  expect(screen.getByText('Tap to go back to Talent')).toBeOnTheScreen();
+  expect(screen.getByText('Tap to go back to BOA HUB')).toBeOnTheScreen();
   const card = screen.getByTestId('zen-radio-info');
   expect(within(card).getByText(name)).toBeOnTheScreen();
   // Its controls work the radio without waking Zen, and stay to play it again.
@@ -181,7 +181,7 @@ test('with nothing playing, the screensaver has no radio card', async () => {
   await advance(400);
   expect(screen.getByTestId('zen-screensaver')).toBeOnTheScreen();
   expect(screen.queryByTestId('zen-radio-info')).toBeNull();
-  expect(screen.getByText('Tap to go back to Radio')).toBeOnTheScreen();
+  expect(screen.getByText('Tap to go back to BOA HUB')).toBeOnTheScreen();
 });
 
 test('locking while Zen is open with its controls turns it into the screensaver', async () => {

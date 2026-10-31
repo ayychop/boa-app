@@ -22,6 +22,10 @@ const KEY = 'boa.zen.screensaver.v1';
 export const SCREENSAVERS = [
   { id: 'night', scene: 'night', name: 'Starry Night', blurb: 'Your original: the night sky, turning slowly', swatch: ['#0A1230', '#2A3F7A'] },
   { id: 'rain', scene: 'rain', name: 'Rainy Window', blurb: 'Your original: rain on the glass of a night city', swatch: ['#10202B', '#3E6A82'] },
+  { id: 'milkyway', scene: 'milkyway', name: 'Milky Way', blurb: 'The galaxy wheeling over a black horizon', swatch: ['#0B0F1A', '#6B5A55'] },
+  { id: 'joshua', scene: 'joshua', name: 'Joshua Tree', blurb: 'Deep navy sky, one tree, a million stars', swatch: ['#070B1C', '#3A4A2A'] },
+  { id: 'desert', scene: 'desert', name: 'Desert Night', blurb: 'A quiet trail under a slow, starry sky', swatch: ['#06080F', '#4A3A2A'] },
+  { id: 'startrails', scene: 'startrails', name: 'Star Trails', blurb: 'The whole sky turning, in long blue ribbons', swatch: ['#0A1636', '#4A78C8'] },
   { id: 'room', name: 'The Room', blurb: 'Your soundscape’s own scene', swatch: ['#3A2410', '#B9792A'] },
   { id: 'aurora', generative: true, name: 'Aurora', blurb: 'Slow ribbons of teal, violet and gold', swatch: ['#12353A', '#5B3FB0'] },
   { id: 'halo', generative: true, name: 'Halo', blurb: 'Gold rings breathing outward', swatch: ['#0B0B0D', '#E2A84B'] },

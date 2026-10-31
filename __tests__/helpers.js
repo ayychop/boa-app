@@ -45,6 +45,7 @@ export function instrument() {
   // Locking: the screen turns off and the app goes to the background
   // (inactive, briefly, on some phones). Unlocking: the reverse.
   const screenEvents = require('../modules/boa-screen');
+  screenEvents.__reset();
   const lock = async (next = 'background') => {
     await act(async () => screenEvents.__emit('off'));
     await setState(next);

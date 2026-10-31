@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, Platform } from 'react-native';
+import { guarded } from '../utils/safely';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import { createAudioPlayer } from 'expo-audio';
@@ -123,13 +124,16 @@ export function HubProvider({ children }) {
       setOnline(new Set());
     };
     if (profile?.visible_on_hub !== false) join();
-    const sub = AppState.addEventListener('change', (s) => {
-      if (s === 'active' && profile?.visible_on_hub !== false) join();
-      else if (s === 'background') {
-        hub.updateProfile(userId, { last_seen_at: new Date().toISOString() }).catch(() => {});
-        leave();
-      }
-    });
+    const sub = AppState.addEventListener(
+      'change',
+      guarded('hub app state', (s) => {
+        if (s === 'active' && profile?.visible_on_hub !== false) join();
+        else if (s === 'background') {
+          hub.updateProfile(userId, { last_seen_at: new Date().toISOString() }).catch(() => {});
+          leave();
+        }
+      }),
+    );
     return () => {
       sub.remove();
       leave();

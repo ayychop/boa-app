@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, Platform } from 'react-native';
+import { guarded } from '../utils/safely';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import { fetchForecast, widgetWeather } from '../api/weather';
@@ -74,7 +75,10 @@ export function WeatherProvider({ children }) {
       })
       .catch(() => {})
       .finally(() => alive && load());
-    const sub = AppState.addEventListener('change', (s) => s === 'active' && load());
+    const sub = AppState.addEventListener(
+      'change',
+      guarded('weather app state', (s) => s === 'active' && load()),
+    );
     return () => {
       alive = false;
       sub.remove();
