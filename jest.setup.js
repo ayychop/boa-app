@@ -292,6 +292,13 @@ jest.mock('expo-font', () => ({
   isLoaded: () => true,
   isLoading: () => false,
 }));
+// The system navigation bar (Android): hidden over the Zen screensaver. Tests
+// read the calls; the bar only exists on Android (src/utils/navBar.js).
+jest.mock('expo-navigation-bar', () => ({
+  setVisibilityAsync: jest.fn(async () => {}),
+  getVisibilityAsync: jest.fn(async () => 'visible'),
+}));
+
 // The screen off/on broadcast (an Android native module in the app); tests
 // fire it with __emit('off' | 'on').
 jest.mock('./modules/boa-screen', () => {
@@ -303,10 +310,8 @@ jest.mock('./modules/boa-screen', () => {
       listeners.add(fn);
       return () => listeners.delete(fn);
     }),
-    // The screen is on unless a test says otherwise; the navigation bar
-    // (setImmersive) is hidden over the screensaver.
+    // The screen is on unless a test says otherwise.
     isScreenOn: jest.fn(() => screenOn),
-    setImmersive: jest.fn(async () => true),
     // The lock screen: unlocked unless a test says otherwise.
     isLocked: jest.fn(() => false),
     showOverLock: jest.fn(async () => true),

@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
 import Animated, { Easing, useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
@@ -154,6 +154,10 @@ export function Vignette({ strength = 1 }) {
   return <LinearGradient pointerEvents="none" colors={[edge, mid, mid, edge]} locations={[0, 0.3, 0.7, 1]} style={StyleSheet.absoluteFill} />;
 }
 
+// A scene whose video is 4K (it has a step down for decoders that can't). iPhone
+// and iPad play a smaller file: Apple's player can't read WebM.
+const is4k = (saver) => Platform.OS !== 'ios' && !!saver.scene && !!SCENES[saver.scene]?.video?.fallback;
+
 /** The picker in the Zen controls: a row of tiles, one per screensaver. */
 export function ScreensaverPicker() {
   const picked = useScreensaver();
@@ -180,6 +184,12 @@ export function ScreensaverPicker() {
                 <LinearGradient colors={s.swatch} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
                 {/* The video screensavers show their photograph; if it can't load, the swatch stays. */}
                 {s.scene && SCENES[s.scene]?.uri ? <Image source={{ uri: SCENES[s.scene].uri, headers: MEDIA_HEADERS }} resizeMode="cover" style={StyleSheet.absoluteFill} fadeDuration={200} /> : null}
+                {/* The 4K clips say so. */}
+                {is4k(s) ? (
+                  <View style={styles.uhd} testID={`zen-saver-4k-${s.id}`}>
+                    <Text style={styles.uhdText}>4K</Text>
+                  </View>
+                ) : null}
               </View>
               <Text style={[styles.tileName, on && { color: colors.gold }]} numberOfLines={1}>
                 {s.name}
@@ -201,6 +211,8 @@ const styles = StyleSheet.create({
   tile: { width: 92, padding: 6, gap: 6, borderRadius: radius.lg, borderWidth: 1, borderColor: 'rgba(243,239,232,0.12)', backgroundColor: 'rgba(243,239,232,0.05)' },
   tileOn: { borderColor: colors.gold, backgroundColor: 'rgba(226,168,75,0.1)' },
   swatch: { height: 52, borderRadius: radius.md, overflow: 'hidden' },
+  uhd: { position: 'absolute', top: 4, right: 4, paddingHorizontal: 5, height: 15, borderRadius: radius.pill, justifyContent: 'center', backgroundColor: 'rgba(5,5,6,0.72)', borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(226,168,75,0.7)' },
+  uhdText: { fontFamily: fonts.mono, fontSize: 8, letterSpacing: 1, color: colors.gold },
   tileName: { fontFamily: fonts.semibold, fontSize: 12, lineHeight: 17, color: colors.text, textAlign: 'center', paddingBottom: 1 },
   blurb: { fontFamily: fonts.medium, fontSize: 12, lineHeight: 17, color: colors.textMuted, marginTop: space.sm },
 });

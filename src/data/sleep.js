@@ -40,6 +40,13 @@ export const SCENES = {
     video: {
       uri: 'https://upload.wikimedia.org/wikipedia/commons/transcoded/a/a1/Starry_sky_with_North_Star_circled.webm/Starry_sky_with_North_Star_circled.webm.1080p.vp9.webm',
       ios: 'https://upload.wikimedia.org/wikipedia/commons/transcoded/a/a1/Starry_sky_with_North_Star_circled.webm/Starry_sky_with_North_Star_circled.webm.360p.mpeg4.mov',
+      // The clip has a frame of its own baked into its pixels: black bars
+      // (5.6% of the height) top and bottom, a thin red border inside them,
+      // and the red circle round the North Star. Drawn "cover" the bars
+      // reached across the foot of the screensaver (the "bar at the bottom"),
+      // so it is enlarged and nudged up until all of that is off screen.
+      // zoom is the scale; shift is the lift, as a fraction of the screen's height.
+      frame: { zoom: 1.25, shift: -0.042 },
       title: 'Starry sky with North Star circled',
       author: 'Thomas Bresson',
       license: 'CC BY 3.0',
@@ -84,73 +91,87 @@ export const SCENES = {
     license: 'CC0 1.0',
     source: 'https://commons.wikimedia.org/wiki/File:Glowing_Embers_(Unsplash).jpg',
   },
-  // Four more night skies for the Zen screensaver (screensavers.js), each in
-  // the same spirit as the two originals: dark, unhurried time-lapse, stars
-  // over a black horizon, nothing bright, nothing with writing on it. Their
-  // photograph is the video's own first frame, so the hand-over is seamless.
-  milkyway: {
-    id: 'milkyway',
+  // Four more night scenes for the Zen screensaver (screensavers.js), in the
+  // same spirit as the two originals (dark, cinematic, unhurried) but with
+  // real movement in them, and all of them genuine 4K: the Earth turning
+  // under the space station, the whole sky wheeling, a night-lit globe and a
+  // meteor shower. Each photograph is the video's own first frame, so the
+  // hand-over is seamless.
+  orbit: {
+    id: 'orbit',
     video: {
-      uri: 'https://upload.wikimedia.org/wikipedia/commons/transcoded/d/d2/Milky_Way_Time-Lapse_Rework.webm/Milky_Way_Time-Lapse_Rework.webm.1080p.vp9.webm',
-      ios: 'https://upload.wikimedia.org/wikipedia/commons/transcoded/d/d2/Milky_Way_Time-Lapse_Rework.webm/Milky_Way_Time-Lapse_Rework.webm.360p.mpeg4.mov',
-      title: 'Milky Way Time-Lapse Rework',
-      author: 'GaryP',
+      // True 4K (3840 x 2160, VP9), the file as its author uploaded it.
+      uri: 'https://upload.wikimedia.org/wikipedia/commons/f/fb/Ocean_Moon_Glint_and_City_Night_Lights_in_4K_UHD.webm',
+      // If a phone's decoder won't take 4K, the same clip one step down.
+      fallback: 'https://upload.wikimedia.org/wikipedia/commons/transcoded/f/fb/Ocean_Moon_Glint_and_City_Night_Lights_in_4K_UHD.webm/Ocean_Moon_Glint_and_City_Night_Lights_in_4K_UHD.webm.480p.vp9.webm',
+      ios: 'https://upload.wikimedia.org/wikipedia/commons/transcoded/f/fb/Ocean_Moon_Glint_and_City_Night_Lights_in_4K_UHD.webm/Ocean_Moon_Glint_and_City_Night_Lights_in_4K_UHD.webm.360p.mpeg4.mov',
+      title: 'Ocean Moon Glint and City Night Lights in 4K UHD',
+      author: 'NASA Johnson',
+      license: 'Public domain',
+      source: 'https://commons.wikimedia.org/wiki/File:Ocean_Moon_Glint_and_City_Night_Lights_in_4K_UHD.webm',
+    },
+    uri: 'https://upload.wikimedia.org/wikipedia/commons/thumb/f/fb/Ocean_Moon_Glint_and_City_Night_Lights_in_4K_UHD.webm/1280px--Ocean_Moon_Glint_and_City_Night_Lights_in_4K_UHD.webm.jpg',
+    title: 'Ocean Moon Glint and City Night Lights in 4K UHD (first frame)',
+    author: 'NASA Johnson',
+    license: 'Public domain',
+    source: 'https://commons.wikimedia.org/wiki/File:Ocean_Moon_Glint_and_City_Night_Lights_in_4K_UHD.webm',
+  },
+  vortex: {
+    id: 'vortex',
+    video: {
+      // True 4K (3840 x 2160, VP9), the file as its author uploaded it.
+      uri: 'https://upload.wikimedia.org/wikipedia/commons/6/63/02-14-15-May-2020-Trails-Cumulative_nX.webm',
+      // If a phone's decoder won't take 4K, the same clip one step down.
+      fallback: 'https://upload.wikimedia.org/wikipedia/commons/transcoded/6/63/02-14-15-May-2020-Trails-Cumulative_nX.webm/02-14-15-May-2020-Trails-Cumulative_nX.webm.1080p.vp9.webm',
+      ios: 'https://upload.wikimedia.org/wikipedia/commons/transcoded/6/63/02-14-15-May-2020-Trails-Cumulative_nX.webm/02-14-15-May-2020-Trails-Cumulative_nX.webm.360p.mpeg4.mov',
+      title: 'Star trails, 14-15 May 2020 (cumulative)',
+      author: 'PsamatheM',
+      license: 'CC BY-SA 4.0',
+      source: 'https://commons.wikimedia.org/wiki/File:02-14-15-May-2020-Trails-Cumulative_nX.webm',
+    },
+    uri: 'https://upload.wikimedia.org/wikipedia/commons/thumb/6/63/02-14-15-May-2020-Trails-Cumulative_nX.webm/1280px--02-14-15-May-2020-Trails-Cumulative_nX.webm.jpg',
+    title: 'Star trails, 14-15 May 2020 (cumulative) (first frame)',
+    author: 'PsamatheM',
+    license: 'CC BY-SA 4.0',
+    source: 'https://commons.wikimedia.org/wiki/File:02-14-15-May-2020-Trails-Cumulative_nX.webm',
+  },
+  globe: {
+    id: 'globe',
+    video: {
+      // True 4K (3840 x 2160, VP9), the file as its author uploaded it.
+      uri: 'https://upload.wikimedia.org/wikipedia/commons/9/91/BlackMarble_2016_rotating_globe_at_night.webm',
+      // If a phone's decoder won't take 4K, the same clip one step down.
+      fallback: 'https://upload.wikimedia.org/wikipedia/commons/transcoded/9/91/BlackMarble_2016_rotating_globe_at_night.webm/BlackMarble_2016_rotating_globe_at_night.webm.1080p.vp9.webm',
+      ios: 'https://upload.wikimedia.org/wikipedia/commons/transcoded/9/91/BlackMarble_2016_rotating_globe_at_night.webm/BlackMarble_2016_rotating_globe_at_night.webm.360p.mpeg4.mov',
+      title: 'BlackMarble 2016 rotating globe at night',
+      author: "NASA's Goddard Space Flight Center / Miguel Román",
+      license: 'Public domain',
+      source: 'https://commons.wikimedia.org/wiki/File:BlackMarble_2016_rotating_globe_at_night.webm',
+    },
+    uri: 'https://upload.wikimedia.org/wikipedia/commons/thumb/9/91/BlackMarble_2016_rotating_globe_at_night.webm/1280px--BlackMarble_2016_rotating_globe_at_night.webm.jpg',
+    title: 'BlackMarble 2016 rotating globe at night (first frame)',
+    author: "NASA's Goddard Space Flight Center / Miguel Román",
+    license: 'Public domain',
+    source: 'https://commons.wikimedia.org/wiki/File:BlackMarble_2016_rotating_globe_at_night.webm',
+  },
+  perseids: {
+    id: 'perseids',
+    video: {
+      // True 4K (3840 x 2160, VP9), the file as its author uploaded it.
+      uri: 'https://upload.wikimedia.org/wikipedia/commons/8/8f/Perseid_shower_of_2023.webm',
+      // If a phone's decoder won't take 4K, the same clip one step down.
+      fallback: 'https://upload.wikimedia.org/wikipedia/commons/transcoded/8/8f/Perseid_shower_of_2023.webm/Perseid_shower_of_2023.webm.1080p.vp9.webm',
+      ios: 'https://upload.wikimedia.org/wikipedia/commons/transcoded/8/8f/Perseid_shower_of_2023.webm/Perseid_shower_of_2023.webm.360p.mpeg4.mov',
+      title: 'Perseid shower of 2023',
+      author: 'Horváth Csaba',
       license: 'CC BY 3.0',
-      source: 'https://commons.wikimedia.org/wiki/File:Milky_Way_Time-Lapse_Rework.webm',
+      source: 'https://commons.wikimedia.org/wiki/File:Perseid_shower_of_2023.webm',
     },
-    uri: 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d2/Milky_Way_Time-Lapse_Rework.webm/1280px--Milky_Way_Time-Lapse_Rework.webm.jpg',
-    title: 'Milky Way Time-Lapse Rework (first frame)',
-    author: 'GaryP',
+    uri: 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/8f/Perseid_shower_of_2023.webm/1280px--Perseid_shower_of_2023.webm.jpg',
+    title: 'Perseid shower of 2023 (first frame)',
+    author: 'Horváth Csaba',
     license: 'CC BY 3.0',
-    source: 'https://commons.wikimedia.org/wiki/File:Milky_Way_Time-Lapse_Rework.webm',
-  },
-  joshua: {
-    id: 'joshua',
-    video: {
-      uri: 'https://upload.wikimedia.org/wikipedia/commons/9/92/Milky_Way_over_a_Joshua_tree_%2830865856965%29.webm',
-      ios: 'https://upload.wikimedia.org/wikipedia/commons/transcoded/9/92/Milky_Way_over_a_Joshua_tree_%2830865856965%29.webm/Milky_Way_over_a_Joshua_tree_%2830865856965%29.webm.360p.mpeg4.mov',
-      title: 'Milky Way over a Joshua tree',
-      author: 'Joshua Tree National Park',
-      license: 'Public domain',
-      source: 'https://commons.wikimedia.org/wiki/File:Milky_Way_over_a_Joshua_tree_(30865856965).webm',
-    },
-    uri: 'https://upload.wikimedia.org/wikipedia/commons/thumb/9/92/Milky_Way_over_a_Joshua_tree_%2830865856965%29.webm/1280px--Milky_Way_over_a_Joshua_tree_%2830865856965%29.webm.jpg',
-    title: 'Milky Way over a Joshua tree (first frame)',
-    author: 'Joshua Tree National Park',
-    license: 'Public domain',
-    source: 'https://commons.wikimedia.org/wiki/File:Milky_Way_over_a_Joshua_tree_(30865856965).webm',
-  },
-  desert: {
-    id: 'desert',
-    video: {
-      uri: 'https://upload.wikimedia.org/wikipedia/commons/transcoded/5/57/Skull_Rock_Trail_at_night_%2830230498613%29.webm/Skull_Rock_Trail_at_night_%2830230498613%29.webm.1080p.vp9.webm',
-      ios: 'https://upload.wikimedia.org/wikipedia/commons/transcoded/5/57/Skull_Rock_Trail_at_night_%2830230498613%29.webm/Skull_Rock_Trail_at_night_%2830230498613%29.webm.360p.mpeg4.mov',
-      title: 'Skull Rock Trail at night',
-      author: 'Joshua Tree National Park',
-      license: 'Public domain',
-      source: 'https://commons.wikimedia.org/wiki/File:Skull_Rock_Trail_at_night_(30230498613).webm',
-    },
-    uri: 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/57/Skull_Rock_Trail_at_night_%2830230498613%29.webm/1280px--Skull_Rock_Trail_at_night_%2830230498613%29.webm.jpg',
-    title: 'Skull Rock Trail at night (first frame)',
-    author: 'Joshua Tree National Park',
-    license: 'Public domain',
-    source: 'https://commons.wikimedia.org/wiki/File:Skull_Rock_Trail_at_night_(30230498613).webm',
-  },
-  startrails: {
-    id: 'startrails',
-    video: {
-      uri: 'https://upload.wikimedia.org/wikipedia/commons/transcoded/6/64/Monument_Valley_Star_Trails_%28Video%29.webm/Monument_Valley_Star_Trails_%28Video%29.webm.1080p.vp9.webm',
-      ios: 'https://upload.wikimedia.org/wikipedia/commons/transcoded/6/64/Monument_Valley_Star_Trails_%28Video%29.webm/Monument_Valley_Star_Trails_%28Video%29.webm.360p.mpeg4.mov',
-      title: 'Monument Valley Star Trails',
-      author: 'Eric Kilby',
-      license: 'CC BY-SA 2.0',
-      source: 'https://commons.wikimedia.org/wiki/File:Monument_Valley_Star_Trails_(Video).webm',
-    },
-    uri: 'https://upload.wikimedia.org/wikipedia/commons/thumb/6/64/Monument_Valley_Star_Trails_%28Video%29.webm/1280px--Monument_Valley_Star_Trails_%28Video%29.webm.jpg',
-    title: 'Monument Valley Star Trails (first frame)',
-    author: 'Eric Kilby',
-    license: 'CC BY-SA 2.0',
-    source: 'https://commons.wikimedia.org/wiki/File:Monument_Valley_Star_Trails_(Video).webm',
+    source: 'https://commons.wikimedia.org/wiki/File:Perseid_shower_of_2023.webm',
   },
 };
 

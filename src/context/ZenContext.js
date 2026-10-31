@@ -19,15 +19,15 @@ const ZenContext = createContext(null);
  * - when the phone's screen turns off while the app is the one on screen,
  *   whether from the power button or the screen timing out: it opens as
  *   the screensaver ("ambient": the room, the clock, and the radio with its
- *   controls if it's playing). Waking it (a tap, or Back) returns to the
- *   exact tab you were on.
+ *   controls if it's playing). Waking it (a tap, or Back) goes to the Home
+ *   tab.
  *
  * Locked, the screensaver sits over the system lock screen (Android): it is
  * opened while the screen is off, so the next press of the power button
- * shows Zen at once rather than the lock screen. Waking it then asks for
- * the PIN or fingerprint first, and unlocking (fingerprint, face) wakes it
- * too; either way you land on the exact tab you locked the phone on, and
- * nothing but Zen is ever shown over the lock.
+ * shows Zen at once rather than the lock screen. Tapping it asks for the
+ * PIN or fingerprint first, then goes Home; unlocking with a fingerprint or
+ * face wakes it too, back on the exact tab you locked the phone on. Nothing
+ * but Zen is ever shown over the lock.
  *
  * Nothing else opens it. Leaving the app (home button, app switcher, a
  * permission dialog, opening Shazam) is not a lock: React Native's AppState
@@ -76,22 +76,26 @@ export function ZenProvider({ children }) {
   const overLock = useRef(false);
   const unlocking = useRef(false);
 
-  const leave = useCallback((toControls) => {
+  const leave = useCallback((toControls, toHome) => {
     setAmbient(false);
-    const back = toControls ? null : returnTo.current;
+    // A tap on the screensaver goes Home; unlocking with a fingerprint goes
+    // back to the tab you locked on; the sound button stays on Zen.
+    const back = toControls ? null : toHome ? 'Home' : returnTo.current;
     returnTo.current = null;
     setReturnTab(null);
     if (back && navigationRef.isReady() && currentTab() === 'Zen') goToTab(back);
   }, []);
 
   /**
-   * Ends the screensaver. Opened by a lock from another tab, it goes back
-   * there; opened on the Zen tab, it shows Zen's controls. With
-   * `{ toControls: true }` (the screensaver's soundscape button) it always
-   * stays on Zen with its controls. Over the lock screen, only once the
-   * phone is unlocked (cancelling stays on the screensaver).
+   * Ends the screensaver. With `{ toHome: true }` (a tap on the screensaver,
+   * or Back) it goes to the Home tab, whatever the phone was locked on. With
+   * `{ toControls: true }` (the screensaver's soundscape button) it stays on
+   * Zen with its controls. With neither (unlocking with a fingerprint or
+   * face) it goes back to the tab the phone was locked on; opened on the Zen
+   * tab, it shows Zen's controls. Over the lock screen, only once the phone
+   * is unlocked (cancelling stays on the screensaver).
    */
-  const wake = useCallback(async ({ toControls = false } = {}) => {
+  const wake = useCallback(async ({ toControls = false, toHome = false } = {}) => {
     if (overLock.current) {
       if (unlocking.current) return;
       unlocking.current = true;
@@ -100,7 +104,7 @@ export function ZenProvider({ children }) {
       if (!ok) return;
       overLock.current = false;
     }
-    safely('zen leave', () => leave(toControls));
+    safely('zen leave', () => leave(toControls, toHome));
   }, [leave]);
 
   // Whether the app is on screen, and when it last stopped being.

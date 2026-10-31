@@ -17,6 +17,10 @@ import { colors, fonts, radius, space, type } from '../../theme';
 // +15 dB), and above it the extra that modules/boa-eq adds past that
 // ceiling: up to 12 dB more bass and 6 dB more treble.
 const PAST = { bass: 12, treble: 6 };
+// Loudness and Clear Vocals: off at 0, then up to this many dB at the top (the
+// most Loudness adds on top of everything else, and the lift at the voice's
+// presence).
+const BOOSTED = { loudness: 12, vocals: 9 };
 const BELOW = 15;
 const STEPS = 30;
 const snap = (v) => Math.round(v * STEPS) / STEPS;
@@ -29,8 +33,17 @@ export const readout = (v, kind) => {
   return n === 0 ? 'Signature' : `${n > 0 ? '+' : ''}${n} dB`;
 };
 
+/** Loudness and Clear Vocals: Off, or the dB they add. */
+export const boostReadout = (v, kind) => {
+  if (v <= 0) return 'Off';
+  return `+${Math.max(1, Math.round(v * BOOSTED[kind]))} dB`;
+};
+
+// Where the sound is going, when that is one the sound is boosted for.
+const ROUTES = { car: 'CAR', bluetooth: 'BLUETOOTH' };
+
 function useEq() {
-  const [s, setS] = useState(() => ({ settings: eq.getSettings(), active: false, supported: eq.isSupported }));
+  const [s, setS] = useState(() => ({ settings: eq.getSettings(), active: false, supported: eq.isSupported, route: eq.getRoute() }));
   useEffect(() => eq.subscribe(setS), []);
   return s;
 }
@@ -42,7 +55,7 @@ function useEq() {
  * let go through onCommit. A change from elsewhere (a preset, a saved value)
  * moves it too, unless you're holding it.
  */
-function Band({ label, kind, value, onPreview, onCommit, locked, testID }) {
+function Band({ label, kind, value, onPreview, onCommit, locked, testID, minimum = -1, scale = ['FLAT', 'BOA SIGNATURE', 'MAX'], tag = 'PAST STOCK', format = readout }) {
   const [shown, setShown] = useState(value);
   const dragging = useRef(false);
   const last = useRef(0);
@@ -69,7 +82,7 @@ function Band({ label, kind, value, onPreview, onCommit, locked, testID }) {
   };
   // Past Signature, past what the phone's own Equalizer can do: the card lights gold.
   const past = shown > 0;
-  const text = readout(shown, kind);
+  const text = format(shown, kind);
   return (
     <View style={[styles.band, past && styles.bandPast]} testID={`${testID}-card`}>
       {past ? <LinearGradient colors={['rgba(226,168,75,0.16)', 'rgba(226,168,75,0)']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={StyleSheet.absoluteFill} /> : null}
@@ -77,16 +90,16 @@ function Band({ label, kind, value, onPreview, onCommit, locked, testID }) {
         <Text style={styles.bandLabel}>{label}</Text>
         {past ? (
           <View style={styles.pastTag} testID={`${testID}-past`}>
-            <Text style={styles.pastText}>PAST STOCK</Text>
+            <Text style={styles.pastText}>{tag}</Text>
           </View>
         ) : null}
-        <Text style={[styles.bandValue, shown <= -1 && { color: colors.textMuted }]} testID={`${testID}-value`}>
+        <Text style={[styles.bandValue, shown <= minimum && { color: colors.textMuted }]} testID={`${testID}-value`}>
           {text}
         </Text>
       </View>
       <BoaSlider
         style={styles.slider}
-        minimumValue={-1}
+        minimumValue={minimum}
         maximumValue={1}
         step={1 / STEPS}
         value={shown}
@@ -99,9 +112,11 @@ function Band({ label, kind, value, onPreview, onCommit, locked, testID }) {
         testID={testID}
       />
       <View style={styles.scale}>
-        <Text style={styles.scaleText}>FLAT</Text>
-        <Text style={[styles.scaleText, { color: colors.gold }]}>BOA SIGNATURE</Text>
-        <Text style={styles.scaleText}>MAX</Text>
+        {scale.map((t, i) => (
+          <Text key={t} style={[styles.scaleText, scale.length === 3 && i === 1 && { color: colors.gold }]}>
+            {t}
+          </Text>
+        ))}
       </View>
     </View>
   );
@@ -114,7 +129,7 @@ function Band({ label, kind, value, onPreview, onCommit, locked, testID }) {
  */
 export default function EqualizerSheet({ open, onClose }) {
   const { hasPremium, checked, requirePremium } = usePremium();
-  const { settings, active, supported } = useEq();
+  const { settings, active, supported, route } = useEq();
   // Never shown locked while the answer is still coming (an admin opening
   // the app straight onto Radio would otherwise see it flash).
   const locked = checked && !hasPremium;
@@ -129,6 +144,12 @@ export default function EqualizerSheet({ open, onClose }) {
             <Slate dot>BOA Hi-Fi</Slate>
             <Text style={[type.title, { marginTop: space.xs }]}>Sound</Text>
           </View>
+          {hasPremium && supported && settings.link && ROUTES[route] ? (
+            <View style={[styles.live, styles.route]} testID="eq-route">
+              <Ionicons name={route === 'car' ? 'car-sport' : 'bluetooth'} size={11} color={colors.gold} />
+              <Text style={[styles.liveText, { color: colors.gold }]}>{ROUTES[route]} BOOST</Text>
+            </View>
+          ) : null}
           {hasPremium && supported ? (
             <View style={[styles.live, !active && { opacity: 0.5 }]} testID="eq-live">
               <View style={[styles.liveDot, { backgroundColor: active ? colors.live : colors.textFaint }]} />
@@ -148,7 +169,8 @@ export default function EqualizerSheet({ open, onClose }) {
                   disabled={locked}
                   onPress={() => {
                     haptics.selection();
-                    eq.setSettings(p.settings);
+                    // A preset shapes the sound; the Bluetooth switch is its own choice.
+                    eq.setSettings({ ...p.settings, link: settings.link });
                   }}
                   accessibilityRole="radio"
                   accessibilityState={{ checked: on, disabled: locked }}
@@ -163,6 +185,33 @@ export default function EqualizerSheet({ open, onClose }) {
 
           <Band label="Bass" kind="bass" value={settings.bass} onPreview={(v) => eq.preview({ bass: v })} onCommit={(v) => eq.setSettings({ bass: v })} locked={locked} testID="eq-bass" />
           <Band label="Treble" kind="treble" value={settings.treble} onPreview={(v) => eq.preview({ treble: v })} onCommit={(v) => eq.setSettings({ treble: v })} locked={locked} testID="eq-treble" />
+
+          <Band
+            label="Loudness"
+            kind="loudness"
+            value={settings.loudness}
+            minimum={0}
+            scale={['OFF', 'MAX']}
+            tag="BOOSTED"
+            format={boostReadout}
+            onPreview={(v) => eq.preview({ loudness: v })}
+            onCommit={(v) => eq.setSettings({ loudness: v })}
+            locked={locked}
+            testID="eq-loudness"
+          />
+          <Band
+            label="Clear Vocals"
+            kind="vocals"
+            value={settings.vocals}
+            minimum={0}
+            scale={['OFF', 'MAX']}
+            tag="CLEAR"
+            format={boostReadout}
+            onPreview={(v) => eq.preview({ vocals: v })}
+            onCommit={(v) => eq.setSettings({ vocals: v })}
+            locked={locked}
+            testID="eq-vocals"
+          />
 
           <View style={styles.spatial}>
             <View style={styles.spatialIcon}>
@@ -184,6 +233,17 @@ export default function EqualizerSheet({ open, onClose }) {
               <Text style={styles.note}>The lows pushed past stock and an 18 dB louder ceiling. Mind your ears.</Text>
             </View>
             <Toggle value={!!settings.boost} onChange={(v) => !locked && eq.setSettings({ boost: v })} label="Bass Boost" testID="eq-boost" />
+          </View>
+
+          <View style={styles.spatial}>
+            <View style={styles.spatialIcon}>
+              <Ionicons name="bluetooth" size={18} color={colors.gold} />
+            </View>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={styles.bandLabel}>Bluetooth & Car Boost</Text>
+              <Text style={styles.note}>Connect to Bluetooth, speakers or a car and the loudness, bass and surround go to the maximum. Mind your ears.</Text>
+            </View>
+            <Toggle value={settings.link} onChange={(v) => !locked && eq.setSettings({ link: v })} label="Bluetooth and Car Boost" testID="eq-link" />
           </View>
 
           {locked ? (
@@ -229,6 +289,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   liveDot: { width: 6, height: 6, borderRadius: 3 },
+  route: { marginRight: 6, borderColor: 'rgba(226,168,75,0.55)' },
   liveText: { fontFamily: fonts.mono, fontSize: 9.5, letterSpacing: 1.4, color: colors.textMuted },
   presets: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, marginBottom: space.md },
   preset: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: radius.pill, backgroundColor: 'rgba(18,18,22,0.7)', borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(226,168,75,0.4)' },

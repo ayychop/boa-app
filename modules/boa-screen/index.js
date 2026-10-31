@@ -26,20 +26,6 @@ export function isScreenOn() {
   }
 }
 
-/**
- * Hides (true) or brings back (false) the system navigation bar: the Zen
- * screensaver is the whole screen, with no dark bar across its foot. False
- * where it isn't available. Never throws.
- */
-export async function setImmersive(on) {
-  if (!native?.setImmersive) return false;
-  try {
-    return await native.setImmersive(!!on);
-  } catch {
-    return false;
-  }
-}
-
 /** Whether the system lock screen is up. */
 export function isLocked() {
   try {

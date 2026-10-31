@@ -1,5 +1,5 @@
 import { Component, useEffect, useRef, useState } from 'react';
-import { BackHandler, Image, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { AppState, BackHandler, Image, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { setStatusBarHidden } from 'expo-status-bar';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import { useVideoPlayer, VideoView } from 'expo-video';
@@ -15,6 +15,7 @@ import Animated, {
   FadeIn,
   FadeInDown,
   useAnimatedStyle,
+  useFrameCallback,
   useSharedValue,
   withDelay,
   withSpring,
@@ -34,10 +35,11 @@ import { categoryOf, MEDIA_HEADERS, SCENES, SLEEP_TIMERS, soundscapeById, ZEN_CA
 import useActiveAudio from '../hooks/useActiveAudio';
 import * as ambientAudio from '../audio/ambient';
 import { cachedSource, discard, sweep } from '../utils/mediaCache';
-import { safely } from '../utils/safely';
+import { guarded, safely } from '../utils/safely';
 import useScreenAwake from '../hooks/useScreenAwake';
 import useSettled from '../hooks/useSettled';
-import { setImmersive } from '../../modules/boa-screen';
+import { hideNavBar, showNavBar } from '../utils/navBar';
+import { addScreenListener } from '../../modules/boa-screen';
 import { haptics } from '../utils/haptics';
 import { shiftHex, withAlpha } from '../utils/color';
 import { startLoop } from '../utils/loop';
@@ -71,26 +73,47 @@ const DRIFT_LOOP = 180000;
 const KEEP_AWAKE_TAG = 'boa-zen';
 // The screensaver's radio card, and what each tab is called on its button.
 const RADIO_CARD = 72;
-const WAKE_HINT = 'Tap to go back to BOA HUB';
+const WAKE_HINT = 'Tap anywhere to go home';
 
 // Re-renders on the minute, not every second: the sweep under the clock
-// shows the seconds, on the UI thread.
+// shows the seconds, on the UI thread. A timer that was due while the screen
+// was off or the app was away fires late (or not before the phone is picked
+// up), so coming back to the app, or the screen lighting, brings the clock
+// up to date at once and starts the next minute's timer from there.
 function useMinute() {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
     let id;
+    let alive = true;
     const schedule = () => {
+      clearTimeout(id);
       const d = new Date();
       id = setTimeout(
         () => {
+          if (!alive) return;
           setNow(new Date());
           schedule();
         },
         60000 - (d.getSeconds() * 1000 + d.getMilliseconds()) + 20,
       );
     };
+    const catchUp = () => {
+      if (!alive) return;
+      setNow((prev) => {
+        const next = new Date();
+        return prev.getMinutes() === next.getMinutes() && next - prev < 60000 ? prev : next;
+      });
+      schedule();
+    };
     schedule();
-    return () => clearTimeout(id);
+    const appSub = safely('clock app state', () => AppState.addEventListener('change', guarded('clock app state', (state) => state === 'active' && catchUp())));
+    const screenOff = safely('clock screen listener', () => addScreenListener(guarded('clock screen', (state) => (state === 'on' || state === 'unlocked') && catchUp())));
+    return () => {
+      alive = false;
+      clearTimeout(id);
+      safely('clock app state remove', () => appSub?.remove());
+      safely('clock screen listener remove', () => screenOff?.());
+    };
   }, []);
   return now;
 }
@@ -266,6 +289,12 @@ const VIDEO_FADE_MS = 1800;
 // only gets its video once the radio has stayed off this long.
 const VIDEO_SETTLE_MS = 500;
 
+/** The files a scene's video can be played from, best first. */
+export function videoFiles(scene) {
+  if (Platform.OS === 'ios') return [scene.video.ios];
+  return [scene.video.uri, scene.video.fallback].filter(Boolean);
+}
+
 /**
  * Playback settings, one at a time and each guarded, so a property the
  * platform doesn't have can't stop the ones after it. The first three come
@@ -305,7 +334,7 @@ function configureVideoPlayer(p) {
  * cached file deleted) so the photograph carries on and the next try starts
  * from a clean copy.
  */
-function SceneVideo({ scene, running, onShown }) {
+function SceneVideo({ scene, running, onShown, height }) {
   const shown = useSharedValue(0);
   const alive = useRef(true);
   useEffect(() => {
@@ -318,6 +347,13 @@ function SceneVideo({ scene, running, onShown }) {
   const [armed, setArmed] = useState(false);
   const [source, setSource] = useState(null);
   const [failed, setFailed] = useState(false);
+  // Which file to play: the best one first (4K), then the step down if this
+  // phone's decoder refuses it. Only the last refusal ends the video.
+  const files = videoFiles(scene);
+  const [tier, setTier] = useState(0);
+  const tierRef = useRef(0);
+  tierRef.current = tier;
+  const lastTier = files.length - 1;
   const runningRef = useRef(running);
   runningRef.current = running;
   const framed = useRef(false);
@@ -332,7 +368,7 @@ function SceneVideo({ scene, running, onShown }) {
     if (!armed) return undefined;
     let live = true;
     sweepOldVideos();
-    const uri = Platform.OS === 'ios' ? scene.video.ios : scene.video.uri;
+    const uri = files[Math.min(tier, lastTier)];
     const ext = Platform.OS === 'ios' ? 'mov' : 'webm';
     // Named after the address too, so a new (sharper) video for a scene is
     // downloaded rather than the old cached one played.
@@ -344,7 +380,8 @@ function SceneVideo({ scene, running, onShown }) {
     return () => {
       live = false;
     };
-  }, [armed, scene]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [armed, scene, tier]);
 
   // A decoder that refuses the file: drop the video, keep the photograph,
   // and delete the cached copy so a bad download isn't replayed for ever.
@@ -352,15 +389,21 @@ function SceneVideo({ scene, running, onShown }) {
     const sub = safely('video status listener', () =>
       player.addListener('statusChange', (e) => {
         if (e?.status !== 'error' || !alive.current) return;
-        console.warn(`[zen] video ${scene.id} was refused by the decoder`, e?.error?.message ?? '');
+        console.warn(`[zen] video ${scene.id} (file ${tierRef.current + 1} of ${lastTier + 1}) was refused by the decoder`, e?.error?.message ?? '');
         if (cachedName.current) discard('scenes', cachedName.current);
-        setFailed(true);
+        if (tierRef.current < lastTier) {
+          // Try the step down (a phone that can't decode 4K plays 1080p).
+          setSource(null);
+          setTier(tierRef.current + 1);
+        } else {
+          setFailed(true);
+        }
       }),
     );
     return () => {
       safely('video status listener remove', () => sub?.remove?.());
     };
-  }, [player, scene.id]);
+  }, [player, scene.id, lastTier]);
 
   useEffect(() => {
     if (!source || failed) return;
@@ -390,8 +433,12 @@ function SceneVideo({ scene, running, onShown }) {
 
   const style = useAnimatedStyle(() => ({ opacity: shown.value }));
   if (failed) return null;
+  // A clip with a frame baked into it (black bars, a border) is enlarged until
+  // that is off screen (see SCENES.night).
+  const frame = scene.video.frame;
+  const cropped = frame ? { transform: [{ translateY: frame.shift * height }, { scale: frame.zoom }] } : null;
   return (
-    <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, style]} testID={`zen-video-${scene.id}`}>
+    <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, cropped, style]} testID={`zen-video-${scene.id}`}>
       <LayerBoundary>
         <VideoView
           player={player}
@@ -446,7 +493,7 @@ function SceneLayer({ scene, newest, width, height, running, withVideo, onCovere
   return (
     <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, style]}>
       <ScenePhoto scene={scene} width={width} height={height} running={running && !(covered && showing)} />
-      {showing && <SceneVideo scene={scene} running={running} onShown={cover} />}
+      {showing && <SceneVideo scene={scene} running={running} onShown={cover} height={height} />}
     </Animated.View>
   );
 }
@@ -497,22 +544,45 @@ function Atmosphere({ sceneId, width, height, running, withVideo = true, ambient
   );
 }
 
+// How often the sweep is redrawn: about 20 times a second is far more than its
+// pace (a point or so every few hundred milliseconds) needs, and costs the UI
+// thread next to nothing. A phone that is warm, or set to reduce motion, still
+// shows the time passing, once a second: the sweep is the clock's seconds
+// hand, not decoration, so it is never held still.
+const SWEEP_STEP_MS = 50;
+const SWEEP_CALM_STEP_MS = 1000;
+
+/** How far through its minute a moment is (0 to 1): the sweep's whole truth. */
+export function minuteFraction(ms) {
+  'worklet';
+  return (ms % 60000) / 60000;
+}
+
 // A gold hairline that fills across each minute, with a bright bead riding
-// its leading edge. Runs on the UI thread from one timing per minute.
-function MinuteSweep({ now, width }) {
-  const reduceMotion = useReducedMotion();
-  const p = useSharedValue(0);
-  useEffect(() => {
-    const d = new Date();
-    const into = d.getSeconds() * 1000 + d.getMilliseconds();
-    p.value = into / 60000;
-    if (!reduceMotion) p.value = withTiming(1, { duration: Math.max(0, 60000 - into), easing: Easing.linear });
-    return () => cancelAnimation(p);
-  }, [now, reduceMotion, p]);
+// its leading edge. Its position is read from the wall clock on every frame
+// (never counted from when it started), so it can't fall behind or freeze:
+// a screen that dimmed, an app that was away, a timer that never fired or an
+// animation the system cancelled can't stop it, and the next frame is right
+// again. (A single one-minute timing, restarted by a timer, did stop: it sat
+// at the end of its run when the timer was late, and held still outright on
+// a phone that was warm or on Reduce Motion.)
+function MinuteSweep({ width }) {
+  const calm = useReducedMotion();
+  const p = useSharedValue(minuteFraction(Date.now()));
+  const last = useSharedValue(0);
+  const step = calm ? SWEEP_CALM_STEP_MS : SWEEP_STEP_MS;
+  useFrameCallback(() => {
+    'worklet';
+    const t = Date.now();
+    if (t - last.value < step) return;
+    last.value = t;
+    p.value = minuteFraction(t);
+  });
+  // The minute turning is instant: the hairline empties as the clock rolls over.
   const fill = useAnimatedStyle(() => ({ width: p.value * width }));
   const bead = useAnimatedStyle(() => ({ transform: [{ translateX: p.value * width - 3 }] }));
   return (
-    <View pointerEvents="none" style={[styles.sweep, { width }]}>
+    <View pointerEvents="none" style={[styles.sweep, { width }]} testID="zen-sweep">
       <Animated.View style={[styles.sweepFill, fill]} />
       <Animated.View style={[styles.bead, bead]} />
     </View>
@@ -587,7 +657,7 @@ function Clock({ width, height, compact, signed = false }) {
         <Digits time={time} size={clockSize} lineHeight={lineHeight} />
         {period ? <Text style={[styles.period, { fontSize: Math.round(clockSize * 0.24), bottom: Math.round(lineHeight * 0.16) }]}>{period}</Text> : null}
       </View>
-      <MinuteSweep now={now} width={Math.round(Math.min(clockSize * 1.8, width * 0.6))} />
+      <MinuteSweep width={Math.round(Math.min(clockSize * 1.8, width * 0.6))} />
       {signed ? (
         <View style={styles.mark} testID="zen-logo" accessibilityLabel="BOA Network" accessible>
           {/* A soft gold halo behind the wordmark, so it glows against the dark. */}
@@ -602,7 +672,7 @@ function Clock({ width, height, compact, signed = false }) {
 // What's on: the soundscape and/or the radio, and when it fades out.
 // With the radio card showing, the radio is left to it. On the screensaver
 // (`onOpenSound`) the soundscape is a button into the full Zen page.
-function NowLine({ sound, withRadio = true, onOpenSound }) {
+function NowLine({ sound, withRadio = true, withSound = true, onOpenSound }) {
   const { current, status, trackTitle } = usePlayer();
   const remaining = useSleepRemaining();
   const nowPlaying = useNowPlaying(current, current?.kind === 'radio');
@@ -610,7 +680,7 @@ function NowLine({ sound, withRadio = true, onOpenSound }) {
   // A paused station isn't "on": only a playing one gets a line.
   const radioOn = status === 'playing' || status === 'loading';
   const radioLine = current && withRadio && radioOn ? [podcast ? podcast.title : current.name, podcast ? current.name : trackTitle || nowPlaying].filter(Boolean).join(' · ') : null;
-  const scape = sound.id && sound.status !== 'idle' ? soundscapeById(sound.id) : null;
+  const scape = withSound && sound.id && sound.status !== 'idle' ? soundscapeById(sound.id) : null;
   const kind = scape ? categoryOf(scape.id) : null;
   const soundLine = scape ? `${kind.label} · ${scape.label}` : null;
   const asButton = !!onOpenSound && !!scape;
@@ -825,15 +895,17 @@ function Transport() {
 }
 
 /**
- * The screensaver's radio, while it plays: the station, what's on, and its
- * controls, so the radio can be paused or changed without waking Zen.
+ * The screensaver's media controls for the radio: the station, what's on (or
+ * that it is paused), and its controls, so the radio can be paused, played
+ * again or changed without waking Zen. On every screensaver, playing or not.
  */
 function RadioCard({ bare = false }) {
-  const { current, trackTitle } = usePlayer();
-  const nowPlaying = useNowPlaying(current, current?.kind === 'radio');
+  const { current, trackTitle, status } = usePlayer();
+  const radioOn = status === 'playing' || status === 'loading';
+  const nowPlaying = useNowPlaying(current, radioOn && current?.kind === 'radio');
   const podcast = current?.kind === 'podcast' ? podcastById(current.podcastId) : null;
   const title = podcast ? podcast.title : current.name;
-  const detail = podcast ? current.name : trackTitle || nowPlaying || 'Live on BOA Radio';
+  const detail = !radioOn ? 'Paused' : podcast ? current.name : trackTitle || nowPlaying || 'Live on BOA Radio';
   return (
     <View style={[styles.radioCard, bare && styles.radioCardBare]} testID="zen-radio-info">
       {current.kind === 'radio' ? <StationLogo station={current} size={44} rounded={22} fit="cover" /> : null}
@@ -846,6 +918,55 @@ function RadioCard({ bare = false }) {
         </Text>
       </View>
       <Transport />
+    </View>
+  );
+}
+
+/**
+ * The same controls for a soundscape, when there is no radio loaded: what is
+ * on, and play or pause. Its name is also the way into the full Zen page.
+ */
+function SoundCard({ sound, onOpen, bare = false }) {
+  const scape = soundscapeById(sound.id);
+  if (!scape) return null;
+  const kind = categoryOf(scape.id);
+  const on = sound.status === 'playing' || sound.status === 'loading';
+  return (
+    <View style={[styles.radioCard, bare && styles.radioCardBare]} testID="zen-sound-info">
+      <View style={styles.soundIcon}>
+        <Ionicons name={kind.icon} size={22} color={colors.text} />
+      </View>
+      <Pressable
+        onPress={() => {
+          haptics.selection();
+          onOpen();
+        }}
+        hitSlop={8}
+        style={styles.radioText}
+        accessibilityRole="button"
+        accessibilityLabel={`${kind.label}, ${scape.label}, ${on ? 'playing' : 'paused'}. Open Zen`}
+        testID="zen-screensaver-sound"
+      >
+        <Text style={styles.radioTitle} numberOfLines={1}>
+          {scape.label}
+        </Text>
+        <Text style={styles.radioDetail} numberOfLines={1}>
+          {kind.label} · {on ? 'Playing' : 'Paused'}
+        </Text>
+      </Pressable>
+      <View style={styles.transport}>
+        <GlassButton
+          label={on ? `Pause ${scape.label}` : `Play ${scape.label}`}
+          onPress={() => {
+            haptics.selection();
+            ambientAudio.toggle(scape.id);
+          }}
+          size={48}
+          primary
+        >
+          {sound.status === 'loading' ? <LoadingDots color={colors.bg} /> : <Ionicons name={on ? 'pause' : 'play'} size={20} color={colors.bg} style={on ? null : { marginLeft: 2 }} />}
+        </GlassButton>
+      </View>
     </View>
   );
 }
@@ -866,7 +987,7 @@ function ZenRoom() {
   const insets = useSafeAreaInsets();
   const reduceMotion = useReducedMotion();
   const focused = useIsFocused();
-  const { ambient, returnTab, wake } = useZen();
+  const { ambient, wake } = useZen();
   const sound = useAmbientAudio();
   const saver = useScreensaver();
   const saverDef = screensaverById(saver);
@@ -875,19 +996,17 @@ function ZenRoom() {
   const bottomSpace = useBottomSpace(space.md);
   const hint = useSharedValue(0);
 
-  // The radio card shows while the radio plays, and stays once shown, so
-  // a radio paused from the screensaver can be played again from it.
-  const [radioShown, setRadioShown] = useState(false);
-  useEffect(() => {
-    if (!ambient) setRadioShown(false);
-    else if (isPlaying && current) setRadioShown(true);
-  }, [ambient, isPlaying, current]);
+  // The media controls: while there is something to control (a station or
+  // an episode loaded, playing or paused, or a soundscape), they sit on the
+  // screensaver, whichever screensaver it is: the whole point is to pause or
+  // change what's on without leaving it. Nothing loaded, nothing shown.
+  const soundLoaded = !!sound.id && sound.status !== 'idle';
 
   // Back wakes the screensaver, like a tap, instead of leaving the app.
   useEffect(() => {
     if (!focused || !ambient) return;
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      wake();
+      wake({ toHome: true });
       return true;
     });
     return () => sub.remove();
@@ -897,18 +1016,6 @@ function ZenRoom() {
     hint.value = ambient ? withDelay(1400, withSequence(withTiming(1, { duration: 1200 }), withDelay(5000, withTiming(0.35, { duration: 1500 })))) : withTiming(0, { duration: 200 });
     return () => cancelAnimation(hint);
   }, [ambient, hint]);
-
-  // The screensaver is the whole screen: the system navigation bar (whose
-  // dark translucent scrim is the "bar" across the foot of the picture) goes
-  // too, and comes back the moment the screensaver ends, the tab is left or
-  // this screen unmounts. Never throws.
-  useEffect(() => {
-    if (!focused || !ambient) return undefined;
-    setImmersive(true);
-    return () => {
-      setImmersive(false);
-    };
-  }, [focused, ambient]);
 
   // The screensaver hides the status bar.
   useEffect(() => {
@@ -959,6 +1066,23 @@ function ZenRoom() {
   // it); it is never started for a screen that is off.
   const awake = useScreenAwake();
   const videoOk = useSettled(focused && awake && !isPlaying, VIDEO_SETTLE_MS);
+
+  // The screensaver is the whole screen: the system navigation bar (the three
+  // buttons or the gesture pill, on a dark translucent scrim) is hidden while
+  // it is up, and comes back the moment the screensaver ends, the tab is left
+  // or this screen unmounts. Android can bring the bar back by itself when
+  // the screen has been off or the app has been away, so it is asked again
+  // each time the screen is awake once more. Never throws.
+  useEffect(() => {
+    if (!focused || !ambient) return undefined;
+    hideNavBar();
+    return () => {
+      showNavBar();
+    };
+  }, [focused, ambient]);
+  useEffect(() => {
+    if (focused && ambient && awake) hideNavBar();
+  }, [focused, ambient, awake]);
   const short = height < 500;
   const top = Math.max(insets.top, space.lg);
   // Controls sit above the tab bar (and mini player); the screensaver has
@@ -966,8 +1090,8 @@ function ZenRoom() {
   const bottom = ambient ? Math.max(insets.bottom, space.lg) : bottomSpace;
   const edge = { left: space.xl, right: space.xl };
   const panelBeside = !ambient && short;
-  const radioCard = ambient && !!current && (isPlaying || radioShown);
-  const backTo = returnTab ? 'BOA HUB' : null;
+  const radioCard = ambient && !!current;
+  const soundCard = ambient && !radioCard && soundLoaded;
   // Tall enough for the soundscapes, the timer and the radio's controls
   // without scrolling.
   const panelHeight = short ? 0 : sound.id ? 460 : 400;
@@ -975,7 +1099,7 @@ function ZenRoom() {
     top: top + (ambient ? 0 : 56),
     // The screensaver centres the clock and the mark on the screen itself:
     // the same room above and below (the radio line floats over the foot).
-    bottom: ambient ? Math.max(top, short && radioCard ? bottom + RADIO_CARD : 0) : panelBeside ? bottom : bottom + panelHeight + space.md,
+    bottom: ambient ? Math.max(top, short && (radioCard || soundCard) ? bottom + RADIO_CARD : 0) : panelBeside ? bottom : bottom + panelHeight + space.md,
     left: 0,
     right: panelBeside ? width / 2 : 0,
   };
@@ -995,17 +1119,17 @@ function ZenRoom() {
       {ambient && (
         <Pressable
           style={StyleSheet.absoluteFill}
-          onPress={() => wake()}
+          onPress={() => wake({ toHome: true })}
           accessibilityRole="button"
-          accessibilityLabel="Wake Zen controls"
-          accessibilityHint={backTo ? `Goes back to ${backTo}` : undefined}
+          accessibilityLabel="Go to Home"
+          accessibilityHint="Closes the screensaver and opens the Home tab"
         />
       )}
 
       {/* Over the wake tap: the soundscape's button takes you into Zen. */}
       <View pointerEvents="box-none" style={[styles.clockArea, clockArea]}>
         <Clock width={clockW} height={clockH} compact={short} signed={ambient} />
-        <NowLine sound={sound} withRadio={!radioCard} onOpenSound={ambient ? () => wake({ toControls: true }) : undefined} />
+        <NowLine sound={sound} withRadio={!radioCard} withSound={!soundCard} onOpenSound={ambient ? () => wake({ toControls: true }) : undefined} />
       </View>
 
       {/* The controls only exist outside the screensaver, so screen readers
@@ -1049,19 +1173,20 @@ function ZenRoom() {
       )}
 
       {/* Over the wake tap, so its buttons work the radio instead. */}
-      {radioCard && (
+      {(radioCard || soundCard) && (
         <Animated.View
           entering={FadeIn.duration(reduceMotion ? 150 : 600)}
           pointerEvents="box-none"
           style={[styles.radioRow, edge, { bottom: bottom + (short ? 0 : 40) }]}
+          testID="zen-media-controls"
         >
-          <RadioCard bare />
+          {radioCard ? <RadioCard bare /> : <SoundCard sound={sound} bare onOpen={() => wake({ toControls: true })} />}
         </Animated.View>
       )}
 
       {ambient && !short && (
         <View pointerEvents="none" style={[styles.hintRow, edge, { bottom: bottom + space.md }]}>
-          <Animated.Text style={[styles.hint, hintStyle]}>{backTo ? WAKE_HINT : 'Tap anywhere for controls'}</Animated.Text>
+          <Animated.Text style={[styles.hint, hintStyle]}>{WAKE_HINT}</Animated.Text>
         </View>
       )}
     </View>
@@ -1229,7 +1354,8 @@ const styles = StyleSheet.create({
   },
   // No plate on the screensaver: the station sits straight on the room.
   radioCardBare: { backgroundColor: 'transparent', borderWidth: 0 },
-  radioText: { flex: 1, gap: 2 },
+  radioText: { flex: 1, gap: 2, justifyContent: 'center' },
+  soundIcon: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(243,239,232,0.1)' },
   radioTitle: { fontFamily: fonts.semibold, fontSize: 15, color: colors.text, letterSpacing: -0.2 },
   radioDetail: { fontFamily: fonts.medium, fontSize: 12.5, color: colors.textMuted },
   hintRow: { position: 'absolute', alignItems: 'center' },

@@ -10,23 +10,29 @@ import android.database.ContentObserver
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import android.media.AudioAttributes
+import android.media.AudioDeviceCallback
+import android.media.AudioDeviceInfo
+import android.media.AudioManager
 import android.media.audiofx.BassBoost
 import android.media.audiofx.DynamicsProcessing
 import android.media.audiofx.Equalizer
 import android.media.audiofx.LoudnessEnhancer
 import android.media.audiofx.Virtualizer
 import android.os.Build
+import android.os.Bundle
 import android.util.Log
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
+import kotlin.math.ln
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
 /**
- * BOA Hi-Fi: bass, treble, spatial sound and Bass Boost on the radio player. Android's
- * own audio effects, attached to the player's audio session (expo-audio
+ * BOA Hi-Fi: bass, treble, loudness, clear vocals, spatial sound and Bass Boost on the radio
+ * player. Android's own audio effects, attached to the player's audio session (expo-audio
  * exposes it as `audioSessionId`, see patches/expo-audio), so only BOA's
  * sound changes, not other apps'.
  *
@@ -40,21 +46,31 @@ import kotlin.math.sqrt
  *    float, with its own limiter, and LoudnessEnhancer lifts the volume
  *    further. A phone without DynamicsProcessing still gets the louder
  *    ceiling.
+ * Loudness (0 to 1) lifts the volume by up to LOUDNESS_SLIDER_MILLIBELS more,
+ * whatever the other sliders say. Clear Vocals (0 to 1) lifts the voice's
+ * presence (about 1 to 6 kHz, by up to VOCAL_DB) and clears the mud under it
+ * (about 200 to 400 Hz) so a voice cuts through a car or a crowded room.
  * Bass Boost holds the lows at least BOOST_BASS up and raises the ceiling
  * to BOOST_GAIN_MILLIBELS, party volume. LoudnessEnhancer is created last,
  * so its limiter sits at the end of the chain and catches every peak. A
  * phone that lacks an effect simply goes without it.
  *
- * In the car (Android Auto projecting, or the phone in car mode) the same
- * sliders sound bigger: a car's cabin and speakers swallow bass, so the
- * extra bass and treble past Signature is raised (CAR_EXTRA_*_DB, with the
- * sub-bass weighted up), the volume ceiling is lifted (CAR_EXTRA_GAIN), the
- * lows are held at least CAR_MIN_PAST past Signature unless the sliders are
- * flat, and the Virtualizer widens the stage all around the cabin. The
- * Equalizer itself can't go past the phone's own hardware range, so this is
- * all DynamicsProcessing and LoudnessEnhancer (its limiter still catches
- * every peak). The effects follow the car: plugging in or leaving re-applies
- * the last settings by itself.
+ * Where the sound is going changes how it is shaped (see [Profile]):
+ *  - a car (Android Auto projecting, or the phone in car mode), or
+ *  - Bluetooth (A2DP, LE Audio, hearing aids: headphones, speakers and
+ *    car stereos alike; Android can't tell which from the output alone).
+ * Both lose bass and treble on the way (a cabin swallows the lows; the
+ * Bluetooth codecs round off the top and bottom), so on either one the same
+ * sliders sound bigger: extra bass and treble past Signature (the sub-bass
+ * weighted up), the lows and highs held at least `minPast` past Signature
+ * unless the sliders are flat, the volume ceiling raised to at least the Bass
+ * Boost ceiling plus the route's own extra, Bass Boost at full strength and
+ * the Virtualizer widening the stage. The Equalizer itself can't go past the
+ * phone's own hardware range, so the extra is DynamicsProcessing and
+ * LoudnessEnhancer (its limiter still catches every peak). The effects follow
+ * the route: a car or a Bluetooth device connecting or leaving re-applies the
+ * last settings by itself, and tells JS which route it now is. The Bluetooth
+ * boost (car and Bluetooth both) can be switched off (`link`); Flat is always flat.
  */
 class BoaEqModule : Module() {
   private var session = 0
@@ -63,19 +79,38 @@ class BoaEqModule : Module() {
   private var bassBoost: BassBoost? = null
   private var virtualizer: Virtualizer? = null
   private var loudness: LoudnessEnhancer? = null
-  private var last: DoubleArray? = null // bass, treble, spatial (0/1), boost (0/1)
+  // bass, treble, spatial (0/1), boost (0/1), loudness, vocals, link (0/1)
+  private var last: DoubleArray? = null
   private var carWatch: ContentObserver? = null
   private var carReceiver: BroadcastReceiver? = null
+  private var deviceWatch: AudioDeviceCallback? = null
+  private var lastRoute: String? = null
+
+  /** How one kind of output is shaped, on top of the sliders. */
+  private class Profile(
+    val extraBassDb: Double,
+    val extraTrebleDb: Double,
+    val subWeight: Double,
+    val minPast: Double,
+    val extraGainMillibels: Int,
+    // Whether the sound is maxed out: Bass Boost at full strength, the volume
+    // ceiling at least BOOST_GAIN_MILLIBELS, the Virtualizer on.
+    val maxed: Boolean,
+  )
 
   override fun definition() = ModuleDefinition {
     Name("BoaEq")
 
+    Events("onRouteChange")
+
     // Returns whether any effect is now shaping the sound.
-    Function("apply") { sessionId: Int, bass: Double, treble: Double, spatial: Boolean, boost: Boolean ->
+    Function("apply") { sessionId: Int, bass: Double, treble: Double, spatial: Boolean, boost: Boolean, loudnessAmount: Double, vocals: Double, link: Boolean ->
       val b = bass.coerceIn(-1.0, 1.0)
       val t = treble.coerceIn(-1.0, 1.0)
-      last = doubleArrayOf(b, t, if (spatial) 1.0 else 0.0, if (boost) 1.0 else 0.0)
-      applyTo(sessionId, b, t, spatial, boost)
+      val l = loudnessAmount.coerceIn(0.0, 1.0)
+      val v = vocals.coerceIn(0.0, 1.0)
+      last = doubleArrayOf(b, t, if (spatial) 1.0 else 0.0, if (boost) 1.0 else 0.0, l, v, if (link) 1.0 else 0.0)
+      applyTo(sessionId, b, t, spatial, boost, l, v, link)
     }
 
     Function("release") {
@@ -87,17 +122,22 @@ class BoaEqModule : Module() {
       inCar()
     }
 
+    /** Where the sound is going: "car", "bluetooth", "wired" or "speaker". */
+    Function("route") {
+      routeName()
+    }
+
     OnCreate {
-      watchCar()
+      watchRoute()
     }
 
     OnDestroy {
-      unwatchCar()
+      unwatchRoute()
       releaseAll()
     }
   }
 
-  // ---- the car
+  // ---- where the sound is going
 
   private val ctx: Context?
     get() = appContext.reactContext
@@ -123,24 +163,78 @@ class BoaEqModule : Module() {
     return projecting(c) || carMode(c)
   }
 
-  // The car connecting or leaving re-applies the last settings, with the car's
-  // (or the phone's own) sound, without JS having to know.
+  private fun isBluetooth(type: Int): Boolean = type in BLUETOOTH_TYPES
+
+  private fun isWired(type: Int): Boolean = type in WIRED_TYPES
+
+  // The outputs media is going to. On Android 13+ that is the real route (a
+  // Bluetooth device that is connected but not in use doesn't count); before
+  // it, every connected output.
+  private fun outputs(c: Context): List<AudioDeviceInfo> {
+    val am = c.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return emptyList()
+    return try {
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        val attrs = AudioAttributes.Builder()
+          .setUsage(AudioAttributes.USAGE_MEDIA)
+          .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+          .build()
+        am.getAudioDevicesForAttributes(attrs)
+      } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+        am.getDevices(AudioManager.GET_DEVICES_OUTPUTS).toList()
+      } else {
+        emptyList()
+      }
+    } catch (_: Exception) {
+      emptyList()
+    }
+  }
+
+  private fun bluetoothOut(c: Context): Boolean = outputs(c).any { isBluetooth(it.type) }
+
+  private fun wiredOut(c: Context): Boolean = outputs(c).any { isWired(it.type) }
+
+  private fun routeName(): String {
+    val c = ctx ?: return "speaker"
+    return when {
+      inCar() -> "car"
+      bluetoothOut(c) -> "bluetooth"
+      wiredOut(c) -> "wired"
+      else -> "speaker"
+    }
+  }
+
+  // The car connecting or leaving, or a Bluetooth device (dis)connecting,
+  // re-applies the last settings with the new route's sound, without JS
+  // having to know, and tells JS which route it now is.
   private fun reapply() {
     val l = last ?: return
     if (session <= 0) return
     try {
-      applyTo(session, l[0], l[1], l[2] > 0, l[3] > 0)
+      applyTo(session, l[0], l[1], l[2] > 0, l[3] > 0, l[4], l[5], l[6] > 0)
     } catch (e: Exception) {
       Log.w(TAG, "re-apply: ${e.message}")
     }
   }
 
-  private fun watchCar() {
+  private fun routeChanged() {
+    reapply()
+    try {
+      val now = routeName()
+      if (now != lastRoute) {
+        lastRoute = now
+        sendEvent("onRouteChange", Bundle().apply { putString("route", now) })
+      }
+    } catch (e: Exception) {
+      Log.w(TAG, "route event: ${e.message}")
+    }
+  }
+
+  private fun watchRoute() {
     val c = ctx ?: return
-    if (carWatch != null) return
+    if (carWatch != null || deviceWatch != null) return
     val main = Handler(Looper.getMainLooper())
     val observer = object : ContentObserver(main) {
-      override fun onChange(selfChange: Boolean) = reapply()
+      override fun onChange(selfChange: Boolean) = routeChanged()
     }
     try {
       c.contentResolver.registerContentObserver(CAR_URI, false, observer)
@@ -149,7 +243,7 @@ class BoaEqModule : Module() {
       // Android Auto isn't installed or won't say: car mode below still works.
     }
     val receiver = object : BroadcastReceiver() {
-      override fun onReceive(context: Context, intent: Intent) = reapply()
+      override fun onReceive(context: Context, intent: Intent) = routeChanged()
     }
     val filter = IntentFilter().apply {
       addAction(UiModeManager.ACTION_ENTER_CAR_MODE)
@@ -161,20 +255,60 @@ class BoaEqModule : Module() {
       carReceiver = receiver
     } catch (_: Exception) {
     }
+    // Bluetooth (and any other output) connecting or leaving.
+    try {
+      val am = c.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+      if (am != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+        val callback = object : AudioDeviceCallback() {
+          override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>?) = routeChanged()
+          override fun onAudioDevicesRemoved(removedDevices: Array<out AudioDeviceInfo>?) = routeChanged()
+        }
+        am.registerAudioDeviceCallback(callback, main)
+        deviceWatch = callback
+      }
+    } catch (e: Exception) {
+      Log.w(TAG, "no output watch on this phone: ${e.message}")
+    }
   }
 
-  private fun unwatchCar() {
+  private fun unwatchRoute() {
     val c = ctx
     carWatch?.let { o -> try { c?.contentResolver?.unregisterContentObserver(o) } catch (_: Exception) {} }
     carReceiver?.let { r -> try { c?.unregisterReceiver(r) } catch (_: Exception) {} }
+    deviceWatch?.let { d ->
+      try {
+        (c?.getSystemService(Context.AUDIO_SERVICE) as? AudioManager)?.unregisterAudioDeviceCallback(d)
+      } catch (_: Exception) {
+      }
+    }
     carWatch = null
     carReceiver = null
+    deviceWatch = null
   }
 
+  // ---- the effects
+
   @Synchronized
-  private fun applyTo(sessionId: Int, bass: Double, treble: Double, spatial: Boolean, boost: Boolean): Boolean {
+  private fun applyTo(
+    sessionId: Int,
+    bass: Double,
+    treble: Double,
+    spatial: Boolean,
+    boost: Boolean,
+    loudnessSlider: Double,
+    vocals: Double,
+    link: Boolean,
+  ): Boolean {
     if (sessionId <= 0) return false
-    val car = inCar()
+    val c = ctx
+    // A car or Bluetooth is boosted unless that has been switched off (`link`).
+    val car = link && inCar()
+    val wireless = !car && link && c != null && bluetoothOut(c)
+    val profile = when {
+      car -> CAR
+      wireless -> BLUETOOTH
+      else -> PHONE
+    }
     if (sessionId != session) {
       releaseAll()
       session = sessionId
@@ -187,19 +321,21 @@ class BoaEqModule : Module() {
     // Bass Boost's lows: the slider's bass, never less than BOOST_BASS.
     val lows = if (boost) max(bass, BOOST_BASS) else bass
     val flat = lows <= -1.0 && treble <= -1.0
+    // Nothing asked for at all: every slider flat, no loudness, no voice.
+    val silent = flat && vocals <= 0.0 && loudnessSlider <= 0.0
     // How far each slider sits from flat to Signature (0 to 1), and past Signature (0 to 1).
     val lowsUpTo = 1 + min(lows, 0.0)
     val highsUpTo = 1 + min(treble, 0.0)
-    // In the car the sliders count as at least CAR_MIN_PAST past Signature
-    // (unless flat on that side), so even a phone-perfect setting gets the
-    // cabin's extra bass and treble.
-    val lowsPast = if (car && lows > -1.0) max(lows, CAR_MIN_PAST) else max(lows, 0.0)
-    val highsPast = if (car && treble > -1.0) max(treble, CAR_MIN_PAST) else max(treble, 0.0)
+    // On a car or Bluetooth the sliders count as at least minPast past
+    // Signature (unless flat on that side), so even a phone-perfect setting
+    // gets the extra bass and treble the route swallows.
+    val lowsPast = if (profile.minPast > 0 && lows > -1.0) max(lows, profile.minPast) else max(lows, 0.0)
+    val highsPast = if (profile.minPast > 0 && treble > -1.0) max(treble, profile.minPast) else max(treble, 0.0)
     var shaping = false
 
     equalizer?.let { eq ->
       try {
-        if (flat) {
+        if (flat && vocals <= 0.0) {
           eq.setEnabled(false)
         } else {
           // The phone's whole range, e.g. [-1500, 1500] millibels: Signature is its ceiling.
@@ -208,7 +344,7 @@ class BoaEqModule : Module() {
           for (b in 0 until eq.numberOfBands.toInt()) {
             val band = b.toShort()
             val hz = eq.getCenterFreq(band) / 1000.0
-            val level = (lowsUpTo * bassWeight(hz) + highsUpTo * trebleWeight(hz)) * up
+            val level = (lowsUpTo * bassWeight(hz) + highsUpTo * trebleWeight(hz) + vocals * VOCAL_EQ_SHARE * vocalShape(hz)) * up
             eq.setBandLevel(band, level.roundToInt().coerceIn(range[0].toInt(), range[1].toInt()).toShort())
           }
           eq.setEnabled(true)
@@ -222,22 +358,23 @@ class BoaEqModule : Module() {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
       dynamics?.let { dp ->
         try {
-          if (lowsPast <= 0 && highsPast <= 0) {
+          if (lowsPast <= 0 && highsPast <= 0 && vocals <= 0.0) {
             dp.setEnabled(false)
           } else {
-            val extraLows = lowsPast * (EXTRA_BASS_DB + if (car) CAR_EXTRA_BASS_DB else 0.0)
-            val extraHighs = highsPast * (EXTRA_TREBLE_DB + if (car) CAR_EXTRA_TREBLE_DB else 0.0)
+            val extraLows = lowsPast * (EXTRA_BASS_DB + profile.extraBassDb)
+            val extraHighs = highsPast * (EXTRA_TREBLE_DB + profile.extraTrebleDb)
+            val extraVoice = vocals * VOCAL_DB
             PRE_EQ_CUTOFFS.forEachIndexed { i, cutoff ->
               val hz = bandCentre(i)
-              // The sub-bass (under 120 Hz) is what a car's cabin loses first.
-              val sub = if (car && hz <= 120) CAR_SUB_WEIGHT else 1.0
-              val gain = (extraLows * bassWeight(hz) * sub + extraHighs * trebleWeight(hz)).toFloat()
+              // The sub-bass (under 120 Hz) is what a cabin, or a Bluetooth codec, loses first.
+              val sub = if (profile.subWeight > 1.0 && hz <= 120) profile.subWeight else 1.0
+              val gain = (extraLows * bassWeight(hz) * sub + extraHighs * trebleWeight(hz) + extraVoice * vocalShape(hz)).toFloat()
               dp.setPreEqBandAllChannelsTo(i, DynamicsProcessing.EqBand(true, cutoff, gain))
             }
             // Room for the extra before the limiter, so it grows the bass
             // and air rather than pumping everything else; LoudnessEnhancer
             // makes the level back up at the end of the chain.
-            dp.setInputGainAllChannelsTo(-(max(extraLows, extraHighs) * HEADROOM_SHARE).toFloat())
+            dp.setInputGainAllChannelsTo(-(max(max(extraLows, extraHighs), extraVoice) * HEADROOM_SHARE).toFloat())
             dp.setEnabled(true)
             shaping = true
           }
@@ -250,8 +387,10 @@ class BoaEqModule : Module() {
     bassBoost?.let { bb ->
       try {
         if (lowsUpTo > 0 && bb.strengthSupported) {
-          // Full strength (1000) from Signature up; fading to off at flat.
-          bb.setStrength((lowsUpTo * 1000).roundToInt().coerceIn(0, 1000).toShort())
+          // Full strength (1000) from Signature up (and always on a car or
+          // Bluetooth); fading to off at flat.
+          val strength = if (profile.maxed) 1000 else (lowsUpTo * 1000).roundToInt().coerceIn(0, 1000)
+          bb.setStrength(strength.toShort())
           bb.setEnabled(true)
           shaping = true
         } else {
@@ -269,9 +408,16 @@ class BoaEqModule : Module() {
         // on to MAX_SLIDER_GAIN at the top.
         val up = max(lowsUpTo, highsUpTo)
         val past = max(lowsPast, highsPast)
-        val base = if (boost) BOOST_GAIN_MILLIBELS else (up * SIGNATURE_GAIN_MILLIBELS + past * (MAX_SLIDER_GAIN_MILLIBELS - SIGNATURE_GAIN_MILLIBELS)).roundToInt()
-        // Louder in the car: a moving cabin is noisy. LoudnessEnhancer's limiter still holds the peaks.
-        val gain = if (car && base > 0) base + CAR_EXTRA_GAIN_MILLIBELS else base
+        val sliders = (up * SIGNATURE_GAIN_MILLIBELS + past * (MAX_SLIDER_GAIN_MILLIBELS - SIGNATURE_GAIN_MILLIBELS)).roundToInt()
+        var base = if (boost) BOOST_GAIN_MILLIBELS else sliders
+        // On a car or Bluetooth the ceiling is maxed out (unless flat): at
+        // least the Bass Boost ceiling, which the route's own extra then tops.
+        if (profile.maxed && !flat) base = max(base, BOOST_GAIN_MILLIBELS)
+        // Louder in the car or on Bluetooth: a moving cabin is noisy and a
+        // codec is quiet. LoudnessEnhancer's limiter still holds the peaks.
+        val routed = if (profile.extraGainMillibels > 0 && base > 0) base + profile.extraGainMillibels else base
+        // The Loudness slider, on top of everything, even with the rest flat.
+        val gain = routed + (loudnessSlider * LOUDNESS_SLIDER_MILLIBELS).roundToInt()
         if (gain > 0) {
           l.setTargetGain(gain)
           l.setEnabled(true)
@@ -286,8 +432,9 @@ class BoaEqModule : Module() {
 
     virtualizer?.let { v ->
       try {
-        // The car gets the wraparound stage whether or not Spatial is on.
-        if (spatial || car) {
+        // A car or Bluetooth gets the wraparound stage whether or not Spatial
+        // is on; flat stays flat.
+        if (spatial || (profile.maxed && !silent)) {
           if (v.strengthSupported) v.setStrength(1000)
           v.setEnabled(true)
           shaping = true
@@ -342,6 +489,20 @@ class BoaEqModule : Module() {
     else -> (hz - 1500) / 3500
   }
 
+  // What Clear Vocals does at each frequency: the mud under a voice cleared a
+  // little (negative), then the presence lifted most at 2.5 kHz, where
+  // consonants live, and tapering to nothing by 12 kHz. Straight lines
+  // between the points, on a log scale.
+  private fun vocalShape(hz: Double): Double {
+    if (hz <= VOCAL_HZ.first() || hz >= VOCAL_HZ.last()) return 0.0
+    var i = 1
+    while (i < VOCAL_HZ.size - 1 && hz > VOCAL_HZ[i]) i++
+    val lo = VOCAL_HZ[i - 1]
+    val hi = VOCAL_HZ[i]
+    val t = (ln(hz) - ln(lo)) / (ln(hi) - ln(lo))
+    return VOCAL_WEIGHT[i - 1] + (VOCAL_WEIGHT[i] - VOCAL_WEIGHT[i - 1]) * t
+  }
+
   private fun <T> make(what: String, create: () -> T): T? =
     try {
       create()
@@ -393,6 +554,15 @@ class BoaEqModule : Module() {
     // up to 14 dB at the top.
     const val SIGNATURE_GAIN_MILLIBELS = 600
     const val MAX_SLIDER_GAIN_MILLIBELS = 1400
+    // The Loudness slider: up to this much more, on top of everything else.
+    const val LOUDNESS_SLIDER_MILLIBELS = 1200
+    // Clear Vocals: up to this much lift at the voice's presence (DynamicsProcessing),
+    // and this share of the Equalizer's ceiling where a phone has no DynamicsProcessing.
+    const val VOCAL_DB = 9.0
+    private const val VOCAL_EQ_SHARE = 0.5
+    private val VOCAL_HZ = doubleArrayOf(150.0, 300.0, 500.0, 1000.0, 2500.0, 4500.0, 8000.0, 12000.0)
+    private val VOCAL_WEIGHT = doubleArrayOf(0.0, -0.35, 0.0, 0.6, 1.0, 0.8, 0.2, 0.0)
+
     // The car: more on top of all that (DynamicsProcessing and LoudnessEnhancer
     // only; the Equalizer is already at the phone's hardware ceiling).
     private const val CAR_MIN_PAST = 0.4
@@ -400,6 +570,35 @@ class BoaEqModule : Module() {
     const val CAR_EXTRA_TREBLE_DB = 3.0
     private const val CAR_SUB_WEIGHT = 1.35
     const val CAR_EXTRA_GAIN_MILLIBELS = 500
+    // Bluetooth: a codec rounds off the bottom and the top, so both are
+    // lifted, a little less than a cabin's worth.
+    private const val BT_MIN_PAST = 0.3
+    const val BT_EXTRA_BASS_DB = 4.0
+    const val BT_EXTRA_TREBLE_DB = 3.0
+    private const val BT_SUB_WEIGHT = 1.25
+    const val BT_EXTRA_GAIN_MILLIBELS = 400
+
+    private val PHONE = Profile(0.0, 0.0, 1.0, 0.0, 0, false)
+    private val CAR = Profile(CAR_EXTRA_BASS_DB, CAR_EXTRA_TREBLE_DB, CAR_SUB_WEIGHT, CAR_MIN_PAST, CAR_EXTRA_GAIN_MILLIBELS, true)
+    private val BLUETOOTH = Profile(BT_EXTRA_BASS_DB, BT_EXTRA_TREBLE_DB, BT_SUB_WEIGHT, BT_MIN_PAST, BT_EXTRA_GAIN_MILLIBELS, true)
+
+    // AudioDeviceInfo types: Bluetooth A2DP (8) and SCO (7), hearing aids
+    // (23), and LE Audio's headset (26), speaker (27) and broadcast (30);
+    // and wired: headset (3), headphones (4), USB headset (22).
+    private val BLUETOOTH_TYPES = setOf(
+      AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
+      AudioDeviceInfo.TYPE_BLUETOOTH_SCO,
+      23,
+      26,
+      27,
+      30,
+    )
+    private val WIRED_TYPES = setOf(
+      AudioDeviceInfo.TYPE_WIRED_HEADSET,
+      AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
+      AudioDeviceInfo.TYPE_USB_HEADSET,
+    )
+
     private val CAR_URI: Uri = Uri.parse("content://androidx.car.app.connection")
     private const val CAR_STATE = "CarConnectionState"
   }
