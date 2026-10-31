@@ -20,6 +20,7 @@ function subscribe(onChange) {
   };
 }
 const snapshot = () => thermal.isWarm();
+const hotSnapshot = () => thermal.isHot();
 
 /** Whether the phone is running warm: true from FAIR up. */
 export function useWarm() {
@@ -31,4 +32,23 @@ export default function useReducedMotion() {
   const system = useSystemReducedMotion();
   const warm = useWarm();
   return system || warm;
+}
+
+/** Whether the phone is properly hot (WARNING or CRITICAL), not merely warm. */
+export function useHot() {
+  return useSyncExternalStore(subscribe, hotSnapshot, hotSnapshot);
+}
+
+/**
+ * For motion that plays once and ends (a panel arriving, a button's ripple, a
+ * muted video that only has to hold): Reduce Motion, or a phone that is hot.
+ * Not merely warm: a phone on a charger or in the sun sits at "warm" all day,
+ * and gating a 400 ms entrance on that left the whole app without animation.
+ * Loops that run until stopped (smoke, grain, spinning records) keep using the
+ * stricter default above.
+ */
+export function useCalm() {
+  const system = useSystemReducedMotion();
+  const hot = useHot();
+  return system || hot;
 }

@@ -8,6 +8,13 @@ import { MEDIA_HEADERS } from '../data/sleep';
 // an 18-second video loop far more. If the download fails it returns the
 // remote uri with the headers instead, so playback still works. The browser
 // always streams.
+//
+// A download lands in `<name>.part` and is moved into place only when it has
+// finished, so a file in the cache is always a whole one. (On Android a
+// download that fails or is cut short, by the app being closed or the phone
+// losing signal, leaves a partly written file at its destination; played as
+// a video that is a corrupt stream the decoder can crash on, so the old
+// "if it's there, it's good" check was not safe.)
 const pending = new Map();
 
 function dir(folder) {
@@ -22,8 +29,9 @@ export function cachedSource(folder, name, uri) {
   if (pending.has(key)) return pending.get(key);
   const job = (async () => {
     try {
-      const file = new File(dir(folder), name);
-      if (!file.exists || !file.size) await File.downloadFileAsync(uri, file, { headers: MEDIA_HEADERS, idempotent: true });
+      const folderDir = dir(folder);
+      const file = new File(folderDir, name);
+      if (!file.exists || !file.size) await download(folderDir, file, name, uri);
       return { uri: file.uri };
     } catch (err) {
       console.warn(`[media] couldn't cache ${key}, streaming instead`, err?.message ?? err);
@@ -34,6 +42,41 @@ export function cachedSource(folder, name, uri) {
   // Only the in-flight download is shared; a later call checks the cache again.
   job.finally(() => pending.delete(key));
   return job;
+}
+
+/** Downloads to `<name>.part`, then moves the finished file into place. */
+async function download(folderDir, file, name, uri) {
+  const part = new File(folderDir, `${name}.part`);
+  if (part.exists) part.delete();
+  try {
+    await File.downloadFileAsync(uri, part, { headers: MEDIA_HEADERS, idempotent: true });
+    if (!part.exists || !part.size) throw new Error('empty download');
+    if (file.exists) file.delete();
+    await part.move(file);
+  } catch (err) {
+    // Never leave half a file behind.
+    try {
+      if (part.exists) part.delete();
+    } catch {}
+    throw err;
+  }
+}
+
+/** Removes files from the cache folder that fail `keep(name)`: old, unverified downloads. Best effort. */
+export function sweep(folder, keep) {
+  if (Platform.OS === 'web') return;
+  try {
+    const d = dir(folder);
+    if (typeof d.list !== 'function') return;
+    for (const entry of d.list()) {
+      const name = String(entry.uri).split('/').pop();
+      if (!keep(name)) {
+        try {
+          entry.delete();
+        } catch {}
+      }
+    }
+  } catch {}
 }
 
 /** The local uri if the file is already in the cache, else null. Synchronous. */

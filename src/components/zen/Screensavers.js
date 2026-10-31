@@ -1,11 +1,12 @@
 import { useEffect } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
 import Animated, { Easing, useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 import useReducedMotion from '../../hooks/useReducedMotion';
 import { startLoop } from '../../utils/loop';
 import { haptics } from '../../utils/haptics';
+import { SCENES } from '../../data/sleep';
 import { SCREENSAVERS, setScreensaver, useScreensaver } from '../../data/screensavers';
 import { colors, fonts, radius, space } from '../../theme';
 
@@ -142,7 +143,6 @@ export function SaverBackdrop({ id, width, height, running }) {
       {id === 'aurora' && <Aurora width={width} height={height} running={running} calm={calm} />}
       {id === 'halo' && <Halo width={width} height={height} running={running} calm={calm} />}
       {id === 'ember' && <Embers width={width} height={height} running={running} calm={calm} />}
-      {id !== 'midnight' && <Vignette />}
     </View>
   );
 }
@@ -176,7 +176,11 @@ export function ScreensaverPicker() {
               testID={`zen-saver-pick-${s.id}`}
               style={({ pressed }) => [styles.tile, on && styles.tileOn, pressed && { transform: [{ scale: 0.96 }] }]}
             >
-              <LinearGradient colors={s.swatch} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.swatch} />
+              <View style={styles.swatch}>
+                <LinearGradient colors={s.swatch} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+                {/* The two originals show their photograph; if it can't load, the swatch stays. */}
+                {s.scene && SCENES[s.scene]?.uri ? <Image source={{ uri: SCENES[s.scene].uri }} resizeMode="cover" style={StyleSheet.absoluteFill} fadeDuration={200} /> : null}
+              </View>
               <Text style={[styles.tileName, on && { color: colors.gold }]} numberOfLines={1}>
                 {s.name}
               </Text>
@@ -196,7 +200,7 @@ const styles = StyleSheet.create({
   tiles: { gap: space.sm, paddingTop: space.sm },
   tile: { width: 92, padding: 6, gap: 6, borderRadius: radius.lg, borderWidth: 1, borderColor: 'rgba(243,239,232,0.12)', backgroundColor: 'rgba(243,239,232,0.05)' },
   tileOn: { borderColor: colors.gold, backgroundColor: 'rgba(226,168,75,0.1)' },
-  swatch: { height: 52, borderRadius: radius.md },
+  swatch: { height: 52, borderRadius: radius.md, overflow: 'hidden' },
   tileName: { fontFamily: fonts.semibold, fontSize: 12, lineHeight: 17, color: colors.text, textAlign: 'center', paddingBottom: 1 },
   blurb: { fontFamily: fonts.medium, fontSize: 12, lineHeight: 17, color: colors.textMuted, marginTop: space.sm },
 });

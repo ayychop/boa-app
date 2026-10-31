@@ -80,6 +80,13 @@ object AlarmStore {
     return set
   }
 
+  /** Which look the alarm page wears (AlarmTheme ids); chosen in the app's Alarm Settings. */
+  fun theme(c: Context): String = prefs(c).getString("theme", AlarmTheme.DEFAULT) ?: AlarmTheme.DEFAULT
+
+  fun setTheme(c: Context, id: String) {
+    prefs(c).edit().putString("theme", AlarmTheme.byId(id).id).apply()
+  }
+
   /** The keys of every system alarm set, so the ones no longer wanted can be cancelled. */
   @Synchronized
   fun scheduledKeys(c: Context): Set<String> = prefs(c).getStringSet("scheduled", emptySet()) ?: emptySet()

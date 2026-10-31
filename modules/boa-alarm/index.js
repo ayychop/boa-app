@@ -65,6 +65,22 @@ export const snooze = () => {
   } catch {}
 };
 
+/** Which look the phone's alarm page wears (an id from src/data/alarmThemes.js). */
+export const setTheme = (id) => {
+  try {
+    native?.setTheme?.(id);
+  } catch {}
+};
+
+/** Shows the alarm page in a theme, over the app, so it can be seen before choosing it. False if it can't (or an alarm is ringing). */
+export function preview(id) {
+  try {
+    return !!native?.preview?.(id);
+  } catch {
+    return false;
+  }
+}
+
 /** Opens BOA's battery settings, where "Unrestricted" stops the phone putting the app to sleep. */
 export function openBatterySettings() {
   try {

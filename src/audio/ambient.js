@@ -56,8 +56,15 @@ function instantSource(soundscape) {
 }
 
 /** Downloads every soundscape in the background (the Zen tab calls this). */
+let warming = null;
 export function warmUp() {
-  return prefetch(SOUNDSCAPES.filter((s) => s.uri).map((s) => ({ folder: 'soundscapes', name: `${s.id}.mp3`, uri: s.uri })));
+  // One pass at a time: going into and out of Zen must not start another loop
+  // over all the sounds each time, nor leave several downloading at once.
+  if (warming) return warming;
+  warming = prefetch(SOUNDSCAPES.filter((s) => s.uri).map((s) => ({ folder: 'soundscapes', name: `${s.id}.mp3`, uri: s.uri }))).finally(() => {
+    warming = null;
+  });
+  return warming;
 }
 
 function stopFade() {

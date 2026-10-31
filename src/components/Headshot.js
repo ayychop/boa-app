@@ -20,7 +20,9 @@ function initials(name) {
 
 const AnimatedRect = Animated.createAnimatedComponent(Rect);
 // Clear air between the initials' area and the name plate under them.
-const PLATE_GAP = 18;
+const PLATE_GAP = 22;
+// A typical caption plate (kicker over a one-line name), before it is measured.
+const PLATE_GUESS = 62;
 // The sheen: one sweep across the letters, then a rest before the next.
 const SWEEP_MS = 1500;
 const REST_MS = 2800;
@@ -106,10 +108,16 @@ function GlassCaption({ kicker, title, highlight, compact, onHeight }) {
  * and smoke that fills the frame edge to edge at any size. Pass `caption`
  * ({ kicker, title, highlight }) to set it on a glass plate in the frame.
  */
-export default function Headshot({ person, width, ratio = 4 / 5, round = false, label = true, caption }) {
+export default function Headshot({ person, width, ratio = 4 / 5, round = false, label = true, caption, reserve = 0 }) {
   const height = round ? width : Math.round(width / ratio);
-  // The initials centre in the space above the caption plate.
-  const [plate, setPlate] = useState(0);
+  // The initials centre in the space above the caption plate. Until the plate
+  // has been measured, a typical one's height stands in for it, so the
+  // letters never start out under the name and then jump.
+  const [plate, setPlate] = useState(PLATE_GUESS);
+  // The room kept clear at the foot for a caption: our own glass plate, or
+  // `reserve` px for text the caller lays over the bottom of the frame.
+  const clear = round ? 0 : caption ? plate + PLATE_GAP : Math.max(0, reserve);
+  const room = Math.max(0, height - clear);
   return (
     <Panel shimmer={false}
       style={[
@@ -130,14 +138,15 @@ export default function Headshot({ person, width, ratio = 4 / 5, round = false, 
             style={StyleSheet.absoluteFill}
           />
           <Fog opacity={0.32} variant={person.name.length} />
-          <View style={[styles.center, caption && !round && { paddingBottom: plate + PLATE_GAP }]} accessible accessibilityLabel={initials(person.name)}>
+          <View style={[styles.center, clear > 0 && { paddingBottom: clear }]} accessible accessibilityLabel={initials(person.name)}>
             <StarInitials
               text={initials(person.name)}
               width={width}
-              height={caption && !round ? Math.max(0, height - plate - PLATE_GAP) : height}
-              // Never taller than the room above the plate (60% of it), so the letters can't reach the name.
-              fontSize={Math.min(width * (round ? 0.42 : 0.34), (caption && !round ? Math.max(0, height - plate - PLATE_GAP) : height) * 0.62)}
-              lift={caption && !round ? width * 0.05 + 4 : 0}
+              height={room}
+              // Never taller than the room above the name (60% of it), so the letters can't reach it.
+              fontSize={Math.min(width * (round ? 0.42 : 0.34), room * 0.6)}
+              // Raised a little above the middle of that room, clear of the name.
+              lift={clear > 0 ? width * 0.06 + 6 : 0}
               delay={(person.name.length % 7) * 260}
             />
           </View>

@@ -483,11 +483,16 @@ export function shapeConversation(c, myId, byId = {}) {
   };
 }
 
-/** The inbox's three filters: Primary and General are accepted chats, Requests are not. */
+/**
+ * The inbox's filters: Primary and General are accepted chats, Requests are
+ * not, and Schedule isn't a folder of chats at all but your upcoming calls
+ * (it has no unread count; `inboxOf` never returns it).
+ */
 export const INBOX_FILTERS = [
   { id: 'primary', label: 'Primary' },
   { id: 'general', label: 'General' },
   { id: 'requests', label: 'Requests' },
+  { id: 'schedule', label: 'Schedule' },
 ];
 
 /** Which filter a conversation shows under. */

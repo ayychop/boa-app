@@ -123,11 +123,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-end',
     paddingHorizontal: space.xl,
-    marginBottom: space.lg,
+    marginBottom: space.xl,
     gap: space.md,
   },
-  sectionTitle: { marginTop: space.md, lineHeight: 30, paddingBottom: 3 },
-  action: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingBottom: 3 },
+  // 21pt letters on a 34 line with 8 beneath: the tails of g, p and y have clear air
+  // all round (a 30 line with 3 under it still cut them on a phone).
+  sectionTitle: { marginTop: space.md, lineHeight: 34, paddingBottom: 8 },
+  action: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingBottom: 8 },
   actionText: { fontFamily: fonts.semibold, fontSize: 13, color: colors.gold },
 });
 

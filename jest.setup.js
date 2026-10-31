@@ -154,6 +154,13 @@ jest.mock('expo-file-system', () => {
       files.delete(this.uri);
       bytes.delete(this.uri);
     }
+    async move(dest) {
+      files.set(dest.uri, files.get(this.uri));
+      if (bytes.has(this.uri)) bytes.set(dest.uri, bytes.get(this.uri));
+      files.delete(this.uri);
+      bytes.delete(this.uri);
+      this.uri = dest.uri;
+    }
     create() {
       files.set(this.uri, 0);
     }
@@ -396,6 +403,8 @@ jest.mock('./modules/boa-alarm', () => {
     current: jest.fn(() => null),
     stop: jest.fn(),
     snooze: jest.fn(),
+    setTheme: jest.fn(),
+    preview: jest.fn(() => true),
     openBatterySettings: jest.fn(() => true),
     addAlarmListener: jest.fn((fn) => {
       listeners.add(fn);

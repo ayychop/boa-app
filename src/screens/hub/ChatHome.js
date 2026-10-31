@@ -3,7 +3,7 @@ import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import Animated, { FadeIn, FadeInDown, FadeInRight } from 'react-native-reanimated';
+import Animated, { FadeInDown, FadeInRight } from 'react-native-reanimated';
 import { useHub } from '../../context/HubContext';
 import * as hub from '../../api/hub';
 import useConversations from '../../hooks/useConversations';
@@ -14,6 +14,8 @@ import DailySpark from '../../components/DailySpark';
 import Headshot from '../../components/Headshot';
 import { ThreadRow } from './HubChatsScreen';
 import ContactSheet from '../../components/hub/ContactSheet';
+import ScheduleList from '../../components/hub/ScheduleList';
+import Panel from '../../components/Panel';
 import { nameFor, useContactBook } from '../../chat/contacts';
 import useDayOne from '../../hooks/useDayOne';
 import { CardRowSkeleton, ThreadSkeleton } from '../../components/Skeleton';
@@ -90,6 +92,10 @@ function PersonCard({ person, online, onPress, index }) {
   );
 }
 
+// The foot of a talent card kept clear of the initials: the name, up to two
+// lines of role, and the space around them.
+const TALENT_TEXT = 82;
+
 // BOA's own roster, as tall portrait cards.
 function TalentCard({ person, onPress, index }) {
   return (
@@ -105,7 +111,7 @@ function TalentCard({ person, onPress, index }) {
         style={({ pressed }) => [styles.talent, pressed && { transform: [{ scale: 0.97 }] }]}
         testID={`pulse-talent-${person.id}`}
       >
-        <Headshot person={person} width={132} ratio={132 / 188} label={false} />
+        <Headshot person={person} width={132} ratio={132 / 188} label={false} reserve={TALENT_TEXT} />
         <LinearGradient colors={['rgba(5,5,6,0)', 'rgba(5,5,6,0.9)']} locations={[0.45, 1]} style={StyleSheet.absoluteFill} />
         <View style={styles.talentText}>
           <Text style={styles.personName} numberOfLines={1}>
@@ -121,8 +127,9 @@ function TalentCard({ person, onPress, index }) {
 }
 
 // A shortcut on dark glass: an icon in a gold ring, a name and a line.
-function Tool({ icon, title, detail, onPress, testID }) {
+function Tool({ icon, title, detail, onPress, testID, index = 0 }) {
   return (
+    <Panel index={index} style={styles.toolSlot}>
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
@@ -141,6 +148,7 @@ function Tool({ icon, title, detail, onPress, testID }) {
         {detail}
       </Text>
     </Pressable>
+    </Panel>
   );
 }
 
@@ -164,10 +172,10 @@ const EMPTY = {
   },
 };
 
-/** Primary, General and Requests: a gold pill slides under the one you're on. */
+/** Primary, General, Requests and Schedule: a gold pill marks the one you're on. */
 function InboxFilters({ value, onChange, counts }) {
   return (
-    <View style={styles.filters} accessibilityRole="tablist" testID="inbox-filters">
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filtersScroll} contentContainerStyle={styles.filters} accessibilityRole="tablist" testID="inbox-filters">
       {hub.INBOX_FILTERS.map((f) => {
         const on = value === f.id;
         const n = counts[f.id] ?? 0;
@@ -187,6 +195,7 @@ function InboxFilters({ value, onChange, counts }) {
             testID={`inbox-filter-${f.id}`}
           >
             {on ? <LinearGradient colors={['#F6D38A', colors.gold]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} /> : null}
+            {f.id === 'schedule' ? <Ionicons name="calendar" size={13} color={on ? colors.bg : colors.gold} /> : null}
             <Text style={[styles.filterText, on && styles.filterTextOn]}>{f.label}</Text>
             {n ? (
               <View style={[styles.filterCount, on && styles.filterCountOn]}>
@@ -196,7 +205,7 @@ function InboxFilters({ value, onChange, counts }) {
           </Pressable>
         );
       })}
-    </View>
+    </ScrollView>
   );
 }
 
@@ -352,7 +361,9 @@ export default function ChatHome({ navigation, bottomPadding }) {
         {/* Your conversations first: what you open the tab for. */}
         <SectionTitle kicker="Your inbox" title="Conversations" />
         <InboxFilters value={filter} onChange={setFilter} counts={counts} />
-        {state === 'loading' ? (
+        {filter === 'schedule' ? (
+          <ScheduleList userId={userId} onSchedule={() => setFilter('primary')} />
+        ) : state === 'loading' ? (
           <ThreadSkeleton />
         ) : state === 'error' ? (
           <View style={styles.emptyCard}>
@@ -362,7 +373,7 @@ export default function ChatHome({ navigation, bottomPadding }) {
             <Button label="Try again" icon="refresh" onPress={() => reload(true)} style={{ marginTop: space.lg }} />
           </View>
         ) : inFilter.length === 0 ? (
-          <Animated.View key={filter} entering={FadeIn.duration(400)} style={styles.emptyCard} testID={filter === 'primary' && visible.length === 0 ? 'chat-empty' : `inbox-empty-${filter}`}>
+          <Panel key={filter} style={styles.emptyCard} testID={filter === 'primary' && visible.length === 0 ? 'chat-empty' : `inbox-empty-${filter}`}>
             <LinearGradient colors={['rgba(226,168,75,0.14)', 'rgba(255,255,255,0.02)']} style={StyleSheet.absoluteFill} />
             {/* A gold medallion: the icon on a lit coin, not a bare glyph. */}
             <View style={styles.medallion}>
@@ -372,7 +383,7 @@ export default function ChatHome({ navigation, bottomPadding }) {
             <Text style={[type.title, styles.emptyTitle]}>{empty.title}</Text>
             <Text style={[type.bodyMuted, styles.emptyBody]}>{empty.body}</Text>
             {empty.action ? <Button label={empty.action} icon="people-outline" onPress={() => navigation.navigate('HubDirectory')} style={{ marginTop: space.lg }} /> : null}
-          </Animated.View>
+          </Panel>
         ) : (
           inFilter.map((item, index) => (
             <ThreadRow
@@ -409,7 +420,7 @@ export default function ChatHome({ navigation, bottomPadding }) {
         <SectionTitle kicker="Your studio" title="Show your work, get paid" />
         <View style={styles.tools}>
           <Tool icon="pie-chart" title="Splits" detail="Split sheets and invoices" onPress={() => navigation.navigate('HubSplits')} testID="tool-splits" />
-          <Tool icon="grid" title="Your profile" detail="Posts, reels and badges" onPress={() => navigation.navigate('HubProfile')} testID="tool-profile" />
+          <Tool index={1} icon="grid" title="Your profile" detail="Posts, reels and badges" onPress={() => navigation.navigate('HubProfile')} testID="tool-profile" />
         </View>
 
         {featured.length > 0 && (
@@ -467,10 +478,10 @@ const styles = StyleSheet.create({
   heroSub: { fontFamily: fonts.medium, fontSize: 13, color: colors.textMuted, marginTop: 2 },
   spark: { paddingHorizontal: space.lg, marginTop: space.xl },
   sectionHead: { flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: space.lg, marginTop: space.xxl, marginBottom: space.md },
-  sectionTitle: { fontFamily: fonts.semibold, fontSize: 21, letterSpacing: -0.6, color: colors.text, marginTop: 4 },
-  sectionAction: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingBottom: 3 },
+  sectionTitle: { fontFamily: fonts.semibold, fontSize: 21, lineHeight: 32, paddingBottom: 6, letterSpacing: -0.6, color: colors.text, marginTop: 4 },
+  sectionAction: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingBottom: 8 },
   sectionActionText: { fontFamily: fonts.semibold, fontSize: 13, color: colors.gold },
-  rowContent: { paddingHorizontal: space.lg, gap: space.md },
+  rowContent: { paddingHorizontal: space.lg, paddingTop: 6, paddingBottom: 12, gap: space.md },
   person: {
     width: 148,
     alignItems: 'center',
@@ -514,9 +525,8 @@ const styles = StyleSheet.create({
   },
   heartBadgeText: { fontFamily: fonts.bold, fontSize: 10, color: '#fff' },
   tools: { flexDirection: 'row', gap: space.md, paddingHorizontal: space.lg },
+  toolSlot: { flex: 1, minWidth: 0, borderRadius: radius.lg },
   tool: {
-    flex: 1,
-    minWidth: 0,
     padding: space.md,
     borderRadius: radius.lg,
     overflow: 'hidden',
@@ -555,7 +565,9 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(246,211,138,0.55)',
     boxShadow: '0px 0px 24px rgba(226,168,75,0.35)',
   },
-  filters: { flexDirection: 'row', gap: space.sm, paddingHorizontal: space.lg, marginBottom: space.md },
+  // Four tabs can be wider than a small phone: they scroll sideways rather than squash.
+  filtersScroll: { flexGrow: 0, flexShrink: 0, marginBottom: space.md },
+  filters: { flexDirection: 'row', gap: space.sm, paddingHorizontal: space.lg, paddingVertical: 4 },
   filter: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -569,7 +581,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(18,18,22,0.6)',
   },
   filterOn: { borderColor: 'rgba(246,211,138,0.9)', boxShadow: '0px 0px 16px rgba(226,168,75,0.35)' },
-  filterText: { fontFamily: fonts.semibold, fontSize: 13.5, color: colors.textMuted },
+  filterText: { fontFamily: fonts.semibold, fontSize: 13.5, lineHeight: 19, color: colors.textMuted },
   filterTextOn: { color: colors.bg },
   filterCount: { minWidth: 18, height: 18, paddingHorizontal: 5, borderRadius: 9, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.gold },
   filterCountOn: { backgroundColor: colors.bg },

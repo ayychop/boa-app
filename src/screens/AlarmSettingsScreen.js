@@ -11,6 +11,7 @@ import { ALARM_SOUNDS, formatTime, repeatLabel, ringsIn, timeParts, WEEKDAYS } f
 import { STATIONS_BY_GENRE } from '../data/radioStations';
 import { GENRES } from '../api/radio';
 import TimeWheel from '../components/alarms/TimeWheel';
+import AlarmThemePicker from '../components/alarms/AlarmThemePicker';
 import StationLogo from '../components/StationLogo';
 import { Field, PageHeader, Toggle } from '../components/kit';
 import { Button, Fog, Slate } from '../components/ui';
@@ -350,6 +351,8 @@ export default function AlarmSettingsScreen({ navigation }) {
             <Text style={styles.warnText}>For the surest wake-up, open BOA's battery settings and choose Unrestricted, so the phone never puts BOA to sleep.</Text>
           </Pressable>
         )}
+        {/* The phone's own alarm page (Android, once this build has the native alarm): six looks. */}
+        {BoaAlarm.isAvailable ? <AlarmThemePicker /> : null}
         {sorted.length ? (
           sorted.map((al, i) => <AlarmCard key={al.id} index={i} alarm={al} onToggle={() => toggle(al.id)} onEdit={() => setEditing({ alarm: al, isNew: false })} />)
         ) : (

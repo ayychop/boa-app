@@ -354,7 +354,9 @@ const styles = StyleSheet.create({
   heroTitle: { fontFamily: fonts.semibold, fontSize: 54, lineHeight: 56, letterSpacing: -2.6, color: colors.text },
   heroActions: { flexDirection: 'row', flexWrap: 'wrap', gap: space.md, marginTop: space.sm },
   section: { marginTop: space.xxl },
-  rowContent: { paddingHorizontal: space.xl, gap: 14 },
+  // A little room above and below the cards: the list sits lower than its title, and
+  // nothing (a shadow, a badge) is cut by the scroller's edge.
+  rowContent: { paddingHorizontal: space.xl, paddingTop: 6, paddingBottom: 14, gap: 14 },
   station: { width: 104, alignItems: 'center' },
   ring: { width: 98, height: 98, borderRadius: 49, alignItems: 'center', justifyContent: 'center', boxShadow: '0px 10px 24px rgba(0,0,0,0.5)' },
   liveBadge: {

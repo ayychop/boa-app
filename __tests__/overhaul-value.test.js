@@ -25,9 +25,9 @@ const row = (extra = {}) => ({
   ...extra,
 });
 
-describe('the inbox: Primary, General and Requests', () => {
-  test('three filters, in order', () => {
-    expect(INBOX_FILTERS.map((f) => f.label)).toEqual(['Primary', 'General', 'Requests']);
+describe('the inbox: Primary, General, Requests and Schedule', () => {
+  test('four filters, in order', () => {
+    expect(INBOX_FILTERS.map((f) => f.label)).toEqual(['Primary', 'General', 'Requests', 'Schedule']);
   });
 
   test("someone new who wrote first is a request until you answer or accept; then it's Primary", () => {

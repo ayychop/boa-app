@@ -81,6 +81,28 @@ class BoaAlarmModule : Module() {
       list.size
     }
 
+    /** Which look the alarm page wears: one of AlarmTheme's ids. */
+    Function("setTheme") { id: String -> AlarmStore.setTheme(context, id) }
+
+    /** Shows the alarm page as it will look, over whatever is on screen (never while an alarm really rings). */
+    Function("preview") { id: String ->
+      if (AlarmService.current != null) {
+        false
+      } else {
+        try {
+          context.startActivity(
+            Intent(context, AlarmActivity::class.java)
+              .putExtra(AlarmActivity.EXTRA_PREVIEW, true)
+              .putExtra(AlarmActivity.EXTRA_THEME, AlarmTheme.byId(id).id)
+              .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+          )
+          true
+        } catch (_: Exception) {
+          false
+        }
+      }
+    }
+
     /** Ids of once-only alarms that rang while the app was closed. */
     Function("takeFired") { AlarmStore.takeFired(context) }
 

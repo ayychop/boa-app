@@ -117,3 +117,25 @@ export function TabGlow({ width, height }) {
     </Svg>
   );
 }
+
+/**
+ * A soft round bloom with no edge at all: a radial gradient from warm gold in
+ * the middle to nothing at the rim. The Originals tab's pulse and every tab's
+ * select-ripple are this, so nothing ever shows a hard circle or an outline.
+ */
+export function TabOrb({ size, id = 'orb', peak = 0.6 }) {
+  const gid = `tab-orb-${id}`;
+  return (
+    <Svg width={size} height={size} pointerEvents="none">
+      <Defs>
+        <RadialGradient id={gid} cx="50%" cy="50%" r="50%">
+          <Stop offset="0" stopColor="#F6D38A" stopOpacity={peak} />
+          <Stop offset="0.35" stopColor="#E2A84B" stopOpacity={peak * 0.55} />
+          <Stop offset="0.7" stopColor="#E2A84B" stopOpacity={peak * 0.16} />
+          <Stop offset="1" stopColor="#E2A84B" stopOpacity={0} />
+        </RadialGradient>
+      </Defs>
+      <Rect width={size} height={size} fill={`url(#${gid})`} />
+    </Svg>
+  );
+}

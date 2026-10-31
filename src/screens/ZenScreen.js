@@ -14,7 +14,6 @@ import Animated, {
   interpolateColor,
   FadeIn,
   FadeInDown,
-  FadeOut,
   useAnimatedStyle,
   useSharedValue,
   withDelay,
@@ -34,7 +33,7 @@ import { podcastById } from '../data/podcasts';
 import { categoryOf, MEDIA_HEADERS, SCENES, SLEEP_TIMERS, soundscapeById, ZEN_CATEGORIES } from '../data/sleep';
 import useActiveAudio from '../hooks/useActiveAudio';
 import * as ambientAudio from '../audio/ambient';
-import { cachedSource } from '../utils/mediaCache';
+import { cachedSource, sweep } from '../utils/mediaCache';
 import { haptics } from '../utils/haptics';
 import { shiftHex, withAlpha } from '../utils/color';
 import { startLoop } from '../utils/loop';
@@ -47,7 +46,7 @@ import BoaLogo from '../components/BoaLogo';
 import { LoadingDots } from '../components/Skeleton';
 import Panel, { panelEntering } from '../components/Panel';
 import { SaverBackdrop, ScreensaverPicker } from '../components/zen/Screensavers';
-import { useScreensaver } from '../data/screensavers';
+import { screensaverById, useScreensaver } from '../data/screensavers';
 
 // Fades: slow and soft, like a room's lights dimming.
 const DIM = Easing.bezier(0.33, 0, 0.2, 1);
@@ -223,11 +222,44 @@ function shortHash(text) {
   return h.toString(36);
 }
 
+// Old downloads (before the cache moved files into place only once whole) are
+// swept away once: any of them could be a half-written video.
+const VIDEO_TAG = 'v2';
+let swept = false;
+const sweepOldVideos = () => {
+  if (swept) return;
+  swept = true;
+  sweep('scenes', (name) => name.includes(`-${VIDEO_TAG}.`) && !name.endsWith('.part'));
+};
+
+/** Waits for the tab's own transition to finish before the video decoder starts. */
+const VIDEO_DELAY_MS = 700;
+
+/**
+ * If a decorative layer can't be drawn (the video, the screensaver picker: a
+ * native or decoder failure surfaced as a render error), it quietly drops
+ * out and the rest stays: never the whole Zen page.
+ */
+class LayerBoundary extends Component {
+  state = { failed: false };
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  componentDidCatch(error) {
+    console.warn('[zen] a layer failed and was dropped', error?.message ?? error);
+  }
+  render() {
+    return this.state.failed ? null : this.props.children;
+  }
+}
+
 /**
  * The scene's looping video, muted and mixed with the app's audio (so it
  * never takes audio focus from a soundscape or the radio), played from the
  * cache. It fades in over the photograph on its first frame; it only plays
- * while the Zen tab is on screen.
+ * while the Zen tab is on screen. On a warm phone it still draws its first
+ * frame (so the room isn't left without its picture) and then holds there.
+ * It starts a moment after the tab opens, once the transition is over.
  */
 function SceneVideo({ scene, running }) {
   const shown = useSharedValue(0);
@@ -239,22 +271,34 @@ function SceneVideo({ scene, running }) {
     p.muted = true;
     p.volume = 0;
   });
+  const [armed, setArmed] = useState(false);
   const [source, setSource] = useState(null);
+  const runningRef = useRef(running);
+  runningRef.current = running;
+  const framed = useRef(false);
 
   useEffect(() => {
+    const id = setTimeout(() => setArmed(true), VIDEO_DELAY_MS);
+    return () => clearTimeout(id);
+  }, []);
+
+  useEffect(() => {
+    if (!armed) return undefined;
     let alive = true;
+    sweepOldVideos();
     const uri = Platform.OS === 'ios' ? scene.video.ios : scene.video.uri;
     const ext = Platform.OS === 'ios' ? 'mov' : 'webm';
     // Named after the address too, so a new (sharper) video for a scene is
     // downloaded rather than the old cached one played.
-    cachedSource('scenes', `${scene.id}-${shortHash(uri)}.${ext}`, uri).then((s) => alive && setSource(s));
+    cachedSource('scenes', `${scene.id}-${shortHash(uri)}-${VIDEO_TAG}.${ext}`, uri).then((s) => alive && setSource(s));
     return () => {
       alive = false;
     };
-  }, [scene]);
+  }, [armed, scene]);
 
   useEffect(() => {
     if (!source) return;
+    framed.current = false;
     try {
       player.replace(source);
     } catch (err) {
@@ -265,7 +309,8 @@ function SceneVideo({ scene, running }) {
   useEffect(() => {
     if (!source) return;
     try {
-      if (running) player.play();
+      // Held (warm phone): play until the first frame is up, which pauses it.
+      if (running || !framed.current) player.play();
       else player.pause();
     } catch {}
   }, [player, source, running]);
@@ -273,40 +318,96 @@ function SceneVideo({ scene, running }) {
   const style = useAnimatedStyle(() => ({ opacity: shown.value }));
   return (
     <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, style]} testID={`zen-video-${scene.id}`}>
-      <VideoView
-        player={player}
-        style={StyleSheet.absoluteFill}
-        contentFit="cover"
-        nativeControls={false}
-        allowsPictureInPicture={false}
-        // A TextureView, so the fade and the overlays above it composite
-        // like any other view (a SurfaceView ignores parent opacity).
-        surfaceType="textureView"
-        onFirstFrameRender={() => {
-          shown.value = withTiming(1, { duration: 1800, easing: DIM });
-        }}
-      />
+      <LayerBoundary>
+        <VideoView
+          player={player}
+          style={StyleSheet.absoluteFill}
+          contentFit="cover"
+          nativeControls={false}
+          allowsPictureInPicture={false}
+          // A TextureView, so the fade and the overlays above it composite
+          // like any other view (a SurfaceView ignores parent opacity).
+          surfaceType="textureView"
+          onFirstFrameRender={() => {
+            framed.current = true;
+            shown.value = withTiming(1, { duration: 1800, easing: DIM });
+            if (!runningRef.current) {
+              try {
+                player.pause();
+              } catch {}
+            }
+          }}
+        />
+      </LayerBoundary>
     </Animated.View>
+  );
+}
+
+// How long one scene fades into the next.
+const SCENE_FADE_MS = 1400;
+
+/**
+ * One scene's photograph (and, on the newest layer, its video). The newest
+ * layer fades in; one being replaced fades out while its photograph stays,
+ * and its video is already gone, so two video players never run at once.
+ * Plain opacity on the UI thread, with no layout-exit animation: a view
+ * kept alive to animate its own removal is exactly what could still be
+ * mid-flight when the tab is left.
+ */
+function SceneLayer({ scene, newest, width, height, running, withVideo }) {
+  const o = useSharedValue(0);
+  useEffect(() => {
+    o.value = withTiming(newest ? 1 : 0, { duration: SCENE_FADE_MS, easing: DIM });
+  }, [newest, o]);
+  const style = useAnimatedStyle(() => ({ opacity: o.value }));
+  return (
+    <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, style]}>
+      <ScenePhoto scene={scene} width={width} height={height} running={running} />
+      {withVideo && newest && <SceneVideo scene={scene} running={running} />}
+    </Animated.View>
+  );
+}
+
+/** The scenes on screen: the current one, and the one it is replacing until that has faded. */
+function SceneStack({ scene, width, height, running, withVideo }) {
+  const [layers, setLayers] = useState([scene]);
+  useEffect(() => {
+    setLayers((l) => (l[l.length - 1].id === scene.id ? l : [l[l.length - 1], scene]));
+  }, [scene]);
+  const settling = layers.length > 1;
+  useEffect(() => {
+    if (!settling) return undefined;
+    const id = setTimeout(() => setLayers((l) => l.slice(-1)), SCENE_FADE_MS + 200);
+    return () => clearTimeout(id);
+  }, [settling, layers]);
+  return (
+    <>
+      {layers.map((l, i) => (
+        <SceneLayer key={l.id} scene={l} newest={i === layers.length - 1} width={width} height={height} running={running} withVideo={withVideo} />
+      ))}
+    </>
   );
 }
 
 /**
  * The room: amber mesh, the scene's photograph, its looping video over
- * that, drifting smoke, film grain, and a deep shade so text reads and the
- * screen stays dim enough to sleep by.
+ * that, drifting smoke, film grain, and a shade so text reads and the
+ * screen stays dim enough to sleep by. As the screensaver the shade is a
+ * single even veil: no darker band across the top or the foot.
  */
-function Atmosphere({ sceneId, width, height, running, withVideo = true }) {
+function Atmosphere({ sceneId, width, height, running, withVideo = true, ambient = false }) {
   const scene = SCENES[sceneId] ?? SCENES.night;
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
       <MeshGradient width={width} height={height} running={running} />
-      <Animated.View key={scene.id} entering={FadeIn.duration(1400)} exiting={FadeOut.duration(1400)} style={StyleSheet.absoluteFill}>
-        <ScenePhoto scene={scene} width={width} height={height} running={running} />
-        {withVideo && <SceneVideo scene={scene} running={running} />}
-      </Animated.View>
+      <SceneStack scene={scene} width={width} height={height} running={running} withVideo={withVideo} />
       <DriftingFog width={width} height={height} opacity={0.45} running={running} />
       <Grain width={width} height={height} opacity={0.05} running={running} />
-      <LinearGradient colors={['rgba(5,5,6,0.62)', 'rgba(5,5,6,0.36)', 'rgba(5,5,6,0.46)', 'rgba(5,5,6,0.9)']} locations={[0, 0.32, 0.6, 1]} style={StyleSheet.absoluteFill} />
+      {ambient ? (
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(5,5,6,0.3)' }]} testID="zen-veil" />
+      ) : (
+        <LinearGradient colors={['rgba(5,5,6,0.62)', 'rgba(5,5,6,0.36)', 'rgba(5,5,6,0.46)', 'rgba(5,5,6,0.9)']} locations={[0, 0.32, 0.6, 1]} style={StyleSheet.absoluteFill} />
+      )}
     </View>
   );
 }
@@ -683,6 +784,7 @@ function ZenRoom() {
   const { ambient, returnTab, wake } = useZen();
   const sound = useAmbientAudio();
   const saver = useScreensaver();
+  const saverDef = screensaverById(saver);
   const active = useActiveAudio();
   const { current, isPlaying } = usePlayer();
   const bottomSpace = useBottomSpace(space.md);
@@ -781,10 +883,10 @@ function ZenRoom() {
       {/* With the radio on, the room is a still photograph: no video
           player exists at all, so opening Zen can never take the audio
           focus from the radio (Android pauses whatever loses it). */}
-      {ambient && saver !== 'room' ? (
+      {ambient && saverDef.generative ? (
         <SaverBackdrop id={saver} width={width} height={height} running={roomMoving} />
       ) : (
-        <Atmosphere sceneId={sceneId} width={width} height={height} running={roomMoving} withVideo={!isPlaying} />
+        <Atmosphere sceneId={(ambient && saverDef.scene) || sceneId} width={width} height={height} running={roomMoving} withVideo={!isPlaying} ambient={ambient} />
       )}
       {ambient && (
         <Pressable
@@ -805,7 +907,7 @@ function ZenRoom() {
       {/* The controls only exist outside the screensaver, so screen readers
           never land on invisible buttons. They fade in and out. */}
       {!ambient && (
-        <Animated.View entering={FadeIn.duration(reduceMotion ? 150 : 450)} exiting={FadeOut.duration(reduceMotion ? 150 : 600)} pointerEvents="box-none" style={StyleSheet.absoluteFill}>
+        <Animated.View entering={FadeIn.duration(reduceMotion ? 150 : 450)} pointerEvents="box-none" style={StyleSheet.absoluteFill}>
           <View style={[styles.topBar, edge, { top }]} pointerEvents="box-none">
             <Slate dot color={colors.text}>
               Sleep & Meditation
@@ -833,7 +935,9 @@ function ZenRoom() {
               <TimerRow />
               <View>
                 <Slate>Screensaver</Slate>
-                <ScreensaverPicker />
+                <LayerBoundary>
+                  <ScreensaverPicker />
+                </LayerBoundary>
               </View>
             </ScrollView>
           </Panel>
@@ -844,7 +948,6 @@ function ZenRoom() {
       {radioCard && (
         <Animated.View
           entering={FadeIn.duration(reduceMotion ? 150 : 600)}
-          exiting={FadeOut.duration(reduceMotion ? 150 : 400)}
           pointerEvents="box-none"
           style={[styles.radioRow, edge, { bottom: bottom + (short ? 0 : 40) }]}
         >

@@ -7,9 +7,9 @@ import { BottomTabBar, createBottomTabNavigator } from '@react-navigation/bottom
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import Animated, { Easing, FadeIn, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming } from 'react-native-reanimated';
-import useReducedMotion from './src/hooks/useReducedMotion';
-import TabGlyph, { TabGlow } from './src/components/TabGlyph';
+import Animated, { cancelAnimation, Easing, FadeIn, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming } from 'react-native-reanimated';
+import useReducedMotion, { useCalm } from './src/hooks/useReducedMotion';
+import TabGlyph, { TabGlow, TabOrb } from './src/components/TabGlyph';
 import EdgeLighting from './src/components/EdgeLighting';
 import ScheduledCallSync from './src/components/ScheduledCallSync';
 import { openScheduledCall } from './src/calls/openRoom';
@@ -138,36 +138,64 @@ function TabTransition({ children }) {
 // lit gold capsule (a soft glow that swells in behind its icon), so you can
 // tell where you are at a glance.
 function TabIcon({ name, focused, color, size, slot }) {
-  const reduceMotion = useReducedMotion();
+  const reduceMotion = useCalm();
   const scale = useSharedValue(1);
   const lit = useSharedValue(focused ? 1 : 0);
+  const breathe = useSharedValue(0);
+  const ripple = useSharedValue(1);
   useEffect(() => {
     lit.value = withTiming(focused ? 1 : 0, { duration: reduceMotion ? 0 : 260, easing: EASE_OUT_EXPO });
     if (!focused || reduceMotion) return;
     scale.value = withSequence(withTiming(0.8, { duration: 90, easing: Easing.bezier(0.23, 1, 0.32, 1) }), withSpring(1, { duration: 480, dampingRatio: 0.42 }));
-  }, [focused, reduceMotion, scale, lit]);
+    // One soft bloom spreads out from the icon you just chose, and is gone.
+    ripple.value = 0;
+    ripple.value = withTiming(1, { duration: 900, easing: EASE_OUT_EXPO });
+  }, [focused, reduceMotion, scale, lit, ripple]);
+  // The tab you are on breathes: its glow swells and settles, slowly, for as long as you stay.
+  useEffect(() => {
+    cancelAnimation(breathe);
+    if (!focused || reduceMotion) {
+      breathe.value = withTiming(0, { duration: 200 });
+      return undefined;
+    }
+    breathe.value = withRepeat(withSequence(withTiming(1, { duration: 2400, easing: Easing.inOut(Easing.sin) }), withTiming(0, { duration: 2400, easing: Easing.inOut(Easing.sin) })), -1, false);
+    return () => cancelAnimation(breathe);
+  }, [focused, reduceMotion, breathe]);
   const style = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
-  const capsule = useAnimatedStyle(() => ({ opacity: lit.value, transform: [{ scale: 0.7 + lit.value * 0.3 }] }));
-  // BOA Originals is the premium headline: a slow gold gleam swells behind its
-  // icon and rests, so it stands out as the marquee tab. Off under Reduce
-  // Motion, and only ever on this one tab.
+  const capsule = useAnimatedStyle(() => ({
+    opacity: lit.value * (0.78 + breathe.value * 0.22),
+    transform: [{ scale: (0.7 + lit.value * 0.3) * (1 + breathe.value * 0.07) }],
+  }));
+  const rippleStyle = useAnimatedStyle(() => ({
+    opacity: (1 - ripple.value) * 0.55,
+    transform: [{ scale: 0.55 + ripple.value * 1.05 }],
+  }));
+  // BOA Originals is the premium headline: a soft bloom of gold swells behind
+  // its icon and settles, slowly, so it stands out as the marquee tab. It has
+  // no edge (a radial fade, not a disc). Off under Reduce Motion or a hot
+  // phone, and the bloom itself only ever sits on this one tab.
   const premium = name === 'Originals';
   const gleam = useSharedValue(0);
   useEffect(() => {
-    if (!premium || reduceMotion) return;
+    if (!premium || reduceMotion) {
+      gleam.value = 0;
+      return undefined;
+    }
     gleam.value = withRepeat(
       withSequence(
-        withTiming(1, { duration: 900, easing: Easing.inOut(Easing.quad) }),
-        withTiming(0, { duration: 900, easing: Easing.inOut(Easing.quad) }),
-        withDelay(2600, withTiming(0, { duration: 0 })),
+        withTiming(1, { duration: 1700, easing: Easing.inOut(Easing.sin) }),
+        withTiming(0, { duration: 1700, easing: Easing.inOut(Easing.sin) }),
+        withDelay(1400, withTiming(0, { duration: 0 })),
       ),
       -1,
       false,
     );
+    return () => cancelAnimation(gleam);
   }, [premium, reduceMotion, gleam]);
-  const gleamStyle = useAnimatedStyle(() => ({ opacity: gleam.value * 0.7 }));
+  const gleamStyle = useAnimatedStyle(() => ({ opacity: 0.25 + gleam.value * 0.7, transform: [{ scale: 0.9 + gleam.value * 0.2 }] }));
   const capsuleW = Math.round(Math.min(size * 2.2, Math.max(size + 8, (slot ?? size * 2) - 2)));
   const capsuleH = Math.round(size * 1.75);
+  const orb = Math.round(size * 2.1);
   return (
     <View style={styles.tabIconBox}>
       {/* The active tab's golden glow: a soft radial bloom with no edge, no
@@ -179,9 +207,15 @@ function TabIcon({ name, focused, color, size, slot }) {
       >
         <TabGlow width={capsuleW} height={capsuleH} />
       </Animated.View>
+      {/* The select ripple: the same soft bloom, spreading and fading once. */}
+      <Animated.View pointerEvents="none" style={[styles.tabCapsule, { width: orb, height: orb, left: (size - orb) / 2, top: (size - orb) / 2 }, rippleStyle]}>
+        <TabOrb size={orb} id={`ripple-${name}`} peak={0.5} />
+      </Animated.View>
       <Animated.View style={style}>
         {premium ? (
-          <Animated.View pointerEvents="none" style={[styles.tabGleam, { width: size * 1.7, height: size * 1.7, borderRadius: size, left: -size * 0.35, top: -size * 0.35 }, gleamStyle]} />
+          <Animated.View pointerEvents="none" testID="tab-originals-orb" style={[styles.tabGleam, { width: orb, height: orb, left: (size - orb) / 2, top: (size - orb) / 2 }, gleamStyle]}>
+            <TabOrb size={orb} id="originals" peak={0.7} />
+          </Animated.View>
         ) : null}
         <View style={{ width: size, height: size }}>
           <TabGlyph name={name} size={size} color={color} focused={focused} />
@@ -605,7 +639,7 @@ const styles = StyleSheet.create({
   // its own (those drew a hard circle); the gradient inside is the glow.
   tabCapsule: { position: 'absolute' },
   // The gold gleam behind the BOA Originals tab icon: a soft radial glow.
-  tabGleam: { position: 'absolute', backgroundColor: 'rgba(226,168,75,0.5)', boxShadow: '0px 0px 14px rgba(226,168,75,0.85)' },
+  tabGleam: { position: 'absolute' },
   crash: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 12, backgroundColor: colors.bg },
   crashTitle: { fontSize: 20, fontWeight: '600', color: colors.text, textAlign: 'center' },
   crashBody: { fontSize: 13, color: colors.textMuted, textAlign: 'center' },
