@@ -166,8 +166,8 @@ describe('deep links and the widget', () => {
   const root = path.join(__dirname, '..');
   const read = (p) => fs.readFileSync(path.join(root, p), 'utf8');
 
-  test('the app scheme is network.boa, and no old boa:// links are left', () => {
-    expect(JSON.parse(read('app.json')).expo.scheme).toBe('network.boa');
+  test('the app schemes are network.boa (and boahub for shared calls), and no old boa:// links are left', () => {
+    expect(JSON.parse(read('app.json')).expo.scheme).toEqual(['network.boa', 'boahub']);
     for (const p of ['src/api/hub.js', 'src/context/AlarmContext.js', 'plugins/widget/BoaWidgetProvider.kt']) {
       expect(read(p)).not.toMatch(/(^|[^.\w])boa:\/\//m);
     }

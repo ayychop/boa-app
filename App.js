@@ -11,6 +11,9 @@ import Animated, { Easing, FadeIn, useAnimatedStyle, useSharedValue, withDelay, 
 import useReducedMotion from './src/hooks/useReducedMotion';
 import TabGlyph, { TabGlow } from './src/components/TabGlyph';
 import EdgeLighting from './src/components/EdgeLighting';
+import ScheduledCallSync from './src/components/ScheduledCallSync';
+import { openScheduledCall } from './src/calls/openRoom';
+import { parseRoomLink } from './src/calls/schedule';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as SplashScreen from 'expo-splash-screen';
@@ -52,6 +55,7 @@ import ProfileScreen from './src/screens/ProfileScreen';
 import ChatScreen from './src/screens/ChatScreen';
 import ForecastScreen from './src/screens/ForecastScreen';
 import AlarmSettingsScreen from './src/screens/AlarmSettingsScreen';
+import ScheduledCallScreen from './src/screens/ScheduledCallScreen';
 import AlarmRingingScreen from './src/screens/AlarmRingingScreen';
 import HubWelcomeScreen from './src/screens/hub/HubWelcomeScreen';
 import HubDirectoryScreen from './src/screens/hub/HubDirectoryScreen';
@@ -356,12 +360,20 @@ function AlarmRinger({ navReady }) {
  * forecast, `now-playing` (the rest of the widget) to the Radio tab, and
  * `auth-callback` (the confirmation email) signs you in, then opens the
  * Chat tab to set up your Hub profile, and `u/<username>` (a BOA Code)
- * opens that person's Hub profile. Anything else just opens the app.
+ * opens that person's Hub profile, and `boahub://call/<room_id>` (a shared
+ * scheduled call) opens its countdown, which joins the call once the host
+ * starts it. Anything else just opens the app.
  * Exported for the tests.
  */
 export function routeLink(url) {
   // The web app, from a public profile's Sign up / Sign in buttons.
   if (/^https?:\/\/[^?#]*\?(?:[^#]*&)?hub=(join|signin)\b/i.test(url || '')) return openPage('HubWelcome', { next: 'back' });
+  // A scheduled call's link: boahub://call/<room_id> (or network.boa://call/<room_id>).
+  const room = parseRoomLink(url);
+  if (room) {
+    openScheduledCall(room);
+    return true;
+  }
   const m = /^network\.boa:\/\/+([^/?#]+)/i.exec(url || '');
   const target = m?.[1]?.toLowerCase();
   if (target === 'weather') return openPage('Forecast');
@@ -418,6 +430,8 @@ function MainTabs({ freshInstall = false }) {
       <Stack.Navigator screenOptions={PAGE_OPTIONS}>
         <Stack.Screen name="Tabs">{() => <Tabs />}</Stack.Screen>
         <Stack.Screen name="Forecast" component={ForecastScreen} />
+        {/* A scheduled call's countdown: it becomes the call when the host starts it. */}
+        <Stack.Screen name="ScheduledCall" component={ScheduledCallScreen} options={{ animation: 'fade_from_bottom' }} />
         <Stack.Screen name="AlarmSettings" component={AlarmSettingsScreen} />
         <Stack.Screen name="AlarmRinging" component={AlarmRingingScreen} options={{ presentation: 'fullScreenModal', animation: 'fade', gestureEnabled: false }} />
         <Stack.Screen name="HubWelcome" component={HubWelcomeScreen} options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
@@ -563,6 +577,8 @@ function Root() {
                                 <FormsProvider>{booted ? <Gate /> : <Intro onDone={finishBoot} />}</FormsProvider>
                               {/* Edge Lighting, over everything (Profile > Edge Lighting). */}
                               <EdgeLighting />
+                              {/* Reminders for your scheduled calls, and what a tapped reminder opens. */}
+                              <ScheduledCallSync />
                               </CallProvider>
                             </PremiumProvider>
                           </HubProvider>

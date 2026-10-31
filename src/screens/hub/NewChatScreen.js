@@ -38,6 +38,9 @@ import {
 } from '../../api/hub';
 import MessageActions, { describeMessage } from '../../components/chat/MessageActions';
 import { ReactionChips, ReplyQuote } from '../../components/chat/MessageExtras';
+import CallInvite from '../../components/chat/CallInvite';
+import ScheduleSheet from '../../components/chat/ScheduleSheet';
+import { roomIdIn, withoutRoomLink } from '../../calls/schedule';
 import StickerPicker from '../../components/chat/StickerPicker';
 import Sticker from '../../components/chat/Sticker';
 import GifPicker from '../../components/chat/GifPicker';
@@ -172,6 +175,8 @@ function Bubble({ message, mine, seen, fresh, vibe, reactions, myId, quoted, quo
   // Animated emoji and GIFs have no bubble around them.
   const sticker = message.kind === 'sticker' || gif;
   const caption = message.body?.trim();
+  // A scheduled-call link shows as a card, not an address.
+  const invite = !media && !voice && !once && !sticker ? roomIdIn(message.body) : null;
   const status = message.failed ? 'Not sent · hold to retry' : message.pending ? 'Sending…' : chatTime(message.created_at);
   const left = message.expires_at ? timeLeft(message.expires_at) : null;
   const max = vibe.light ? 1 : mine ? MINE_MAX : THEIRS_MAX;
@@ -253,7 +258,8 @@ function Bubble({ message, mine, seen, fresh, vibe, reactions, myId, quoted, quo
           <ViewOnceTile message={message} mine={mine} onOpen={onOpenOnce} opening={opening} accent={mine ? vibe.mineText : vibe.accent} textColor={mine ? vibe.mineText : vibe.theirsText} />
         ) : null}
         {voice ? <VoiceNote message={message} mine={mine} /> : null}
-        {(!media && !voice && !once) || (caption && !once) ? (
+        {invite ? <CallInvite roomId={invite} text={withoutRoomLink(message.body)} mine={mine} vibe={vibe} /> : null}
+        {!invite && ((!media && !voice && !once) || (caption && !once)) ? (
           <Text
             style={[
               styles.body,
@@ -325,8 +331,10 @@ function Smoke({ vibe }) {
  * (a small spinner, the button still works), 'starting' once you've tapped
  * and it's waiting on that ("Preparing call...").
  */
-function Header({ name, person, online, badge, status, vibe, motion, onBack, onProfile, onContact, onVibe, onCall, onVoiceCall, callState, onLayout }) {
+function Header({ name, person, online, badge, status, vibe, motion, onBack, onProfile, onContact, onVibe, onCall, onVoiceCall, onSchedule, callState, onLayout }) {
   const insets = useSafeAreaInsets();
+  // Four round buttons and the Vibe pill: on a narrow phone the pill is just its icon, so the name keeps room.
+  const compact = useWindowDimensions().width < 400;
   const starting = callState === 'starting';
   // The chat header name wears the member's chosen headline typeface, so the
   // font picker shows in the chat too, not only on the profile.
@@ -365,6 +373,18 @@ function Header({ name, person, online, badge, status, vibe, motion, onBack, onP
             )}
           </View>
         </Pressable>
+        {onSchedule ? (
+          <Pressable
+            onPress={onSchedule}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={`Schedule a call or set a reminder with ${name}`}
+            style={({ pressed }) => [styles.round, { borderColor: vibe.accentEdge, backgroundColor: vibe.accentSoft }, pressed && styles.pressed]}
+            testID="thread-schedule"
+          >
+            <Ionicons name="calendar-outline" size={19} color={vibe.accent} />
+          </Pressable>
+        ) : null}
         {onVoiceCall ? (
           <Pressable
             onPress={onVoiceCall}
@@ -397,12 +417,12 @@ function Header({ name, person, online, badge, status, vibe, motion, onBack, onP
           hitSlop={8}
           accessibilityRole="button"
           accessibilityLabel="Chat vibe"
-          style={({ pressed }) => [styles.vibe, { borderColor: vibe.accentEdge }, pressed && styles.pressed]}
+          style={({ pressed }) => [styles.vibe, compact && styles.vibeCompact, { borderColor: vibe.accentEdge }, pressed && styles.pressed]}
           testID="thread-vibe"
         >
           <LinearGradient colors={vibe.send} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
           <Ionicons name={motion ? 'sparkles' : 'color-palette'} size={14} color={vibe.sendIcon} />
-          <Text style={[styles.vibeLabel, { color: vibe.sendIcon }]}>Vibe</Text>
+          {compact ? null : <Text style={[styles.vibeLabel, { color: vibe.sendIcon }]}>Vibe</Text>}
         </Pressable>
       </View>
       {/* A fine line of the vibe's light along the glass's lower edge. */}
@@ -452,6 +472,7 @@ function Thread({ navigation, route }) {
   const [keyboard, setKeyboard] = useState(false);
   const [theyType, setTheyType] = useState(false);
   const [picking, setPicking] = useState(false);
+  const [scheduling, setScheduling] = useState(false);
   // The header and composer float over the list, so it keeps their heights clear at its ends.
   const [headerH, setHeaderH] = useState(insets.top + 60);
   const [composerH, setComposerH] = useState(64);
@@ -995,11 +1016,26 @@ function Thread({ navigation, route }) {
       onVibe={() => setPicking(true)}
       onCall={calls && other && !isBlocked ? () => calls.startCall({ ...other, id: conv.otherId }) : null}
       onVoiceCall={calls && other && !isBlocked ? () => calls.startCall({ ...other, id: conv.otherId }, { voice: true }) : null}
+      onSchedule={other && conv && !isBlocked ? () => { haptics.selection(); setScheduling(true); } : null}
       callState={calls?.callPrep}
       onLayout={(e) => setHeaderH(e.nativeEvent.layout.height)}
     />
   );
-  const sheet = <ChatVibeSheet open={picking} onClose={() => setPicking(false)} />;
+  const sheet = (
+    <>
+      <ChatVibeSheet open={picking} onClose={() => setPicking(false)} />
+      {other && conv ? (
+        <ScheduleSheet
+          open={scheduling}
+          onClose={() => setScheduling(false)}
+          userId={userId}
+          person={{ ...other, id: conv.otherId }}
+          conversationId={id}
+          onSend={(text) => send(text, null, null)}
+        />
+      ) : null}
+    </>
+  );
 
   if (state !== 'ready') {
     return (
@@ -1222,6 +1258,7 @@ const styles = StyleSheet.create({
   statusText: { fontFamily: fonts.chat, fontSize: 12.5, marginTop: 2 },
   round: { width: 38, height: 38, borderRadius: 19, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   vibe: { height: 34, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: space.md, borderRadius: radius.pill, borderWidth: 1, overflow: 'hidden' },
+  vibeCompact: { width: 34, paddingHorizontal: 0, justifyContent: 'center' },
   vibeLabel: { fontFamily: fonts.stamp, fontSize: 11, letterSpacing: 1.8, textTransform: 'uppercase' },
   edge: { position: 'absolute', left: 0, right: 0, bottom: 0, height: StyleSheet.hairlineWidth, opacity: 0.45 },
   requestBar: { flexDirection: 'column', alignItems: 'stretch', gap: space.xs },

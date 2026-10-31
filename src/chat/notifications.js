@@ -111,7 +111,8 @@ export function installChatHandler() {
       if (data.type === 'call') return { shouldShowBanner: false, shouldShowList: false, shouldPlaySound: false, shouldSetBadge: false };
       // Every message and heart stays in the pull-down; it pops up and
       // rings unless you're already looking at that thread.
-      const keep = data.type === 'chat' || data.type === 'heart' || data.type === 'missed-call';
+      // A call reminder (src/calls/reminders.js) is the same: it pops up even with the app open.
+      const keep = data.type === 'chat' || data.type === 'heart' || data.type === 'missed-call' || data.type === 'call-reminder';
       // A message request never pops or plays a sound; it waits in the shade and in Requests.
       const pop = keep && !data.request && !(data.type === 'chat' && data.conversationId === openThread);
       return { shouldShowBanner: pop, shouldShowList: keep, shouldPlaySound: pop, shouldSetBadge: false };

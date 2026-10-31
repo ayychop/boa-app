@@ -622,17 +622,20 @@ export function CallProvider({ children }) {
 
   /** Calls someone (BOA Premium). person: their profile. */
   const startCall = useCallback(
-    (person, { voice = false } = {}) =>
+    (person, { voice = false, roomId = null, onStarted = null } = {}) =>
       requirePremium(async () => {
         const peer = personOf(person);
         if (!peer || !userId || peer.id === userId) return;
         if (stale(callRef.current)) expire(callRef.current);
         if (callRef.current && callRef.current.phase !== 'ended') return;
         // Use the call got ready ahead; if it's still getting ready, say
-        // "Preparing call..." on the button and wait for it.
-        const ahead = primed.current;
-        primed.current = null;
-        setPrep('idle');
+        // "Preparing call..." on the button and wait for it. A scheduled
+        // room (roomId) has its own id, so the one made ahead is left for later.
+        const ahead = roomId ? null : primed.current;
+        if (!roomId) {
+          primed.current = null;
+          setPrep('idle');
+        }
         if (ahead?.ready) {
           setStarting(true);
           await ahead.ready;
@@ -640,7 +643,7 @@ export function CallProvider({ children }) {
           if (callRef.current && callRef.current.phase !== 'ended') return;
         }
         clearTimers();
-        const id = ahead?.id ?? newId();
+        const id = roomId ?? ahead?.id ?? newId();
         // The ref too, at once: the ring can be answered before React renders.
         const sentAt = Date.now();
         callRef.current = {
@@ -656,6 +659,8 @@ export function CallProvider({ children }) {
         setCall(callRef.current);
         setVideo(NO_MEDIA);
         haptics.selection();
+        // The scheduled call's host: the call is on, so the room turns 'active' and everyone waiting on the countdown joins.
+        onStarted?.(id);
         // Your camera comes on while it rings, so you can check how you look.
         // A voice call has no picture to check: the camera stays off.
         if (voice) {
@@ -680,6 +685,39 @@ export function CallProvider({ children }) {
     signal.send(c.peer.id, 'accept', { callId: c.id, by: userId });
     goLive();
   }, [goLive, userId]);
+
+  /**
+   * Joins a scheduled room that has started: the link, or the countdown
+   * turning 'active'. The room id is the call's id (and Agora's channel), so
+   * this is the same call the host rang; the host is told you're here. Rooms
+   * need no ring, so it goes straight to the call. Resolves to whether you're
+   * in that call now (true also if you already were).
+   */
+  const joinRoom = useCallback(
+    (roomId, host) => {
+      const peer = personOf(host);
+      if (!roomId || !userId || !peer?.id) return false;
+      if (stale(callRef.current)) expire(callRef.current);
+      const now = callRef.current;
+      if (now && now.phase !== 'ended') {
+        if (now.id !== roomId) return false;
+        // The host's ring got here first: joining answers it.
+        if (now.direction === 'in' && now.phase === 'ringing') accept();
+        return true;
+      }
+      clearTimers();
+      // The host's own ring for this room must not ring here as well.
+      seen.current.add(roomId);
+      stopRingNotification(roomId);
+      callRef.current = { id: roomId, peer, direction: 'in', phase: 'ringing', startedAt: null, reason: null, sentAt: Date.now(), voice: false };
+      setCall(callRef.current);
+      setVideo(NO_MEDIA);
+      signal.send(peer.id, 'accept', { callId: roomId, by: userId });
+      goLive();
+      return true;
+    },
+    [userId, expire, goLive, accept],
+  );
 
   const decline = useCallback(() => {
     const c = callRef.current;
@@ -805,6 +843,7 @@ export function CallProvider({ children }) {
       openChat,
       pip,
       startCall,
+      joinRoom,
       accept,
       decline,
       hangUp,
@@ -837,6 +876,7 @@ export function CallProvider({ children }) {
       openChat,
       pip,
       startCall,
+      joinRoom,
       accept,
       decline,
       hangUp,
