@@ -38,7 +38,7 @@ export function isCar() {
 }
 
 /**
- * Where the sound is going: 'car', 'bluetooth', 'wired' or 'speaker'. On a car
+ * Where the sound is going: 'car', 'usb', 'bluetooth', 'wired' or 'speaker'. On a car
  * or Bluetooth the sound is bigger and wider (see BoaEqModule.kt).
  */
 export function route() {
@@ -49,7 +49,7 @@ export function route() {
   }
 }
 
-/** Calls fn('car' | 'bluetooth' | 'wired' | 'speaker') whenever the route changes; returns an unsubscribe function. */
+/** Calls fn('car' | 'usb' | 'bluetooth' | 'wired' | 'speaker') whenever the route changes; returns an unsubscribe function. */
 export function addRouteListener(fn) {
   if (!native?.addListener) return () => {};
   try {

@@ -57,9 +57,10 @@ import kotlin.math.sqrt
  *
  * Where the sound is going changes how it is shaped (see [Profile]):
  *  - a car (Android Auto projecting, or the phone in car mode), or
+ *  - USB (a DAC or a head unit on a cable), or
  *  - Bluetooth (A2DP, LE Audio, hearing aids: headphones, speakers and
  *    car stereos alike; Android can't tell which from the output alone).
- * Both lose bass and treble on the way (a cabin swallows the lows; the
+ * All three lose bass and treble on the way (a cabin swallows the lows; the
  * Bluetooth codecs round off the top and bottom), so on either one the same
  * sliders sound bigger: extra bass and treble past Signature (the sub-bass
  * weighted up), the lows and highs held at least `minPast` past Signature
@@ -96,6 +97,10 @@ class BoaEqModule : Module() {
     // Whether the sound is maxed out: Bass Boost at full strength, the volume
     // ceiling at least BOOST_GAIN_MILLIBELS, the Virtualizer on.
     val maxed: Boolean,
+    // How much of the extra bass/treble is made room for before the limiter
+    // (DynamicsProcessing's input gain). The route profiles lift more, so they
+    // leave more room: that is what keeps the harder bass from clipping.
+    val headroomShare: Double,
   )
 
   override fun definition() = ModuleDefinition {
@@ -122,7 +127,7 @@ class BoaEqModule : Module() {
       inCar()
     }
 
-    /** Where the sound is going: "car", "bluetooth", "wired" or "speaker". */
+    /** Where the sound is going: "car", "usb", "bluetooth", "wired" or "speaker". */
     Function("route") {
       routeName()
     }
@@ -191,12 +196,15 @@ class BoaEqModule : Module() {
 
   private fun bluetoothOut(c: Context): Boolean = outputs(c).any { isBluetooth(it.type) }
 
+  private fun usbOut(c: Context): Boolean = outputs(c).any { it.type in USB_TYPES }
+
   private fun wiredOut(c: Context): Boolean = outputs(c).any { isWired(it.type) }
 
   private fun routeName(): String {
     val c = ctx ?: return "speaker"
     return when {
       inCar() -> "car"
+      usbOut(c) -> "usb"
       bluetoothOut(c) -> "bluetooth"
       wiredOut(c) -> "wired"
       else -> "speaker"
@@ -304,8 +312,11 @@ class BoaEqModule : Module() {
     // A car or Bluetooth is boosted unless that has been switched off (`link`).
     val car = link && inCar()
     val wireless = !car && link && c != null && bluetoothOut(c)
+    // A USB DAC or a head unit on a USB cable (not Android Auto, which is the car above).
+    val cabled = !car && !wireless && link && c != null && usbOut(c)
     val profile = when {
       car -> CAR
+      cabled -> USB
       wireless -> BLUETOOTH
       else -> PHONE
     }
@@ -374,7 +385,7 @@ class BoaEqModule : Module() {
             // Room for the extra before the limiter, so it grows the bass
             // and air rather than pumping everything else; LoudnessEnhancer
             // makes the level back up at the end of the chain.
-            dp.setInputGainAllChannelsTo(-(max(max(extraLows, extraHighs), extraVoice) * HEADROOM_SHARE).toFloat())
+            dp.setInputGainAllChannelsTo(-(max(max(extraLows, extraHighs), extraVoice) * profile.headroomShare).toFloat())
             dp.setEnabled(true)
             shaping = true
           }
@@ -415,7 +426,9 @@ class BoaEqModule : Module() {
         if (profile.maxed && !flat) base = max(base, BOOST_GAIN_MILLIBELS)
         // Louder in the car or on Bluetooth: a moving cabin is noisy and a
         // codec is quiet. LoudnessEnhancer's limiter still holds the peaks.
-        val routed = if (profile.extraGainMillibels > 0 && base > 0) base + profile.extraGainMillibels else base
+        // Capped at ROUTE_GAIN_CEILING_MILLIBELS: past it the lift is only
+        // clipping, and the bass stops being felt and starts being heard as noise.
+        val routed = if (profile.extraGainMillibels > 0 && base > 0) min(base + profile.extraGainMillibels, ROUTE_GAIN_CEILING_MILLIBELS) else base
         // The Loudness slider, on top of everything, even with the rest flat.
         val gain = routed + (loudnessSlider * LOUDNESS_SLIDER_MILLIBELS).roundToInt()
         if (gain > 0) {
@@ -564,23 +577,39 @@ class BoaEqModule : Module() {
     private val VOCAL_WEIGHT = doubleArrayOf(0.0, -0.35, 0.0, 0.6, 1.0, 0.8, 0.2, 0.0)
 
     // The car: more on top of all that (DynamicsProcessing and LoudnessEnhancer
-    // only; the Equalizer is already at the phone's hardware ceiling).
-    private const val CAR_MIN_PAST = 0.4
-    const val CAR_EXTRA_BASS_DB = 6.0
-    const val CAR_EXTRA_TREBLE_DB = 3.0
-    private const val CAR_SUB_WEIGHT = 1.35
-    const val CAR_EXTRA_GAIN_MILLIBELS = 500
+    // only; the Equalizer is already at the phone's hardware ceiling). Raised
+    // from 6 / 3 dB and 5 dB of volume: the bass is meant to be felt in the
+    // seat, not only heard. The headroom (CAR_HEADROOM_SHARE) rises with it,
+    // so the extra lifts the sound rather than clipping it.
+    private const val CAR_MIN_PAST = 0.5
+    const val CAR_EXTRA_BASS_DB = 9.0
+    const val CAR_EXTRA_TREBLE_DB = 4.0
+    private const val CAR_SUB_WEIGHT = 1.5
+    const val CAR_EXTRA_GAIN_MILLIBELS = 900
+    private const val CAR_HEADROOM_SHARE = 0.65
+    // USB (a DAC, or a head unit on a cable): the cabin's worth, a touch under the car.
+    private const val USB_MIN_PAST = 0.45
+    const val USB_EXTRA_BASS_DB = 8.0
+    const val USB_EXTRA_TREBLE_DB = 3.5
+    private const val USB_SUB_WEIGHT = 1.45
+    const val USB_EXTRA_GAIN_MILLIBELS = 800
+    private const val USB_HEADROOM_SHARE = 0.65
     // Bluetooth: a codec rounds off the bottom and the top, so both are
     // lifted, a little less than a cabin's worth.
-    private const val BT_MIN_PAST = 0.3
-    const val BT_EXTRA_BASS_DB = 4.0
-    const val BT_EXTRA_TREBLE_DB = 3.0
-    private const val BT_SUB_WEIGHT = 1.25
-    const val BT_EXTRA_GAIN_MILLIBELS = 400
+    private const val BT_MIN_PAST = 0.45
+    const val BT_EXTRA_BASS_DB = 7.0
+    const val BT_EXTRA_TREBLE_DB = 3.5
+    private const val BT_SUB_WEIGHT = 1.4
+    const val BT_EXTRA_GAIN_MILLIBELS = 700
+    private const val BT_HEADROOM_SHARE = 0.6
+    // The most volume lift a route gets from Bass Boost's ceiling plus its own
+    // extra (the Loudness slider is added on top of it, as everywhere).
+    const val ROUTE_GAIN_CEILING_MILLIBELS = 2800
 
-    private val PHONE = Profile(0.0, 0.0, 1.0, 0.0, 0, false)
-    private val CAR = Profile(CAR_EXTRA_BASS_DB, CAR_EXTRA_TREBLE_DB, CAR_SUB_WEIGHT, CAR_MIN_PAST, CAR_EXTRA_GAIN_MILLIBELS, true)
-    private val BLUETOOTH = Profile(BT_EXTRA_BASS_DB, BT_EXTRA_TREBLE_DB, BT_SUB_WEIGHT, BT_MIN_PAST, BT_EXTRA_GAIN_MILLIBELS, true)
+    private val PHONE = Profile(0.0, 0.0, 1.0, 0.0, 0, false, HEADROOM_SHARE)
+    private val CAR = Profile(CAR_EXTRA_BASS_DB, CAR_EXTRA_TREBLE_DB, CAR_SUB_WEIGHT, CAR_MIN_PAST, CAR_EXTRA_GAIN_MILLIBELS, true, CAR_HEADROOM_SHARE)
+    private val USB = Profile(USB_EXTRA_BASS_DB, USB_EXTRA_TREBLE_DB, USB_SUB_WEIGHT, USB_MIN_PAST, USB_EXTRA_GAIN_MILLIBELS, true, USB_HEADROOM_SHARE)
+    private val BLUETOOTH = Profile(BT_EXTRA_BASS_DB, BT_EXTRA_TREBLE_DB, BT_SUB_WEIGHT, BT_MIN_PAST, BT_EXTRA_GAIN_MILLIBELS, true, BT_HEADROOM_SHARE)
 
     // AudioDeviceInfo types: Bluetooth A2DP (8) and SCO (7), hearing aids
     // (23), and LE Audio's headset (26), speaker (27) and broadcast (30);
@@ -593,6 +622,8 @@ class BoaEqModule : Module() {
       27,
       30,
     )
+    // USB: a USB device (11) or accessory (12) as the output.
+    private val USB_TYPES = setOf(AudioDeviceInfo.TYPE_USB_DEVICE, AudioDeviceInfo.TYPE_USB_ACCESSORY)
     private val WIRED_TYPES = setOf(
       AudioDeviceInfo.TYPE_WIRED_HEADSET,
       AudioDeviceInfo.TYPE_WIRED_HEADPHONES,

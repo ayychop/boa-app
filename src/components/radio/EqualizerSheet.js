@@ -40,7 +40,8 @@ export const boostReadout = (v, kind) => {
 };
 
 // Where the sound is going, when that is one the sound is boosted for.
-const ROUTES = { car: 'CAR', bluetooth: 'BLUETOOTH' };
+const ROUTES = { car: 'CAR', usb: 'USB', bluetooth: 'BLUETOOTH' };
+const ROUTE_ICONS = { car: 'car-sport', usb: 'hardware-chip', bluetooth: 'bluetooth' };
 
 function useEq() {
   const [s, setS] = useState(() => ({ settings: eq.getSettings(), active: false, supported: eq.isSupported, route: eq.getRoute() }));
@@ -146,7 +147,7 @@ export default function EqualizerSheet({ open, onClose }) {
           </View>
           {hasPremium && supported && settings.link && ROUTES[route] ? (
             <View style={[styles.live, styles.route]} testID="eq-route">
-              <Ionicons name={route === 'car' ? 'car-sport' : 'bluetooth'} size={11} color={colors.gold} />
+              <Ionicons name={ROUTE_ICONS[route] ?? 'bluetooth'} size={11} color={colors.gold} />
               <Text style={[styles.liveText, { color: colors.gold }]}>{ROUTES[route]} BOOST</Text>
             </View>
           ) : null}

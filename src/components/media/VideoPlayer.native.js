@@ -1,21 +1,18 @@
-import { StyleSheet, Text, View } from 'react-native';
-import { colors, fonts } from '../../theme';
+import { View } from 'react-native';
+import { useVideoPlayer, VideoView } from 'expo-video';
 
-// TODO(native): swap this placeholder for react-native-video, e.g.
-//   import Video from 'react-native-video';
-//   <Video source={{ uri }} poster={poster} controls resizeMode="contain"
-//          style={{ width, height }} />
-// (needs a development build). BOA's current episodes are on YouTube and play
-// through YouTubePlayer, so this path only matters once direct files exist.
-export default function VideoPlayer({ width, height }) {
+// A direct video file, played by expo-video: a downloaded episode (a file://
+// on the phone, so it plays in Flight Mode) or an episode published as a file.
+// Starts playing when it opens, with the system's own controls. Mount it with
+// a `key` of the file so a different file starts fresh.
+export default function VideoPlayer({ uri, width, height }) {
+  const player = useVideoPlayer({ uri }, (p) => {
+    p.loop = false;
+    p.play();
+  });
   return (
-    <View style={[styles.box, { width, height }]}>
-      <Text style={styles.text}>Native video playback arrives with react-native-video.</Text>
+    <View style={{ width, height, backgroundColor: '#000' }}>
+      <VideoView player={player} nativeControls contentFit="contain" allowsFullscreen allowsPictureInPicture={false} style={{ width: '100%', height: '100%' }} testID="screening-video" />
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  box: { alignItems: 'center', justifyContent: 'center', backgroundColor: '#000', padding: 24 },
-  text: { fontFamily: fonts.medium, color: colors.textMuted, textAlign: 'center' },
-});

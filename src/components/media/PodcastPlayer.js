@@ -14,6 +14,10 @@ import { Slate, Tappable } from '../ui';
 import { colors, fonts, radius, space, type } from '../../theme';
 import { useSlideUp } from '../../utils/motion';
 import { LoadingDots } from '../Skeleton';
+import DownloadButton, { DownloadBar } from '../offline/DownloadButton';
+import { audioSpec } from '../../offline/specs';
+import { useOffline } from '../../offline/network';
+import { getDownload } from '../../offline/downloads';
 
 const RATES = [1, 1.25, 1.5, 2, 0.75];
 
@@ -41,6 +45,7 @@ export default function PodcastPlayer({ podcast, onClose }) {
   const player = usePlayer();
   const { position, duration } = usePlaybackProgress();
   const reduceMotion = useReducedMotion();
+  const offline = useOffline();
   const coverScale = useSharedValue(1);
 
   const mine = player.current?.kind === 'podcast' && player.current.podcastId === podcast?.id;
@@ -120,8 +125,10 @@ export default function PodcastPlayer({ podcast, onClose }) {
                   )}
                 </CircleButton>
                 <CircleButton icon="play-forward" label="Forward 30 seconds" onPress={() => player.skip(30)} />
-                {/* Balances the speed pill so play stays centred. */}
-                <View style={styles.rate} />
+                {/* Download this episode (balances the speed pill so play stays centred). */}
+                <View style={styles.rate}>
+                  <DownloadButton spec={audioSpec(podcast, episode)} size={40} testID="podcast-download" hitSlop={4} />
+                </View>
               </View>
               {mine && player.status === 'error' && <Text style={[type.caption, { textAlign: 'center', marginTop: space.md }]}>This episode couldn't load. Tap play to retry.</Text>}
 
@@ -130,13 +137,15 @@ export default function PodcastPlayer({ podcast, onClose }) {
               <Slate style={{ marginTop: space.xxl, marginBottom: space.md }}>Episodes</Slate>
               {podcast.episodes.map((ep, i) => {
                 const isCurrent = ep.id === episode.id;
+                // With no internet only what is downloaded can play.
+                const unreachable = offline && getDownload(ep.id)?.status !== 'done';
                 return (
                   <Animated.View key={ep.id} entering={FadeIn}>
                     <Pressable
                       onPress={() => player.play(episodeItem(podcast, ep))}
                       accessibilityRole="button"
                       accessibilityLabel={`Play ${ep.title}${ep.sample ? ' (sample episode)' : ''}`}
-                      style={({ pressed }) => [styles.epRow, isCurrent && styles.epRowActive, pressed && { opacity: 0.7 }]}
+                      style={({ pressed }) => [styles.epRow, isCurrent && styles.epRowActive, unreachable && { opacity: 0.45 }, pressed && { opacity: 0.7 }]}
                     >
                       <Text style={[styles.epNum, isCurrent && { color: podcast.palette[0] }]}>{String(i + 1).padStart(2, '0')}</Text>
                       <View style={{ flex: 1, minWidth: 0 }}>
@@ -144,11 +153,13 @@ export default function PodcastPlayer({ podcast, onClose }) {
                           {ep.title}
                         </Text>
                         <Text style={styles.epSub} numberOfLines={1}>
-                          {[i === 0 ? 'Latest' : null, minutes(ep.duration), ep.sample ? 'Sample Episode' : null].filter(Boolean).join(' · ')}
+                          {[i === 0 ? 'Latest' : null, minutes(ep.duration), ep.sample ? 'Sample Episode' : null, unreachable ? 'Needs internet' : null].filter(Boolean).join(' · ')}
                         </Text>
                       </View>
+                      <DownloadButton spec={audioSpec(podcast, ep)} size={32} testID={`download-${ep.id}`} hitSlop={6} />
                       <Ionicons name={isCurrent && playing ? 'pulse' : 'play-circle-outline'} size={22} color={isCurrent ? podcast.palette[0] : colors.textMuted} />
                     </Pressable>
+                    <DownloadBar id={ep.id} style={styles.epBar} />
                   </Animated.View>
                 );
               })}
@@ -181,6 +192,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
   },
+  epBar: { marginHorizontal: space.md, marginTop: -2, marginBottom: 6 },
   epRowActive: { backgroundColor: 'rgba(243,239,232,0.06)' },
   epNum: { fontFamily: fonts.mono, fontSize: 12, color: colors.textFaint, width: 22 },
   epTitle: { fontFamily: fonts.semibold, fontSize: 15, color: colors.text },

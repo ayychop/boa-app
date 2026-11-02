@@ -16,6 +16,7 @@ import { haptics } from '../utils/haptics';
 import { blockScreenshots } from '../calls/privacy';
 import { notifyMissedCall } from '../chat/notifications';
 import * as BoaCall from '../../modules/boa-call';
+import { setAppCall } from '../audio/interruptions';
 import { askForCallWakeUp } from '../calls/wakeUp';
 import { startConversation } from '../api/hub';
 import { goToTab, navigationRef, openPage } from '../navigation/ref';
@@ -206,6 +207,13 @@ export function CallProvider({ children }) {
   const [pip, setPip] = useState(false);
   useEffect(() => BoaCall.addPipListener(setPip), []);
   const onCall = !!call && call.phase !== 'ended' && !(call.direction === 'in' && call.phase === 'ringing');
+  // The radio and Zen hold for a BOA call from the moment it rings or is
+  // placed until it ends (src/audio/interruptions.js).
+  const callActive = !!call && call.phase !== 'ended';
+  useEffect(() => {
+    setAppCall(callActive);
+    return () => setAppCall(false);
+  }, [callActive]);
   useEffect(() => {
     BoaCall.setPipReady(onCall);
     if (!onCall) setPip(false);

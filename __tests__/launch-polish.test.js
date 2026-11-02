@@ -15,8 +15,10 @@ describe('the casting board', () => {
   });
 
   test('the initials are gold, swept by a sheen clipped to the letters, and centred in the frame', async () => {
-    await render(<Headshot person={talent[0]} width={160} ratio={4 / 5} />);
-    expect(screen.getByLabelText('SG')).toBeOnTheScreen();
+    // Someone without a photo yet keeps the gold initials.
+    const faceless = talent.find((t) => !t.headshot);
+    await render(<Headshot person={faceless} width={160} ratio={4 / 5} />);
+    expect(screen.getByLabelText(faceless.name.split(' ').map((w) => w[0]).slice(0, 2).join(''))).toBeOnTheScreen();
     const src = read('src/components/Headshot.js');
     expect(src).toMatch(/clipPath=\{`url\(#letters/);
     expect(src).toMatch(/textAnchor="middle"/);

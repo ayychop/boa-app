@@ -90,6 +90,30 @@ export function openBatterySettings() {
   }
 }
 
+/** True when Android already lets BOA run without battery restrictions. Null where this build can't tell. */
+export function isIgnoringBatteryOptimizations() {
+  try {
+    const v = native?.isIgnoringBatteryOptimizations?.();
+    return typeof v === 'boolean' ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Shows Android's own "always run in the background?" box (the official
+ * ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS intent). Resolves to what
+ * opened: 'dialog', 'list' (the phone's battery list, when it has no box) or
+ * 'none'.
+ */
+export function requestIgnoreBatteryOptimizations() {
+  try {
+    return native?.requestIgnoreBatteryOptimizations?.() ?? 'none';
+  } catch {
+    return 'none';
+  }
+}
+
 /** fn({ state: 'ringing' | 'stopped' | 'snoozed', id, name, station }); returns unsubscribe. */
 export function addAlarmListener(fn) {
   if (!native) return () => {};

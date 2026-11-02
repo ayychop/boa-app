@@ -16,6 +16,7 @@ import { useMedia } from '../context/MediaContext';
 import { useForms } from '../context/FormsContext';
 import BoaLogo from '../components/BoaLogo';
 import Headshot from '../components/Headshot';
+import { useGoldSheen } from '../components/GoldSheen';
 import Poster, { metaLine } from '../components/Poster';
 import { heroArt } from '../components/HeroArt';
 import PodcastCover from '../components/PodcastCover';
@@ -125,6 +126,31 @@ function Hero({ production, width, height, bottomInset = 0, topInset = 0 }) {
         </View>
       </View>
     </View>
+  );
+}
+
+// One face in the "Our Talent" row; a press lights the photo with gold.
+function PersonChip({ person, onPress }) {
+  const sheen = useGoldSheen();
+  return (
+    <Tappable
+      onPress={onPress}
+      onPressIn={sheen.onIn}
+      onPressOut={sheen.onOut}
+      onHoverIn={sheen.onIn}
+      onHoverOut={sheen.onOut}
+      style={styles.person}
+      accessibilityRole="button"
+      accessibilityLabel={`${person.name}, ${person.role}`}
+    >
+      <Headshot person={person} width={96} round sheen={sheen.value} />
+      <Text style={styles.personName} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
+        {person.name}
+      </Text>
+      <Text style={styles.personRole} numberOfLines={1}>
+        {person.role}
+      </Text>
+    </Tappable>
   );
 }
 
@@ -265,21 +291,7 @@ export default function HomeScreen({ navigation }) {
         <SectionHeader index="04" kicker="The roster" title="Our Talent" action="See all" onAction={() => navigation.navigate('Talent')} />
         <Row>
           {talent.map((person) => (
-            <Tappable
-              key={person.id}
-              onPress={() => navigation.navigate('Talent', { talentId: person.id })}
-              style={styles.person}
-              accessibilityRole="button"
-              accessibilityLabel={`${person.name}, ${person.role}`}
-            >
-              <Headshot person={person} width={96} round />
-              <Text style={styles.personName} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
-                {person.name}
-              </Text>
-              <Text style={styles.personRole} numberOfLines={1}>
-                {person.role}
-              </Text>
-            </Tappable>
+            <PersonChip key={person.id} person={person} onPress={() => navigation.navigate('Talent', { talentId: person.id })} />
           ))}
         </Row>
       </View>

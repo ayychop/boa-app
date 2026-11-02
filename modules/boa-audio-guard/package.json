@@ -1,0 +1,7 @@
+{
+  "name": "boa-audio-guard",
+  "version": "1.0.0",
+  "private": true,
+  "main": "index.js",
+  "description": "BOA Radio yields to calls (phone, WhatsApp, BOA), to another device's call over Bluetooth, and stops when the app is swiped away, unless the phone is in a car."
+}

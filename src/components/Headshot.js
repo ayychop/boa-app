@@ -9,6 +9,8 @@ import { Fog, Slate } from './ui';
 import { withAlpha } from '../utils/color';
 import { colors, fonts } from '../theme';
 import Panel from './Panel';
+import GoldSheen from './GoldSheen';
+import { fillFrame, toSource } from './HeroArt';
 
 function initials(name) {
   return name
@@ -23,6 +25,9 @@ const AnimatedRect = Animated.createAnimatedComponent(Rect);
 const PLATE_GAP = 22;
 // A typical caption plate (kicker over a one-line name), before it is measured.
 const PLATE_GUESS = 62;
+// A photo's shade, top to bottom: clear over the face, then deepening under the name.
+const PHOTO_SHADE = ['rgba(5,5,6,0)', 'rgba(5,5,6,0.18)', 'rgba(5,5,6,0.62)', 'rgba(5,5,6,0.9)'];
+const PHOTO_SHADE_AT = [0.3, 0.55, 0.8, 1];
 // The sheen: one sweep across the letters, then a rest before the next.
 const SWEEP_MS = 1500;
 const REST_MS = 2800;
@@ -108,7 +113,7 @@ function GlassCaption({ kicker, title, highlight, compact, onHeight }) {
  * and smoke that fills the frame edge to edge at any size. Pass `caption`
  * ({ kicker, title, highlight }) to set it on a glass plate in the frame.
  */
-export default function Headshot({ person, width, ratio = 4 / 5, round = false, label = true, caption, reserve = 0 }) {
+export default function Headshot({ person, width, ratio = 4 / 5, round = false, label = true, caption, reserve = 0, sheen }) {
   const height = round ? width : Math.round(width / ratio);
   // The initials centre in the space above the caption plate. Until the plate
   // has been measured, a typical one's height stands in for it, so the
@@ -127,7 +132,12 @@ export default function Headshot({ person, width, ratio = 4 / 5, round = false, 
       ]}
     >
       {person.headshot ? (
-        <Image source={{ uri: person.headshot }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+        <>
+          {/* The photo fills the frame edge to edge (cover), cropped from the middle. */}
+          <Image source={toSource(person.headshot)} style={fillFrame} resizeMode="cover" accessible accessibilityLabel={`${person.name}, headshot`} testID="headshot-photo" />
+          {/* Night falls over the foot of the picture, so the name plate reads on any photo, light or dark. */}
+          {caption && !round ? <LinearGradient colors={PHOTO_SHADE} locations={PHOTO_SHADE_AT} style={StyleSheet.absoluteFill} pointerEvents="none" testID="headshot-shade" /> : null}
+        </>
       ) : (
         <>
           <LinearGradient
@@ -154,6 +164,7 @@ export default function Headshot({ person, width, ratio = 4 / 5, round = false, 
         </>
       )}
       {caption && !round && <GlassCaption {...caption} compact={width < 170} onHeight={setPlate} />}
+      {sheen ? <GoldSheen sheen={sheen} width={width} height={height} radius={round ? width / 2 : 14} /> : null}
     </Panel>
   );
 }

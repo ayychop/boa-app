@@ -55,6 +55,8 @@ import ProfileScreen from './src/screens/ProfileScreen';
 import ChatScreen from './src/screens/ChatScreen';
 import ForecastScreen from './src/screens/ForecastScreen';
 import AlarmSettingsScreen from './src/screens/AlarmSettingsScreen';
+import DownloadsScreen from './src/screens/DownloadsScreen';
+import OfflineMode from './src/components/offline/OfflineMode';
 import ScheduledCallScreen from './src/screens/ScheduledCallScreen';
 import AlarmRingingScreen from './src/screens/AlarmRingingScreen';
 import HubWelcomeScreen from './src/screens/hub/HubWelcomeScreen';
@@ -467,6 +469,7 @@ function MainTabs({ freshInstall = false }) {
         {/* A scheduled call's countdown: it becomes the call when the host starts it. */}
         <Stack.Screen name="ScheduledCall" component={ScheduledCallScreen} options={{ animation: 'fade_from_bottom' }} />
         <Stack.Screen name="AlarmSettings" component={AlarmSettingsScreen} />
+        <Stack.Screen name="Downloads" component={DownloadsScreen} />
         <Stack.Screen name="AlarmRinging" component={AlarmRingingScreen} options={{ presentation: 'fullScreenModal', animation: 'fade', gestureEnabled: false }} />
         <Stack.Screen name="HubWelcome" component={HubWelcomeScreen} options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
         <Stack.Screen name="HubDirectory" component={HubDirectoryScreen} />
@@ -611,6 +614,8 @@ function Root() {
                                 <FormsProvider>{booted ? <Gate /> : <Intro onDone={finishBoot} />}</FormsProvider>
                               {/* Edge Lighting, over everything (Profile > Edge Lighting). */}
                               <EdgeLighting />
+                              {/* "Offline Mode": the pill with no internet, and the switch to downloads. */}
+                              <OfflineMode />
                               {/* Reminders for your scheduled calls, and what a tapped reminder opens. */}
                               <ScheduledCallSync />
                               </CallProvider>

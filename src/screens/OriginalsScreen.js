@@ -15,6 +15,8 @@ import useLayout, { WIDE } from '../hooks/useLayout';
 import { haptics } from '../utils/haptics';
 import { colors, fonts, radius, space, type } from '../theme';
 import Panel from '../components/Panel';
+import DownloadButton from '../components/offline/DownloadButton';
+import { videoSpec } from '../offline/specs';
 
 const GAP = 14;
 const CONTENT_MAX = 1200;
@@ -183,6 +185,10 @@ function EpisodeCard({ production, episode, width }) {
         <View pointerEvents="none" style={styles.playOverlay}>
           <BoaPlayButton size={64} />
         </View>
+        {/* Save it for Flight Mode: the cloud with the arrow, over the corner of the still. */}
+        <View style={styles.downloadCorner}>
+          <DownloadButton spec={videoSpec(production, episode)} size={38} testID={`download-${episode.id}`} style={styles.downloadBtn} />
+        </View>
       </View>
       <View style={[styles.episodeCaption, { width }]}>
         <Slate>Ep 01</Slate>
@@ -271,6 +277,8 @@ const styles = StyleSheet.create({
   episodeCaption: { paddingTop: 10, gap: 4 },
   episodeTitle: { fontFamily: fonts.semibold, fontSize: 15, lineHeight: 20, color: colors.text },
   heroPlay: { position: 'absolute', left: 0, right: 0, alignItems: 'center' },
+  downloadCorner: { position: 'absolute', top: 10, right: 10 },
+  downloadBtn: { backgroundColor: 'rgba(5,5,6,0.62)' },
   playOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
   sheen: { position: 'absolute', top: '-20%', bottom: '-20%', left: 0 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: space.xl },

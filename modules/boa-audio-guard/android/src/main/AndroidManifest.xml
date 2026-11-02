@@ -1,0 +1,20 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <!-- Whether the phone is joined to a car's Bluetooth (not just headphones):
+       Android only tells an app what kind of device it is connected to once
+       it has this (Android 12+; before that, the install-time BLUETOOTH). The
+       app asks once, in its own words, the first time it needs to know (see
+       src/audio/interruptions.js); without it the radio treats Bluetooth as
+       headphones and stops when the app is swiped away, but a car running
+       Android Auto, or the phone in car mode, still counts. -->
+  <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+  <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+  <application>
+    <!-- Notices the app being swiped away from Recents (stopWithTask=false is
+         what gets onTaskRemoved called) and stops the radio, unless the phone
+         is in a car. -->
+    <service
+      android:name="expo.modules.boaaudioguard.BoaTaskGuardService"
+      android:exported="false"
+      android:stopWithTask="false" />
+  </application>
+</manifest>

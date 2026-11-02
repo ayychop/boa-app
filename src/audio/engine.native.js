@@ -4,6 +4,7 @@ import { ensureAudioSession } from './session';
 import { splitTrack } from '../utils/track';
 import * as focus from './focus';
 import * as eq from './eq';
+import { localUriFor } from '../offline/downloads';
 import { guarded, safely } from '../utils/safely';
 
 export { splitTrack };
@@ -20,7 +21,7 @@ export { splitTrack };
 let player = null;
 let ready = null;
 let current = null;
-let state = { status: 'idle', title: null, position: 0, duration: 0, rate: 1, retry: 0 };
+let state = { status: 'idle', title: null, position: 0, duration: 0, rate: 1, retry: 0, interrupted: null };
 // The listener's intent: true from play() until pause(), a final error, or a
 // pause from outside the app (lock screen, headset, losing audio focus).
 let wantPlaying = false;
@@ -48,6 +49,9 @@ let remote = null; // { next, previous } from the player context
 // did nothing however far they were pushed. Attach whenever a real, non-zero
 // id appears (and re-attach if a reconnect mints a new one).
 let eqSession = 0;
+// What the player has loaded, so a download finishing (or the phone going
+// offline) can swap an episode over to its local copy.
+let loadedUri = null;
 function attachEq() {
   if (!player) return;
   try {
@@ -128,6 +132,12 @@ function onStatus(s) {
     wantPlaying = false;
     return emit({ status: 'ended', position: state.duration });
   }
+  if (s.playing && !s.isBuffering && interruption === 'call') {
+    // Something started it (audio focus handing back mid-call, a lock screen
+    // or headset button) while a call is on: held until the call ends.
+    holdForInterruption();
+    return;
+  }
   if (s.playing && !s.isBuffering) {
     // Playback is live now: the player has a real audio session id, so the
     // Hi-Fi effects can finally attach to it.
@@ -140,9 +150,12 @@ function onStatus(s) {
       clearTimeout(connectTimer);
       attempts = 0;
       established = true;
+      playingSince = Date.now();
       // Also covers play from the lock screen, headset or car.
       wantPlaying = true;
-      emit({ status: 'playing', retry: 0 });
+      // Pressing play on the car or lock screen after another device took the speaker clears that hold.
+      if (interruption === 'bluetooth') interruption = null;
+      emit({ status: 'playing', retry: 0, interrupted: null });
     }
     return;
   }
@@ -251,8 +264,73 @@ function fail(attempt) {
   }
 }
 
+// ---- being held for a call
+//
+// A call (the phone's, WhatsApp's, BOA's own) or another device's call over the
+// car's Bluetooth holds the radio: it pauses at once and stays paused until
+// the call is over. audio/interruptions.js decides when; this is the engine's
+// side of it. 'call' resumes by itself when it ends (if the radio was on and
+// you didn't pause it yourself meanwhile); 'bluetooth' (another phone took the
+// speaker) stays paused until you press play, since nothing says when that
+// call ends.
+let interruption = null; // 'call' | 'bluetooth' | null
+let resumeAfter = false;
+let playingSince = 0;
+let userPausedAt = 0;
+
+/** Why the radio is being held ('call', 'bluetooth') or null. */
+export const getInterruption = () => interruption;
+
+/** When you last paused it yourself (ms since epoch; 0 if never), so a Bluetooth "stream stopped" caused by that isn't mistaken for a hand-over. */
+export const lastUserPause = () => userPausedAt;
+
+/** How long the radio has been playing without a break, in ms (0 when it isn't). */
+export const playingFor = () => (state.status === 'playing' && playingSince ? Date.now() - playingSince : 0);
+
+function holdForInterruption() {
+  clearTimers();
+  attempts = 0;
+  wantPlaying = false;
+  gen += 1;
+  emit({ status: 'paused', retry: 0, interrupted: interruption });
+  safely('radio pause (interruption)', () => player?.pause());
+}
+
+/** A call (or a hand-over) holds the radio now: it pauses this instant. */
+export function interrupt(reason) {
+  const on = wantPlaying || state.status === 'playing' || state.status === 'loading';
+  // A call outranks a hand-over.
+  if (interruption === 'call' && reason !== 'call') return;
+  interruption = reason;
+  if (!on) return;
+  resumeAfter = reason === 'call';
+  holdForInterruption();
+}
+
+/** The call is over: the radio carries on if it was playing before. */
+export function endInterruption(reason) {
+  if (interruption !== reason) return;
+  interruption = null;
+  const again = resumeAfter && current;
+  resumeAfter = false;
+  emit({ interrupted: null });
+  if (again) play(current);
+}
+
 /** User-initiated play: resets the retry budget. */
 export function play(item) {
+  if (interruption === 'call') {
+    // Not now: you're on a call. It plays when the call ends.
+    current = item;
+    resumeAfter = true;
+    if (state.status !== 'paused') emit({ status: 'paused', retry: 0, interrupted: 'call' });
+    return Promise.resolve();
+  }
+  if (interruption) {
+    // Pressing play after another device took the speaker is the way back.
+    interruption = null;
+    emit({ interrupted: null });
+  }
   // The radio takes over from a Zen soundscape.
   focus.claim('radio');
   clearTimers();
@@ -271,7 +349,10 @@ async function connect(item, { retry = false, resumeAt = 0 }) {
     // status already shows the reconnect attempt
   } else if (switching) emit({ status: 'loading', title: null, position: 0, duration: item.duration || 0, retry: 0 });
   else emit({ status: 'loading', retry: 0 });
-  if (!/^https?:\/\//i.test(item.streamUrl || '')) {
+  // A downloaded episode plays from the phone (whatever the connection):
+  // nothing to buffer, nothing to use up, and it works in Flight Mode.
+  const uri = (!isLive(item) && localUriFor(item.id)) || item.streamUrl;
+  if (!/^(https?|file):\/\//i.test(uri || '')) {
     console.warn(`[audio] not an http(s) stream: ${item.streamUrl}`);
     failedGen = attempt;
     wantPlaying = false;
@@ -287,7 +368,8 @@ async function connect(item, { retry = false, resumeAt = 0 }) {
       return;
     }
     // Reloading a live stream on resume puts it back at "now".
-    p.replace({ uri: item.streamUrl });
+    p.replace({ uri });
+    loadedUri = uri;
     p.setPlaybackRate(isLive(item) ? 1 : state.rate);
     if (resumeAt > 0) await p.seekTo(resumeAt);
     p.play();
@@ -408,6 +490,9 @@ export async function pause() {
   clearTimers();
   attempts = 0;
   wantPlaying = false;
+  resumeAfter = false;
+  userPausedAt = Date.now();
+  playingSince = 0;
   gen += 1;
   emit({ status: 'paused', retry: 0 });
   safely('radio pause', () => player?.pause());
@@ -468,6 +553,37 @@ export function skip(delta) {
 export async function setRate(rate) {
   emit({ rate });
   if (player && !isLive(current)) safely('radio rate', () => player.setPlaybackRate(rate));
+}
+
+/**
+ * The connection has gone and the episode on is downloaded: carry on from the
+ * phone's own copy, at the same place, instead of waiting on a dead stream.
+ * Returns whether it switched.
+ */
+export async function reloadFromDevice() {
+  if (!player || !current || isLive(current)) return false;
+  const local = localUriFor(current.id);
+  if (!local || loadedUri === local) return false;
+  const at = state.position || 0;
+  const wasPlaying = wantPlaying && state.status !== 'paused';
+  try {
+    clearTimers();
+    gen += 1;
+    player.replace({ uri: local });
+    loadedUri = local;
+    player.setPlaybackRate(state.rate);
+    if (at > 0) await player.seekTo(at);
+    if (wasPlaying) {
+      wantPlaying = true;
+      established = false;
+      attempts = 0;
+      player.play();
+    }
+    return true;
+  } catch (err) {
+    console.warn('[audio] couldn\'t switch to the downloaded copy', err?.message ?? err);
+    return false;
+  }
 }
 
 /** What's loaded (a station or an episode), or null. */

@@ -51,10 +51,23 @@ export function Fog({ opacity = 0.35, variant = 0 }) {
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 /** Press-to-shrink wrapper so every tappable thing feels physical. */
-export function Tappable({ children, style, onPress, scaleTo = PRESS_SCALE, haptic = true, ...rest }) {
+export function Tappable({ children, style, onPress, scaleTo = PRESS_SCALE, haptic = true, onPressIn, onPressOut, ...rest }) {
   const press = usePress({ to: scaleTo, haptic: haptic && !!onPress });
   return (
-    <AnimatedPressable onPress={onPress} onPressIn={press.onPressIn} onPressOut={press.onPressOut} style={[style, press.style]} {...rest}>
+    <AnimatedPressable
+      onPress={onPress}
+      // The press's own dip, then whatever the caller adds (a gold sheen, say).
+      onPressIn={(e) => {
+        press.onPressIn(e);
+        onPressIn?.(e);
+      }}
+      onPressOut={(e) => {
+        press.onPressOut(e);
+        onPressOut?.(e);
+      }}
+      style={[style, press.style]}
+      {...rest}
+    >
       {children}
     </AnimatedPressable>
   );

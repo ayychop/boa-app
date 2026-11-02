@@ -20,16 +20,16 @@ describe('BOA Hi-Fi in the car (Android Auto)', () => {
   });
 
   test('the car gets more bass and treble past Signature, the sub-bass weighted up, a louder ceiling and the wraparound stage', () => {
-    expect(kt).toMatch(/CAR_EXTRA_BASS_DB = 6\.0/);
-    expect(kt).toMatch(/CAR_EXTRA_TREBLE_DB = 3\.0/);
-    expect(kt).toMatch(/CAR_EXTRA_GAIN_MILLIBELS = 500/);
-    expect(kt).toMatch(/EXTRA_BASS_DB \+ if \(car\) CAR_EXTRA_BASS_DB else 0\.0/);
-    expect(kt).toMatch(/val sub = if \(car && hz <= 120\) CAR_SUB_WEIGHT else 1\.0/);
-    expect(kt).toMatch(/if \(spatial \|\| car\)/);
-    expect(kt).toMatch(/val lowsPast = if \(car && lows > -1\.0\) max\(lows, CAR_MIN_PAST\)/);
+    expect(kt).toMatch(/CAR_EXTRA_BASS_DB = 9\.0/);
+    expect(kt).toMatch(/CAR_EXTRA_TREBLE_DB = 4\.0/);
+    expect(kt).toMatch(/CAR_EXTRA_GAIN_MILLIBELS = 900/);
+    expect(kt).toMatch(/val extraLows = lowsPast \* \(EXTRA_BASS_DB \+ profile\.extraBassDb\)/);
+    expect(kt).toMatch(/val sub = if \(profile\.subWeight > 1\.0 && hz <= 120\) profile\.subWeight else 1\.0/);
+    expect(kt).toMatch(/if \(spatial \|\| \(profile\.maxed && !silent\)\)/);
+    expect(kt).toMatch(/val lowsPast = if \(profile\.minPast > 0 && lows > -1\.0\) max\(lows, profile\.minPast\)/);
     // Flat is still flat, and the phone's own sound is untouched off the car.
     expect(kt).toMatch(/val flat = lows <= -1\.0 && treble <= -1\.0/);
-    expect(kt).toMatch(/val gain = if \(car && base > 0\) base \+ CAR_EXTRA_GAIN_MILLIBELS else base/);
+    expect(kt).toMatch(/if \(profile\.extraGainMillibels > 0 && base > 0\) min\(base \+ profile\.extraGainMillibels, ROUTE_GAIN_CEILING_MILLIBELS\) else base/);
   });
 
   test('the limiter still sits at the end of the chain, so the extra can not clip', () => {

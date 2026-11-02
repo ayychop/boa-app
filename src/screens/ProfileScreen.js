@@ -10,6 +10,7 @@ import { usePremium } from '../context/PremiumContext';
 import { usePlayer } from '../context/PlayerContext';
 import { PRICE } from '../components/premium/PremiumScreen';
 import StationLogo from '../components/StationLogo';
+import Headshot from '../components/Headshot';
 import { VIBES } from './OnboardingScreen';
 import BoaLogo from '../components/BoaLogo';
 import { Button, EmptyState, Fog, GoldBadge, LogoWatermark, Slate, Tappable, Viewfinder } from '../components/ui';
@@ -26,6 +27,7 @@ import { Avatar, BoaStarBadge, Toggle } from '../components/kit';
 import DailySpark from '../components/DailySpark';
 import { replayTour } from '../api/onboarding';
 import { useLastLiked } from '../audio/liked';
+import { formatBytes, useDownloads } from '../offline/downloads';
 import { pulseEdgeLighting, setEdgeLighting, useEdgeLighting } from '../data/edgeLighting';
 
 // Until you sign in, the profile card has a placeholder name.
@@ -76,6 +78,11 @@ export default function ProfileScreen({ navigation }) {
   const [creditsOpen, setCreditsOpen] = useState(false);
   const [carOpen, setCarOpen] = useState(false);
   const edgeOn = useEdgeLighting();
+  const downloads = useDownloads();
+  const savedDownloads = downloads.filter((d) => d.status === 'done');
+  const downloadsDetail = savedDownloads.length
+    ? `${savedDownloads.length} saved · ${formatBytes(savedDownloads.reduce((n, d) => n + (d.bytes || 0), 0))}`
+    : 'Listen and watch offline, in Flight Mode';
   const lastLoved = useLastLiked();
   const inner = Math.min(width, 1100) - space.xl * 2;
   const columns = inner >= 960 ? 3 : 2;
@@ -84,6 +91,7 @@ export default function ProfileScreen({ navigation }) {
   const row = wide ? [styles.link, styles.tile, { width: tileWidth }] : styles.link;
 
   const actions = [
+    { icon: 'cloud-download-outline', label: 'Downloads', detail: downloadsDetail, onPress: () => navigation.navigate('Downloads'), testID: 'profile-downloads' },
     { icon: 'sparkles-outline', label: 'Zen Mode', detail: 'Sleep sounds, timer and screensaver', onPress: () => openZen(false) },
     { icon: 'people-circle-outline', label: 'Creative Hub', detail: 'Find talent and message creatives', onPress: () => openHub() },
     { icon: 'alarm-outline', label: 'Alarms', detail: 'Wake up to a sound or a station', onPress: () => navigation.navigate('AlarmSettings') },
@@ -293,6 +301,7 @@ export default function ProfileScreen({ navigation }) {
               key={a.label}
               onPress={a.onPress}
               accessibilityRole={a.external ? 'link' : 'button'}
+              testID={a.testID}
               style={({ pressed }) => [row, pressed && { backgroundColor: colors.surfaceRaised }]}
             >
               <Ionicons name={a.icon} size={19} color={colors.gold} />
@@ -368,9 +377,12 @@ export default function ProfileScreen({ navigation }) {
           {founders.map((f) => (
             <View key={f.name} style={[styles.quote, wide && { width: (inner - space.xl) / 2 }]}>
               <Text style={styles.quoteText}>“{f.quote}”</Text>
-              <Slate style={{ marginTop: space.md }}>
-                {f.name} · {f.role}
-              </Slate>
+              <View style={styles.founderRow}>
+                <Headshot person={f} width={44} round />
+                <Slate style={{ flex: 1 }} lines={2}>
+                  {f.name} · {f.role}
+                </Slate>
+              </View>
             </View>
           ))}
         </View>
@@ -503,6 +515,7 @@ const styles = StyleSheet.create({
   lovedKicker: { fontFamily: fonts.monoMedium, fontSize: 9.5, letterSpacing: 1.4, color: colors.gold },
   lovedName: { fontFamily: fonts.semibold, fontSize: 17, letterSpacing: -0.3, color: colors.text, marginTop: 3 },
   lovedPlay: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.gold, boxShadow: '0px 4px 14px rgba(226,168,75,0.5)' },
+  founderRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, marginTop: space.md },
   quote: { marginTop: space.lg, paddingLeft: space.lg, borderLeftWidth: 2, borderLeftColor: colors.gold },
   quoteText: { fontFamily: fonts.serif, fontSize: 24, lineHeight: 30, color: colors.text },
 });

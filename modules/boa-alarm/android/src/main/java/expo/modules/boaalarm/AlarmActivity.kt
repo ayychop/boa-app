@@ -20,6 +20,8 @@ import android.graphics.drawable.RippleDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.text.format.DateFormat
 import android.util.TypedValue
 import android.view.Gravity
@@ -62,6 +64,9 @@ class AlarmActivity : Activity() {
 
   private var preview = false
   private var listening = false
+  // Stop or Snooze has been pressed: it only counts once.
+  private var acted = false
+  private val handler = Handler(Looper.getMainLooper())
   private val animators = mutableListOf<Animator>()
 
   private val closer = object : BroadcastReceiver() {
@@ -110,6 +115,7 @@ class AlarmActivity : Activity() {
   }
 
   override fun onDestroy() {
+    handler.removeCallbacksAndMessages(null)
     animators.forEach { it.cancel() }
     animators.clear()
     if (listening) {
@@ -299,10 +305,26 @@ class AlarmActivity : Activity() {
       setOnClickListener { onClick() }
     }
 
+    // Stop and Snooze work on the first press, whatever the service is doing:
+    // the page answers at once (it dims), the press goes straight to the
+    // service, and if the service never says it is done the page closes itself
+    // a moment later, so a press can never leave it standing there.
+    fun act(action: String) {
+      if (preview) {
+        finish()
+        return
+      }
+      if (acted) return
+      acted = true
+      root.animate().alpha(0.5f).setDuration(140).start()
+      AlarmService.command(this, action)
+      handler.postDelayed({ if (!isFinishing) finish() }, 700L)
+    }
+
     val lit = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(t.buttonFrom, t.buttonTo))
     lit.setCornerRadius(bigH / 2f)
     val stop = pill("Stop", bigH, lit, t.buttonText, Color.argb(70, 255, 255, 255)) {
-      if (preview) finish() else AlarmService.command(this, AlarmService.ACTION_STOP)
+      act(AlarmService.ACTION_STOP)
     }
     stop.elevation = dp(12).toFloat()
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
@@ -316,7 +338,7 @@ class AlarmActivity : Activity() {
     glass.setCornerRadius(smallH / 2f)
     glass.setStroke(dp(1), t.glassStroke)
     val snooze = pill("Snooze  ·  ${AlarmService.SNOOZE_MINUTES} min", smallH, glass, t.text, if (t.light) Color.argb(50, 0, 0, 0) else Color.argb(50, 255, 255, 255)) {
-      if (preview) finish() else AlarmService.command(this, AlarmService.ACTION_SNOOZE)
+      act(AlarmService.ACTION_SNOOZE)
     }
     add(snooze, LinearLayout.LayoutParams(bw, smallH).apply { topMargin = dp(14) })
 

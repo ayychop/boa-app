@@ -89,7 +89,17 @@ export const showreel = {
 };
 
 // Order, roles, frame ratios and tints match the roster on /talent.
-// The site has no headshots yet (headshot: null).
+// Real photos (assets/talent, cropped to cover from the middle) for everyone
+// who has sent one; the rest keep the initials placeholder (headshot: null).
+const PHOTOS = {
+  'sabeian-gilzene': require('../../assets/talent/sabeian-gilzene.jpg'),
+  'jeremy-owusu': require('../../assets/talent/jeremy-owusu.jpg'),
+  'ngor-yel': require('../../assets/talent/ngor-yel.jpg'),
+  'prince-boamah': require('../../assets/talent/prince-boamah.jpg'),
+  'rebecca-soper': require('../../assets/talent/rebecca-soper.jpg'),
+  'phillip-quartey': require('../../assets/talent/phillip-quartey.jpg'),
+};
+
 export const talent = [
   { id: 'sabeian-gilzene', name: 'Sabeian Gilzene', role: 'Actor & Model', ratio: 3 / 4, tint: '#E2A84B' },
   { id: 'jeremy-owusu', name: 'Jeremy Benson', role: 'Actor & Model', ratio: 2 / 3, tint: '#D9D4C8' },
@@ -98,10 +108,11 @@ export const talent = [
   { id: 'chan-yel', name: 'Chan Yel', role: 'Actor & Model', ratio: 4 / 5, tint: '#E08AA0' },
   { id: 'prince-boamah', name: 'Prince Boamah', role: 'Actor & Model', ratio: 4 / 5, tint: '#D1513F' },
   { id: 'rebecca-soper', name: 'Rebecca Soper', role: 'Actress & Model', ratio: 3 / 4, tint: '#E2A84B' },
+  { id: 'phillip-quartey', name: 'Phillip Quartey', role: 'Actor & Model', ratio: 3 / 4, tint: '#5CB8E6' },
   { id: 'aaron-russell', name: 'Aaron Russell', role: 'Actor & Model', ratio: 3 / 4, tint: '#A6A29B' },
 ].map((t) => ({
   ...t,
-  headshot: null,
+  headshot: PHOTOS[t.id] ?? null,
   profileUrl: `${SITE_URL}/talent/${t.id}`,
   enquireUrl: `${SITE_URL}/contact?subject=${encodeURIComponent(`Booking enquiry: ${t.name}`)}`,
 }));
@@ -110,11 +121,15 @@ export const founders = [
   {
     name: 'Joseph Boat',
     role: 'Co-founder',
+    headshot: require('../../assets/talent/joseph-boat.jpg'),
+    tint: '#E2A84B',
     quote: 'Talent was never the problem. Access was.',
   },
   {
     name: 'David O',
     role: 'Co-founder',
+    headshot: require('../../assets/talent/david-o.jpg'),
+    tint: '#E2A84B',
     quote: 'We are not here to guard the door. We are here to hold it open.',
   },
 ];

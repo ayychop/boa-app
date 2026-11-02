@@ -18,6 +18,7 @@ import { Button, Fog, Slate } from '../components/ui';
 import { haptics } from '../utils/haptics';
 import { colors, fonts, radius, space, type } from '../theme';
 import * as BoaAlarm from '../../modules/boa-alarm';
+import { BATTERY, batteryStatus, batteryTipDismissed, dismissBatteryTip, requestBatteryExemption } from '../utils/batteryExemption';
 
 // Stations to wake up to: your library first, then two picks per genre.
 function useWakeStations() {
@@ -291,8 +292,36 @@ function Editor({ initial, onDone, onDelete, isNew }) {
  */
 export default function AlarmSettingsScreen({ navigation }) {
   const insets = useSafeAreaInsets();
-  const { alarms, toggle, remove, permission, askPermission, exact, askExact } = useAlarms();
+  const { alarms, ready, toggle, remove, permission, askPermission, exact, askExact } = useAlarms();
   const [editing, setEditing] = useState(null); // { alarm, isNew }
+
+  // Battery: Android's "always run in the background?" box comes up once, the
+  // first time a radio alarm is turned on (never on opening this screen, never
+  // again by itself). A "no" is kept; what is left is one quiet line to tap or close.
+  const [battery, setBattery] = useState(BATTERY.unsupported);
+  const [tipClosed, setTipClosed] = useState(true);
+  useEffect(() => {
+    let live = true;
+    (async () => {
+      const [b, closed] = await Promise.all([batteryStatus(), batteryTipDismissed()]);
+      if (live) {
+        setBattery(b);
+        setTipClosed(closed);
+      }
+    })();
+    return () => {
+      live = false;
+    };
+  }, []);
+  const stationAlarms = alarms.filter((a) => a.enabled && a.sound?.type === 'station').length;
+  const seenStations = useRef(null);
+  useEffect(() => {
+    if (!ready) return;
+    const before = seenStations.current;
+    seenStations.current = stationAlarms;
+    if (before === null || stationAlarms <= before) return; // the list just loaded, or nothing new is on
+    requestBatteryExemption().then(setBattery);
+  }, [ready, stationAlarms]);
 
   if (editing) {
     return (
@@ -345,11 +374,34 @@ export default function AlarmSettingsScreen({ navigation }) {
             <Text style={styles.warnText}>Android needs your OK to ring alarms at the exact minute. Tap to allow Alarms & reminders for BOA.</Text>
           </Pressable>
         )}
-        {BoaAlarm.isAvailable && sorted.some((a) => a.enabled && a.sound?.type === 'station') && (
-          <Pressable onPress={() => BoaAlarm.openBatterySettings()} style={styles.warn} accessibilityRole="button" testID="alarm-battery-tip">
-            <Ionicons name="battery-charging-outline" size={18} color={colors.gold} />
-            <Text style={styles.warnText}>For the surest wake-up, open BOA's battery settings and choose Unrestricted, so the phone never puts BOA to sleep.</Text>
-          </Pressable>
+        {BoaAlarm.isAvailable && stationAlarms > 0 && !tipClosed && (battery === BATTERY.pending || battery === BATTERY.declined) && (
+          <View style={styles.warn} testID="alarm-battery-tip">
+            <Pressable
+              onPress={() => requestBatteryExemption({ byUser: true }).then(setBattery)}
+              accessibilityRole="button"
+              accessibilityLabel="Let BOA run in the background so alarms ring"
+              style={styles.warnMain}
+            >
+              <Ionicons name="battery-charging-outline" size={18} color={colors.gold} />
+              <Text style={styles.warnText}>
+                {battery === BATTERY.declined
+                  ? "Battery saver may stop BOA's alarms. Tap to try again."
+                  : 'For the surest wake-up, let BOA run in the background. Tap to allow.'}
+              </Text>
+            </Pressable>
+            <Pressable
+              hitSlop={10}
+              onPress={() => {
+                setTipClosed(true);
+                dismissBatteryTip();
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Close battery tip"
+              testID="alarm-battery-tip-close"
+            >
+              <Ionicons name="close" size={16} color={colors.textMuted} />
+            </Pressable>
+          </View>
         )}
         {/* The phone's own alarm page (Android, once this build has the native alarm): six looks. */}
         {BoaAlarm.isAvailable ? <AlarmThemePicker /> : null}
@@ -389,6 +441,7 @@ const styles = StyleSheet.create({
   cardWhen: { fontFamily: fonts.mono, fontSize: 10, letterSpacing: 1.4, color: colors.gold, marginTop: 6, textTransform: 'uppercase' },
   empty: { alignItems: 'center', padding: space.xl, borderRadius: radius.xl, overflow: 'hidden', backgroundColor: colors.surface, marginTop: space.lg },
   warn: { flexDirection: 'row', gap: space.sm, alignItems: 'center', padding: space.md, borderRadius: radius.md, backgroundColor: colors.goldSoft },
+  warnMain: { flex: 1, flexDirection: 'row', gap: space.sm, alignItems: 'center' },
   warnText: { flex: 1, fontFamily: fonts.medium, fontSize: 12.5, color: colors.text },
   editor: { padding: space.xl, paddingTop: 0, paddingBottom: space.xxxl },
   ringsIn: { textAlign: 'center', fontFamily: fonts.mono, fontSize: 11, letterSpacing: 1.6, color: colors.gold, marginTop: space.sm, textTransform: 'uppercase' },

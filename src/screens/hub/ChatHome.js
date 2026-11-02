@@ -12,6 +12,7 @@ import { Avatar, IconButton, BoaStarBadge, DayOneBadge } from '../../components/
 import { Button, Slate } from '../../components/ui';
 import DailySpark from '../../components/DailySpark';
 import Headshot from '../../components/Headshot';
+import { useGoldSheen } from '../../components/GoldSheen';
 import { ThreadRow } from './HubChatsScreen';
 import ContactSheet from '../../components/hub/ContactSheet';
 import ScheduleList from '../../components/hub/ScheduleList';
@@ -98,6 +99,7 @@ const TALENT_TEXT = 82;
 
 // BOA's own roster, as tall portrait cards.
 function TalentCard({ person, onPress, index }) {
+  const sheen = useGoldSheen();
   return (
     <Animated.View
       entering={FadeInRight.delay(Math.min(index, 6) * 60)
@@ -106,12 +108,16 @@ function TalentCard({ person, onPress, index }) {
     >
       <Pressable
         onPress={onPress}
+        onPressIn={sheen.onIn}
+        onPressOut={sheen.onOut}
+        onHoverIn={sheen.onIn}
+        onHoverOut={sheen.onOut}
         accessibilityRole="button"
         accessibilityLabel={`${person.name}, ${person.role}`}
         style={({ pressed }) => [styles.talent, pressed && { transform: [{ scale: 0.97 }] }]}
         testID={`pulse-talent-${person.id}`}
       >
-        <Headshot person={person} width={132} ratio={132 / 188} label={false} reserve={TALENT_TEXT} />
+        <Headshot person={person} width={132} ratio={132 / 188} label={false} reserve={TALENT_TEXT} sheen={sheen.value} />
         <LinearGradient colors={['rgba(5,5,6,0)', 'rgba(5,5,6,0.9)']} locations={[0.45, 1]} style={StyleSheet.absoluteFill} />
         <View style={styles.talentText}>
           <Text style={styles.personName} numberOfLines={1}>

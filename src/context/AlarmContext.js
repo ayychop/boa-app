@@ -215,17 +215,22 @@ export function AlarmProvider({ children }) {
     [player, stopTone],
   );
 
+  // Stop and Snooze read the alarm that is ringing from here, not from the
+  // render they were made in, so a press never acts on a stale (or no) alarm.
+  const ringingRef = useRef(null);
+  ringingRef.current = ringing;
+
   const stop = useCallback(() => {
     stopTone();
     if (nativeRinging.current) {
       nativeRinging.current = false;
       BoaAlarm.stop();
-    } else if (ringing?.sound?.type === 'station') player.pause();
+    } else if (ringingRef.current?.sound?.type === 'station') player.pause();
     setRinging(null);
-  }, [ringing, player, stopTone]);
+  }, [player, stopTone]);
 
   const snooze = useCallback(() => {
-    const alarm = ringing;
+    const alarm = ringingRef.current;
     const byPhone = nativeRinging.current;
     if (byPhone) {
       // The phone sets the snooze itself (and stops the radio).
@@ -243,7 +248,7 @@ export function AlarmProvider({ children }) {
       content: { title: `${alarm.name || 'BOA Alarm'} (snoozed)`, sound: t.file, data: { alarmId: alarm.id, snooze: true } },
       trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: at, channelId: channelFor(t.id), delivery: 'alarmClock' },
     }).catch(() => {});
-  }, [ringing, stop]);
+  }, [stop]);
 
   // Tapped from the notification (or the app open when it arrives).
   useEffect(() => {

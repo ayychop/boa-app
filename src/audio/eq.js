@@ -61,7 +61,7 @@ let settings = SIGNATURE;
 let allowed = false;
 let session = 0;
 let active = false;
-// Where the sound is going: 'car', 'bluetooth', 'wired' or 'speaker'.
+// Where the sound is going: 'car', 'usb', 'bluetooth', 'wired' or 'speaker'.
 let route = native.route?.() ?? 'speaker';
 const subs = new Set();
 
@@ -112,7 +112,7 @@ native.addRouteListener?.((next) => {
   emit();
 });
 
-/** Where the sound is going now: 'car', 'bluetooth', 'wired' or 'speaker'. */
+/** Where the sound is going now: 'car', 'usb', 'bluetooth', 'wired' or 'speaker'. */
 export const getRoute = () => route;
 
 /**

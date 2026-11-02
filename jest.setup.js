@@ -44,9 +44,15 @@ jest.mock('./src/audio/engine', () => {
     },
     setRemoteControls: jest.fn(),
     getCurrent: jest.fn(() => null),
+    reloadFromDevice: jest.fn(async () => false),
     fadeOut: jest.fn(async () => emit({ status: 'paused' })),
     setNowPlaying: jest.fn(),
     setArtwork: jest.fn(),
+    interrupt: jest.fn(),
+    endInterruption: jest.fn(),
+    getInterruption: jest.fn(() => null),
+    lastUserPause: jest.fn(() => 0),
+    playingFor: jest.fn(() => 0),
   };
 });
 
@@ -136,6 +142,9 @@ jest.mock('expo-file-system', () => {
       return true;
     }
     create() {}
+    list() {
+      return [];
+    }
   }
   class File {
     constructor(...parts) {
@@ -169,13 +178,32 @@ jest.mock('expo-file-system', () => {
     }
   }
   // Images (station logos) arrive as a real-sized PNG.
-  File.downloadFileAsync = jest.fn(async (url, dest) => {
+  File.downloadFileAsync = jest.fn(async (url, dest, options) => {
+    options?.onProgress?.({ bytesWritten: 512, totalBytes: 1024 });
     const image = /\.(png|jpe?g|webp|gif)(\?|$)/i.test(url);
     files.set(dest.uri, image ? 8192 : 1024);
     if (image) bytes.set(dest.uri, PNG);
     return dest;
   });
-  return { Directory, File, Paths: { cache: { uri: 'file:///cache' } }, __files: files };
+  return { Directory, File, Paths: { cache: { uri: 'file:///cache' }, document: { uri: 'file:///documents' } }, __files: files };
+});
+
+// NetInfo: online unless a test says otherwise (__emit({ isConnected: false })).
+jest.mock('@react-native-community/netinfo', () => {
+  const listeners = new Set();
+  let state = { isConnected: true, isInternetReachable: true };
+  const api = {
+    addEventListener: jest.fn((fn) => {
+      listeners.add(fn);
+      return () => listeners.delete(fn);
+    }),
+    fetch: jest.fn(async () => state),
+    __emit: (next) => {
+      state = { ...state, ...next };
+      listeners.forEach((fn) => fn(state));
+    },
+  };
+  return { __esModule: true, default: api, ...api };
 });
 
 // expo-video: a fake player per hook call, recording source, looping and
@@ -431,6 +459,8 @@ jest.mock('./modules/boa-alarm', () => {
     setTheme: jest.fn(),
     preview: jest.fn(() => true),
     openBatterySettings: jest.fn(() => true),
+    isIgnoringBatteryOptimizations: jest.fn(() => null),
+    requestIgnoreBatteryOptimizations: jest.fn(() => 'dialog'),
     addAlarmListener: jest.fn((fn) => {
       listeners.add(fn);
       return () => listeners.delete(fn);

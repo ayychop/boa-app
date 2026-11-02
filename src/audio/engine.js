@@ -218,6 +218,11 @@ export function setRemoteControls(handlers) {
 }
 
 /** What's loaded (a station or an episode), or null. */
+/** Nothing is downloaded on the web: nothing to switch to. */
+export async function reloadFromDevice() {
+  return false;
+}
+
 export function getCurrent() {
   return current;
 }
@@ -231,6 +236,14 @@ export function subscribe(fn) {
 // Browsers can't read ICY track metadata from cross-origin streams, so
 // state.title stays null for live radio on web.
 export const supportsTrackTitles = false;
+
+// Calls can't hold the radio in a browser (there are no calls to see), so
+// these are the same interface as the native engine, doing nothing.
+export const getInterruption = () => null;
+export const lastUserPause = () => 0;
+export const playingFor = () => 0;
+export function interrupt() {}
+export function endInterruption() {}
 
 // A Zen soundscape starting pauses the radio at once.
 focus.register('radio', () => {

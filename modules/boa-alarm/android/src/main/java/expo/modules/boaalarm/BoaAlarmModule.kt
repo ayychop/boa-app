@@ -6,6 +6,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.net.Uri
 import android.os.Build
+import android.os.PowerManager
 import android.provider.Settings
 import androidx.core.content.ContextCompat
 import expo.modules.kotlin.modules.Module
@@ -113,6 +114,40 @@ class BoaAlarmModule : Module() {
 
     Function("stop") { AlarmService.command(context, AlarmService.ACTION_STOP) }
     Function("snooze") { AlarmService.command(context, AlarmService.ACTION_SNOOZE) }
+
+    /** Whether Android already lets BOA run without battery restrictions (nothing to ask). */
+    Function("isIgnoringBatteryOptimizations") {
+      val pm = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
+      if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) true else pm?.isIgnoringBatteryOptimizations(context.packageName) == true
+    }
+
+    /**
+     * Android's own "Let BOA always run in the background?" box
+     * (ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS), a one-tap Allow / Deny.
+     * Where a phone has no such box, its list of battery-optimised apps opens
+     * instead. Returns "dialog", "list" or "none" for what was shown.
+     */
+    Function("requestIgnoreBatteryOptimizations") {
+      if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+        "none"
+      } else {
+        val pkg = context.packageName
+        val ask = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:$pkg"))
+          .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        val list = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        try {
+          context.startActivity(ask)
+          "dialog"
+        } catch (_: Exception) {
+          try {
+            context.startActivity(list)
+            "list"
+          } catch (_: Exception) {
+            "none"
+          }
+        }
+      }
+    }
 
     /** The system's battery screen for BOA: "Unrestricted" keeps the phone from stopping the app. */
     Function("openBatterySettings") {

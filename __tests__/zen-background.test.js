@@ -28,7 +28,7 @@ test('Zen played first (no radio this session) keeps playing with the phone lock
   await advance(200);
 
   // Background playback is on before the first sound plays.
-  expect(audio.setAudioModeAsync).toHaveBeenCalledWith({ playsInSilentMode: true, shouldPlayInBackground: true, interruptionMode: 'doNotMix' });
+  expect(audio.setAudioModeAsync).toHaveBeenCalledWith({ playsInSilentMode: true, shouldPlayInBackground: true, interruptionMode: 'doNotMixPersistent' });
   const player = zenPlayer();
   expect(audio.setAudioModeAsync.mock.invocationCallOrder[0]).toBeLessThan(player.play.mock.invocationCallOrder[0]);
 

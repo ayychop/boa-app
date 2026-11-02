@@ -73,7 +73,23 @@ class AlarmService : Service() {
       return AlarmStore.Alarm(id, i.getStringExtra(AlarmScheduler.EXTRA_NAME) ?: "BOA Alarm", 0, 0, emptyList(), i.getStringExtra(AlarmScheduler.EXTRA_STATION) ?: "", url)
     }
 
+    /** The service ringing now, if it is up: Stop and Snooze go straight to it. */
+    @Volatile private var instance: AlarmService? = null
+
+    /**
+     * Stop or Snooze, this instant. They used to go through Android's service
+     * start, which a service that is busy (or an app Android holds back) can
+     * swallow, so a press did nothing and the next one was needed. Now, with the
+     * service up, the press goes straight to it on the main thread; only with
+     * it down does it fall back to starting it (which then finds nothing
+     * ringing and ends itself).
+     */
     fun command(c: Context, action: String) {
+      val live = instance
+      if (live != null) {
+        Handler(Looper.getMainLooper()).post { live.perform(action) }
+        return
+      }
       try {
         c.startService(Intent(c, AlarmService::class.java).setAction(action))
       } catch (_: Exception) {
@@ -151,15 +167,30 @@ class AlarmService : Service() {
 
   override fun onBind(intent: Intent?): IBinder? = null
 
-  override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-    when (intent?.action) {
-      ACTION_STOP -> {
-        finishRinging("stopped")
-        return START_NOT_STICKY
-      }
+  override fun onCreate() {
+    super.onCreate()
+    instance = this
+  }
+
+  /** Stop or Snooze, from the page, the notification or the app. Once: a second press finds nothing ringing. */
+  private fun perform(action: String) {
+    if (!ringing && alarm == null) {
+      if (action == ACTION_STOP) stopSelf()
+      return
+    }
+    when (action) {
+      ACTION_STOP -> finishRinging("stopped")
       ACTION_SNOOZE -> {
         alarm?.let { AlarmScheduler.snooze(this, it, SNOOZE_MINUTES) }
         finishRinging("snoozed")
+      }
+    }
+  }
+
+  override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+    when (intent?.action) {
+      ACTION_STOP, ACTION_SNOOZE -> {
+        perform(intent?.action ?: ACTION_STOP)
         return START_NOT_STICKY
       }
     }
@@ -189,6 +220,7 @@ class AlarmService : Service() {
   }
 
   override fun onDestroy() {
+    if (instance === this) instance = null
     if (ringing) finishRinging("stopped")
     super.onDestroy()
   }

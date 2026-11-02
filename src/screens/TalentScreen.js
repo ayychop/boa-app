@@ -6,6 +6,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { talent } from '../data/boaContent';
 import { useForms } from '../context/FormsContext';
 import Headshot from '../components/Headshot';
+import { useGoldSheen } from '../components/GoldSheen';
 import BottomSheet from '../components/BottomSheet';
 import CastingBoard from '../components/casting/CastingBoard';
 import { Button, Fog, Slate, Tappable } from '../components/ui';
@@ -33,10 +34,21 @@ function toColumns(people, count) {
 }
 
 function TalentCard({ person, width, onPress, delay, selected }) {
+  // A press (or a mouse over it, on the web) lights the photo with gold.
+  const sheen = useGoldSheen();
   return (
     <Animated.View entering={FadeInDown.delay(delay).springify().damping(18)} layout={LinearTransition.springify().damping(20)}>
-      <Tappable onPress={() => onPress(person)} accessibilityRole="button" accessibilityLabel={`${person.name}, ${person.role}`}>
-        <Headshot person={person} width={width} ratio={person.ratio} caption={{ kicker: person.role, title: person.name, highlight: selected }} />
+      <Tappable
+        onPress={() => onPress(person)}
+        onPressIn={sheen.onIn}
+        onPressOut={sheen.onOut}
+        onHoverIn={sheen.onIn}
+        onHoverOut={sheen.onOut}
+        accessibilityRole="button"
+        accessibilityLabel={`${person.name}, ${person.role}`}
+        testID={`talent-card-${person.id}`}
+      >
+        <Headshot person={person} width={width} ratio={person.ratio} sheen={sheen.value} caption={{ kicker: person.role, title: person.name, highlight: selected }} />
       </Tappable>
     </Animated.View>
   );

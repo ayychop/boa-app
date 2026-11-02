@@ -12,6 +12,10 @@ import { fillFrame, toSource } from '../HeroArt';
 import OriginalHeart from '../hub/OriginalHeart';
 import { colors, fonts, space, type } from '../../theme';
 import { PARKED_ONLY } from '../../car/parked';
+import DownloadButton from '../offline/DownloadButton';
+import { videoSpec } from '../../offline/specs';
+import { localUriFor, useDownload } from '../../offline/downloads';
+import { useOffline } from '../../offline/network';
 
 // Default room art when a production has none of its own.
 const ROOM_ART = require('../../../assets/images/mind-states-backdrop.jpg');
@@ -29,6 +33,9 @@ export default function ScreeningRoom({ screening, onClose, onSwitch, car }) {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const inCar = !!car?.car;
+  const offline = useOffline();
+  // Whether this episode is saved on the phone: it plays from there, online or not.
+  const saved = useDownload(screening?.kind === 'episode' ? screening?.episode?.id : null);
   const parked = !inCar || !!car.parked;
   // Held: stopped because the car moved, until Resume.
   const [held, setHeld] = useState(false);
@@ -48,7 +55,12 @@ export default function ScreeningRoom({ screening, onClose, onSwitch, car }) {
 
   let source = null;
   if (kind === 'trailer' && production.trailerYouTubeId) source = { youTubeId: production.trailerYouTubeId };
-  if (kind === 'episode' && episode) source = episode.videoUrl ? { videoUrl: episode.videoUrl } : { youTubeId: episode.youTubeId };
+  const localUri = saved?.status === 'done' ? localUriFor(saved.id) : null;
+  if (kind === 'episode' && episode) {
+    source = localUri ? { videoUrl: localUri, local: true } : episode.videoUrl ? { videoUrl: episode.videoUrl } : { youTubeId: episode.youTubeId };
+  }
+  // With no internet, only a downloaded episode can play.
+  const needsInternet = offline && !source?.local && !!(source?.youTubeId || source?.videoUrl);
 
   const label = kind === 'trailer' ? 'Official trailer' : episode?.title ?? 'Episode';
   const firstEpisode = production.episodes[0];
@@ -97,10 +109,16 @@ export default function ScreeningRoom({ screening, onClose, onSwitch, car }) {
                 <Text style={styles.parkedBody}>{PARKED_ONLY}</Text>
                 {parked ? <Button label="Resume" onPress={() => setHeld(false)} style={{ marginTop: space.lg }} testID="screening-resume" /> : null}
               </View>
+            ) : needsInternet ? (
+              <View style={[styles.parkedHold, { width: videoWidth, height: videoHeight }]} testID="screening-offline">
+                <Ionicons name="cloud-offline-outline" size={40} color={colors.gold} />
+                <Text style={styles.parkedTitle}>You are offline</Text>
+                <Text style={styles.parkedBody}>Download episodes while you are online to watch them in Flight Mode.</Text>
+              </View>
             ) : source?.youTubeId ? (
               <YouTubePlayer key={source.youTubeId} videoId={source.youTubeId} width={videoWidth} height={videoHeight} />
             ) : source?.videoUrl ? (
-              <VideoPlayer uri={source.videoUrl} poster={production.image} width={videoWidth} height={videoHeight} />
+              <VideoPlayer key={source.videoUrl} uri={source.videoUrl} poster={production.image} width={videoWidth} height={videoHeight} />
             ) : (
               <View>
                 <Poster production={production} width={videoWidth} showTitle={false} rounded={0} />
@@ -117,6 +135,7 @@ export default function ScreeningRoom({ screening, onClose, onSwitch, car }) {
           <View style={[styles.info, { width: Math.min(width, 760) }]}>
             <View style={styles.titleRow}>
               <Text style={[type.h1, { flex: 1 }]}>{production.title}</Text>
+              {kind === 'episode' && episode ? <DownloadButton spec={videoSpec(production, episode)} size={40} testID="screening-download" /> : null}
               <OriginalHeart production={production} />
             </View>
             {!!metaLine(production) && <Slate style={{ marginTop: 10 }}>{metaLine(production)}</Slate>}
