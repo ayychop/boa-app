@@ -11,7 +11,7 @@ import { podcastById } from '../data/podcasts';
 import { productions } from '../data/boaContent';
 import { cancelDownload, formatBytes, localUriFor, removeAllDownloads, startDownload, useDownloads } from '../offline/downloads';
 import { useOffline } from '../offline/network';
-import useBottomSpace from '../hooks/useBottomSpace';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { toSource } from '../components/HeroArt';
 import { haptics } from '../utils/haptics';
 import { colors, fonts, radius, space } from '../theme';
@@ -99,7 +99,11 @@ function Row({ entry, index, onPlay }) {
  * bin deletes it to free the space.
  */
 export default function DownloadsScreen({ navigation }) {
-  const bottom = useBottomSpace(space.xxl);
+  // A page over the tabs (a root stack screen), so there is no tab bar here to
+  // measure (the tab-bar hooks throw outside the tab navigator). Clear the
+  // gesture bar / home indicator instead.
+  const insets = useSafeAreaInsets();
+  const bottom = insets.bottom + space.xxl;
   const downloads = useDownloads();
   const offline = useOffline();
   const player = usePlayer();

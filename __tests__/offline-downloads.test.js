@@ -4,8 +4,6 @@ import { act, render, screen, userEvent } from '@testing-library/react-native';
 import { Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-jest.mock('../src/hooks/useBottomSpace', () => () => 0);
-
 const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
 const flush = async () => {
   for (let i = 0; i < 10; i += 1) await act(async () => { await Promise.resolve(); });
@@ -345,6 +343,17 @@ describe('the Downloads page in Profile', () => {
     await flush();
     expect(screen.queryByTestId('download-row-ep-1')).toBeNull();
     expect(screen.getByText('No audio downloads yet')).toBeOnTheScreen();
+  });
+
+  test('it is a page over the tabs: it never asks for the tab bar height (that crashed the app)', () => {
+    const src = read('src/screens/DownloadsScreen.js');
+    expect(src).not.toMatch(/useBottomSpace|useBottomTabBarHeight/);
+    expect(src).toMatch(/useSafeAreaInsets/);
+    for (const f of ['src/components/offline/OfflineMode.js', 'src/components/offline/DownloadButton.js', 'src/offline/downloads.js']) {
+      expect(read(f)).not.toMatch(/useBottomSpace|useBottomTabBarHeight/);
+    }
+    // And it renders with no tab navigator around it, as it does in the app.
+    // (The other tests in this file render it the same way, unmocked.)
   });
 
   test('in Offline Mode the page says so', async () => {
