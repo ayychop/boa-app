@@ -10,7 +10,7 @@ import { usePremium } from '../context/PremiumContext';
 import { usePlayer } from '../context/PlayerContext';
 import { PRICE } from '../components/premium/PremiumScreen';
 import StationLogo from '../components/StationLogo';
-import Headshot from '../components/Headshot';
+import FounderCard from '../components/FounderCard';
 import { VIBES } from './OnboardingScreen';
 import BoaLogo from '../components/BoaLogo';
 import { Button, EmptyState, Fog, GoldBadge, LogoWatermark, Slate, Tappable, Viewfinder } from '../components/ui';
@@ -375,15 +375,7 @@ export default function ProfileScreen({ navigation }) {
         <Slate style={{ marginTop: space.xxl }}>The founders</Slate>
         <View style={wide && styles.quotes}>
           {founders.map((f) => (
-            <View key={f.name} style={[styles.quote, wide && { width: (inner - space.xl) / 2 }]}>
-              <Text style={styles.quoteText}>“{f.quote}”</Text>
-              <View style={styles.founderRow}>
-                <Headshot person={f} width={44} round />
-                <Slate style={{ flex: 1 }} lines={2}>
-                  {f.name} · {f.role}
-                </Slate>
-              </View>
-            </View>
+            <FounderCard key={f.name} founder={f} style={[styles.quote, wide && { width: (inner - space.xl) / 2 }]} textStyle={styles.quoteText} />
           ))}
         </View>
 
@@ -515,7 +507,6 @@ const styles = StyleSheet.create({
   lovedKicker: { fontFamily: fonts.monoMedium, fontSize: 9.5, letterSpacing: 1.4, color: colors.gold },
   lovedName: { fontFamily: fonts.semibold, fontSize: 17, letterSpacing: -0.3, color: colors.text, marginTop: 3 },
   lovedPlay: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.gold, boxShadow: '0px 4px 14px rgba(226,168,75,0.5)' },
-  founderRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, marginTop: space.md },
   quote: { marginTop: space.lg, paddingLeft: space.lg, borderLeftWidth: 2, borderLeftColor: colors.gold },
   quoteText: { fontFamily: fonts.serif, fontSize: 24, lineHeight: 30, color: colors.text },
 });

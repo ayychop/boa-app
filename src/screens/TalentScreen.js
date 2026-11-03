@@ -3,9 +3,10 @@ import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-na
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeIn, FadeInDown, LinearTransition } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
-import { talent } from '../data/boaContent';
+import { founders, talent } from '../data/boaContent';
 import { useForms } from '../context/FormsContext';
 import Headshot from '../components/Headshot';
+import FounderCard from '../components/FounderCard';
 import { useGoldSheen } from '../components/GoldSheen';
 import BottomSheet from '../components/BottomSheet';
 import CastingBoard from '../components/casting/CastingBoard';
@@ -95,6 +96,9 @@ export default function TalentScreen({ route, navigation }) {
   const colWidth = Math.floor((contentWidth - space.xl * 2 - GAP * (columns - 1)) / columns);
   const visible = talent.filter(FILTERS.find((f) => f.id === filter).test);
   const grid = toColumns(visible, columns);
+  // The founders sit two across, or one under the other on a narrow phone.
+  const founderInner = contentWidth - space.xl * 2;
+  const founderPhoto = founderInner >= 560 ? Math.floor((founderInner - space.xl) / 2) : founderInner;
 
   const browse = (
     <ScrollView testID="talent-scroll" contentContainerStyle={{ paddingBottom: bottom }} showsVerticalScrollIndicator={false}>
@@ -146,6 +150,22 @@ export default function TalentScreen({ route, navigation }) {
         ))}
       </View>
 
+      {/* The people behind BOA, on the roster page too. */}
+      <View style={[styles.founders, { width: contentWidth }]} testID="talent-founders">
+        <Slate dot>The founders</Slate>
+        <View style={[styles.founderGrid, { gap: space.xl }]}>
+          {founders.map((f) => (
+            <FounderCard
+              key={f.name}
+              founder={f}
+              photoWidth={founderPhoto}
+              style={{ width: founderPhoto }}
+              textStyle={styles.founderQuote}
+            />
+          ))}
+        </View>
+      </View>
+
       <Animated.View entering={FadeIn.delay(300)} style={styles.cta}>
         <Text style={[type.h1, { textAlign: 'center' }]}>
           The next face here could be <Text style={type.serif}>yours.</Text>
@@ -160,7 +180,8 @@ export default function TalentScreen({ route, navigation }) {
     <Animated.View key="full" entering={FadeIn.duration(360)} style={styles.screen}>
       {browse}
 
-      <BottomSheet open={sheetOpen} onClose={() => setSheetOpen(false)}>
+      {/* Only the handle drags, so a long bio can scroll. */}
+      <BottomSheet open={sheetOpen} onClose={() => setSheetOpen(false)} dragAnywhere={false}>
         {selected && (
           <View style={styles.sheet}>
             <View style={styles.sheetHead}>
@@ -173,6 +194,13 @@ export default function TalentScreen({ route, navigation }) {
                 <Slate style={{ marginTop: 8 }}>BOA Network roster</Slate>
               </View>
             </View>
+            {selected.bio ? (
+              <ScrollView style={styles.bioScroll} nestedScrollEnabled showsVerticalScrollIndicator={false} testID="talent-bio-scroll">
+                <Text style={[type.bodyMuted, styles.bio]} testID="talent-bio">
+                  {selected.bio}
+                </Text>
+              </ScrollView>
+            ) : null}
             <ProfileActions person={selected} onEnquire={() => enquire(selected)} />
           </View>
         )}
@@ -202,8 +230,13 @@ const styles = StyleSheet.create({
   filterTextActive: { color: colors.bg },
   filterCount: { fontFamily: fonts.mono, fontSize: 11, color: colors.textFaint },
   grid: { flexDirection: 'row', alignSelf: 'center', paddingHorizontal: space.xl },
+  founders: { alignSelf: 'center', paddingHorizontal: space.xl, marginTop: space.xxxl * 1.5 },
+  founderGrid: { flexDirection: 'row', flexWrap: 'wrap', marginTop: space.lg },
+  founderQuote: { fontFamily: fonts.serif, fontSize: 22, lineHeight: 28, color: colors.text },
   cta: { alignItems: 'center', paddingHorizontal: space.xl, paddingTop: space.xxxl * 1.5, maxWidth: 620, alignSelf: 'center' },
   sheet: { paddingHorizontal: space.xl, gap: space.xl },
+  bioScroll: { maxHeight: 240 },
+  bio: { lineHeight: 23 },
   sheetHead: { flexDirection: 'row', alignItems: 'center', gap: space.lg },
   sheetActions: { flexDirection: 'row', gap: space.md },
 });

@@ -9,9 +9,11 @@ describe('the casting board', () => {
   const { talent } = require('../src/data/boaContent');
   const Headshot = require('../src/components/Headshot').default;
 
-  test('Jeremy Benson, in full', () => {
-    expect(talent.map((t) => t.name)).toContain('Jeremy Benson');
-    expect(talent.some((t) => /Owusu/.test(t.name))).toBe(false);
+  test('Jeremy Benson and Jeremy Owusu are two people, each in full', () => {
+    expect(talent.map((t) => t.name)).toEqual(expect.arrayContaining(['Jeremy Benson', 'Jeremy Owusu']));
+    // Owusu has the photo that was sent; Benson keeps initials until his arrives.
+    expect(talent.find((t) => t.id === 'jeremy-owusu').headshot).toBeTruthy();
+    expect(talent.find((t) => t.id === 'jeremy-benson').headshot).toBeNull();
   });
 
   test('the initials are gold, swept by a sheen clipped to the letters, and centred in the frame', async () => {
