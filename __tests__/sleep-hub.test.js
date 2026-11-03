@@ -1,4 +1,4 @@
-import { screen, userEvent } from '@testing-library/react-native';
+import { screen, userEvent, within } from '@testing-library/react-native';
 import * as fs from 'expo-file-system';
 
 const { File } = fs;
@@ -168,7 +168,7 @@ test('"Off" cancels the timer', async () => {
   expect(screen.queryByText(/Fades out in/)).not.toBeOnTheScreen();
 });
 
-test('the screensaver (after a lock) shows the room and what is playing, with no controls at all', async () => {
+test('the screensaver (after a lock) shows the room and what is playing, with just its own play and pause, and no Zen panel', async () => {
   const user = userEvent.setup();
   await openHub(user);
   await user.press(screen.getByRole('button', { name: 'Play Rain' }));
@@ -179,8 +179,12 @@ test('the screensaver (after a lock) shows the room and what is playing, with no
   await probe.unlock();
   await advance(500);
   expect(screen.getByTestId('zen-screensaver')).toBeOnTheScreen();
-  expect(screen.getByText('Rain · On the window')).toBeOnTheScreen();
+  const card = within(screen.getByTestId('zen-sound-info'));
+  expect(card.getByText('On the window')).toBeOnTheScreen();
+  expect(card.getByText('Rain · Playing')).toBeOnTheScreen();
+  // The category buttons of the Zen page are not here; the card's own transport is.
   expect(screen.queryByRole('button', { name: /^(Play|Pause) Rain$/ })).toBeNull();
+  expect(card.getByRole('button', { name: 'Pause On the window' })).toBeOnTheScreen();
   expect(screen.queryByTestId('zen-panel')).toBeNull();
   // The soundscape keeps playing through the screensaver.
   expect(lastPlayer().playing).toBe(true);

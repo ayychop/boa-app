@@ -37,8 +37,8 @@ describe('BOA Hi-Fi at full power', () => {
     expect(kt).toMatch(/val up = min\(range\[1\]\.toInt\(\), MAX_MILLIBELS\)/);
     // At 0 both sliders are 1 of the way to the ceiling: the Equalizer at its top.
     expect(kt).toMatch(/val lowsUpTo = 1 \+ min\(lows, 0\.0\)/);
-    expect(kt).toMatch(/\(lowsUpTo \* bassWeight\(hz\) \+ highsUpTo \* trebleWeight\(hz\)\) \* up/);
-    expect(kt).toMatch(/bb\.setStrength\(\(lowsUpTo \* 1000\)/);
+    expect(kt).toMatch(/\(lowsUpTo \* bassWeight\(hz\) \+ highsUpTo \* trebleWeight\(hz\) \+ vocals \* VOCAL_EQ_SHARE \* vocalShape\(hz\)\) \* up/);
+    expect(kt).toMatch(/\(lowsUpTo \* 1000\)\.roundToInt\(\)\.coerceIn\(0, 1000\)/);
     expect(kt).toMatch(/SIGNATURE_GAIN_MILLIBELS = 600/);
     // -1 on both is flat: every effect off.
     expect(kt).toMatch(/val flat = lows <= -1\.0 && treble <= -1\.0/);

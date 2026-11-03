@@ -107,7 +107,6 @@ test('locking the phone: straight to the Zen screensaver, never a modal, 25 cycl
   const user = userEvent.setup();
   await bootIntoTabs(user);
   await openTab(user, 'Radio');
-  let from = 'radio-stage';
   for (let i = 0; i < 25; i++) {
     await probe.lock(i % 2 ? 'inactive' : 'background');
     await advance(500);
@@ -118,15 +117,14 @@ test('locking the phone: straight to the Zen screensaver, never a modal, 25 cycl
     await probe.unlock();
     await advance(400);
     expect(screen.getByTestId('zen-screensaver')).toBeOnTheScreen();
-    // A tap goes back to the tab you locked the phone on, with the tab bar.
-    await user.press(screen.getByRole('button', { name: 'Wake Zen controls' }));
+    // A tap goes Home, with the tab bar.
+    await user.press(screen.getByRole('button', { name: 'Go to Home' }));
     await advance(300);
     expect(screen.queryByTestId('zen-screensaver')).toBeNull();
-    expect(screen.getByTestId(from)).toBeOnTheScreen();
+    expect(screen.getByTestId('home-scroll')).toBeOnTheScreen();
     expect(tabButton('Home')).toBeOnTheScreen();
     // And the app answers: off to another tab, which the next lock leaves from.
     await openTab(user, i % 2 ? 'Radio' : 'Talent');
-    from = i % 2 ? 'radio-stage' : 'talent-scroll';
   }
   await openTab(user, 'Radio');
   expect(screen.getByText(FIRST_STATION)).toBeOnTheScreen();
@@ -151,7 +149,7 @@ test('the screensaver shows the radio with its controls while it plays, and Back
   await probe.unlock();
   await advance(400);
   expect(screen.getByTestId('zen-screensaver')).toBeOnTheScreen();
-  expect(screen.getByText('Tap to go back to BOA HUB')).toBeOnTheScreen();
+  expect(screen.getByText('Tap anywhere to go home')).toBeOnTheScreen();
   const card = screen.getByTestId('zen-radio-info');
   expect(within(card).getByText(name)).toBeOnTheScreen();
   // Its controls work the radio without waking Zen, and stay to play it again.
@@ -159,7 +157,7 @@ test('the screensaver shows the radio with its controls while it plays, and Back
   await advance(200);
   expect(screen.getByTestId('zen-screensaver')).toBeOnTheScreen();
   expect(within(screen.getByTestId('zen-radio-info')).getByRole('button', { name: 'Play radio' })).toBeOnTheScreen();
-  // Back wakes it, straight to the tab the phone was locked on (handlers
+  // Back wakes it, straight to Home (handlers
   // run newest first, as on Android, until one takes it).
   const listening = back.length;
   await act(async () => {
@@ -167,7 +165,7 @@ test('the screensaver shows the radio with its controls while it plays, and Back
   });
   await advance(300);
   expect(screen.queryByTestId('zen-screensaver')).toBeNull();
-  expect(screen.getByTestId('talent-scroll')).toBeOnTheScreen();
+  expect(screen.getByTestId('home-scroll')).toBeOnTheScreen();
   expect(back).toHaveLength(listening - 1);
 });
 
@@ -181,7 +179,7 @@ test('with nothing playing, the screensaver has no radio card', async () => {
   await advance(400);
   expect(screen.getByTestId('zen-screensaver')).toBeOnTheScreen();
   expect(screen.queryByTestId('zen-radio-info')).toBeNull();
-  expect(screen.getByText('Tap to go back to BOA HUB')).toBeOnTheScreen();
+  expect(screen.getByText('Tap anywhere to go home')).toBeOnTheScreen();
 });
 
 test('locking while Zen is open with its controls turns it into the screensaver', async () => {
@@ -203,7 +201,7 @@ test('leaving the Zen tab ends the screensaver, so coming back shows the control
   await probe.lock();
   await advance(500);
   await probe.unlock();
-  await user.press(screen.getByRole('button', { name: 'Wake Zen controls' }));
+  await user.press(screen.getByRole('button', { name: 'Go to Home' }));
   await openTab(user, 'Home');
   await openTab(user, 'Zen');
   expect(screen.getByTestId('zen-screen')).toBeOnTheScreen();

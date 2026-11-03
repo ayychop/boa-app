@@ -85,7 +85,7 @@ test('locking: the screensaver is opened and put over the lock screen while the 
   expect(screenEvents.showOverLock).toHaveBeenCalled();
 });
 
-test('waking over the lock screen asks to unlock first; cancelling stays on Zen, unlocking returns to the tab', async () => {
+test('waking over the lock screen asks to unlock first; cancelling stays on Zen, unlocking goes Home', async () => {
   const user = userEvent.setup();
   await bootIntoTabs(user);
   await openTab(user, 'Talent');
@@ -94,15 +94,15 @@ test('waking over the lock screen asks to unlock first; cancelling stays on Zen,
   await probe.unlock();
 
   screenEvents.unlock.mockImplementationOnce(async () => false);
-  await user.press(screen.getByRole('button', { name: 'Wake Zen controls' }));
+  await user.press(screen.getByRole('button', { name: 'Go to Home' }));
   await advance(300);
   expect(screen.getByTestId('zen-screensaver')).toBeOnTheScreen();
 
-  await user.press(screen.getByRole('button', { name: 'Wake Zen controls' }));
+  await user.press(screen.getByRole('button', { name: 'Go to Home' }));
   await advance(300);
   expect(screenEvents.unlock).toHaveBeenCalledTimes(2);
   expect(screen.queryByTestId('zen-screensaver')).toBeNull();
-  expect(screen.getByTestId('talent-scroll')).toBeOnTheScreen();
+  expect(screen.getByTestId('home-scroll')).toBeOnTheScreen();
 });
 
 test('unlocking with a fingerprint while the screensaver shows goes straight back to the tab', async () => {

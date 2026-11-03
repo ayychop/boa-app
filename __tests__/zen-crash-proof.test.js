@@ -5,6 +5,7 @@ import * as path from 'path';
 import * as video from 'expo-video';
 import * as files from 'expo-file-system';
 import * as screenEvents from '../modules/boa-screen';
+import * as navBar from '../src/utils/navBar';
 import { SCREENSAVERS } from '../src/data/screensavers';
 import { SCENES } from '../src/data/sleep';
 import { advance as tick, bootIntoTabs, instrument, openTab, PORTRAIT, setWindow } from './helpers';
@@ -54,6 +55,7 @@ async function radioPausedOn(user, tab) {
 
 describe('the reported crash: radio paused, power button, Zen screensaver', () => {
   test('no video decoder is ever started while the screen is off; the picture comes back once it is lit', async () => {
+    const hide = jest.spyOn(navBar, 'hideNavBar');
     const user = userEvent.setup();
     await radioPausedOn(user, 'Talent');
     const before = livePlayers();
@@ -66,7 +68,7 @@ describe('the reported crash: radio paused, power button, Zen screensaver', () =
     expect(screen.getByTestId('zen-scene-night')).toBeOnTheScreen();
     expect(videos()).toHaveLength(0);
     expect(livePlayers()).toBe(before);
-    expect(screenEvents.setImmersive).toHaveBeenLastCalledWith(true);
+    expect(hide).toHaveBeenCalled();
 
     await probe.unlock();
     await advance(4000);
@@ -99,6 +101,7 @@ describe('the reported crash: radio paused, power button, Zen screensaver', () =
   });
 
   test('power button, wake, power button again, in quick succession, 30 times: nothing throws, nothing is left running', async () => {
+    const hide = jest.spyOn(navBar, 'hideNavBar');
     const user = userEvent.setup();
     await radioPausedOn(user, 'Talent');
     const before = livePlayers();
@@ -175,6 +178,8 @@ describe('the reported crash: radio paused, power button, Zen screensaver', () =
   });
 
   test('the screensaver hides the navigation bar, and gives it back when it ends', async () => {
+    const hide = jest.spyOn(navBar, 'hideNavBar');
+    const show = jest.spyOn(navBar, 'showNavBar');
     const user = userEvent.setup();
     await bootIntoTabs(user);
     await openTab(user, 'Talent');
@@ -182,12 +187,12 @@ describe('the reported crash: radio paused, power button, Zen screensaver', () =
     await advance(800);
     await probe.unlock();
     await advance(800);
-    expect(screenEvents.setImmersive).toHaveBeenLastCalledWith(true);
+    expect(hide).toHaveBeenCalled();
 
-    await user.press(screen.getByRole('button', { name: 'Wake Zen controls' }));
+    await user.press(screen.getByRole('button', { name: 'Go to Home' }));
     await advance(500);
     expect(screen.queryByTestId('zen-screensaver')).toBeNull();
-    expect(screenEvents.setImmersive).toHaveBeenLastCalledWith(false);
+    expect(show).toHaveBeenCalled();
   });
 });
 
@@ -304,9 +309,9 @@ describe('Zen screensaver look and choices', () => {
       await advance(500);
       await probe.unlock();
       await advance(500);
-      expect(screen.getByText('Tap to go back to BOA HUB')).toBeOnTheScreen();
-      expect(screen.queryByText(/go back to (Radio|Talent)/)).toBeNull();
-      await user.press(screen.getByRole('button', { name: 'Wake Zen controls' }));
+      expect(screen.getByText('Tap anywhere to go home')).toBeOnTheScreen();
+      expect(screen.queryByText(/go (back )?(to|home) (Radio|Talent)/)).toBeNull();
+      await user.press(screen.getByRole('button', { name: 'Go to Home' }));
       await advance(500);
     }
   });
@@ -318,15 +323,15 @@ describe('Zen screensaver look and choices', () => {
     expect(src).toMatch(/soundChipBare: \{ backgroundColor: 'transparent', borderWidth: 0 \}/);
     expect(src).toMatch(/radioCardBare: \{ backgroundColor: 'transparent', borderWidth: 0 \}/);
     expect(src).toMatch(/<RadioCard bare \/>/);
-    // The system navigation bar's scrim goes while it is up.
-    expect(src).toMatch(/setImmersive\(true\)/);
-    expect(src).toMatch(/setImmersive\(false\)/);
+    // The system navigation bar goes while it is up, and comes back after.
+    expect(src).toMatch(/hideNavBar\(\)/);
+    expect(src).toMatch(/showNavBar\(\)/);
   });
 
   test('the two original videos stay first (and the default); four new night skies follow, each a complete scene', () => {
     expect(SCREENSAVERS.slice(0, 2).map((s) => s.id)).toEqual(['night', 'rain']);
     const news = SCREENSAVERS.slice(2, 6);
-    expect(news.map((s) => s.id)).toEqual(['milkyway', 'joshua', 'desert', 'startrails']);
+    expect(news.map((s) => s.id)).toEqual(['orbit', 'vortex', 'globe', 'perseids']);
     for (const s of news) {
       const scene = SCENES[s.scene];
       expect(scene).toBeDefined();
@@ -345,7 +350,7 @@ describe('Zen screensaver look and choices', () => {
     const user = userEvent.setup();
     await bootIntoTabs(user);
     await openTab(user, 'Zen');
-    await user.press(screen.getByTestId('zen-saver-pick-milkyway'));
+    await user.press(screen.getByTestId('zen-saver-pick-orbit'));
     await advance(300);
     await openTab(user, 'Home');
     await probe.lock();
@@ -353,7 +358,7 @@ describe('Zen screensaver look and choices', () => {
     await probe.unlock();
     await advance(4000);
     expect(screen.getByTestId('zen-screensaver')).toBeOnTheScreen();
-    expect(screen.getByTestId('zen-scene-milkyway')).toBeOnTheScreen();
-    expect(screen.getByTestId('zen-video-milkyway')).toBeOnTheScreen();
+    expect(screen.getByTestId('zen-scene-orbit')).toBeOnTheScreen();
+    expect(screen.getByTestId('zen-video-orbit')).toBeOnTheScreen();
   });
 });

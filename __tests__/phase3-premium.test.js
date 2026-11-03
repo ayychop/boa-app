@@ -116,10 +116,10 @@ describe('Hi-Fi audio', () => {
     eq.setSession(42);
     eq.setAllowed(false);
     eq.setSettings({ bass: 3, treble: -0.5, spatial: true });
-    expect(eq.getSettings()).toEqual({ bass: 1, treble: -0.5, spatial: true, boost: false });
+    expect(eq.getSettings()).toEqual({ bass: 1, treble: -0.5, loudness: 0, vocals: 0, spatial: true, boost: false, link: true });
     expect(eqNative.apply).toHaveBeenLastCalledWith(42, eq.FLAT);
     eq.setAllowed(true);
-    expect(eqNative.apply).toHaveBeenLastCalledWith(42, { bass: 1, treble: -0.5, spatial: true, boost: false });
+    expect(eqNative.apply).toHaveBeenLastCalledWith(42, { bass: 1, treble: -0.5, loudness: 0, vocals: 0, spatial: true, boost: false, link: true });
     eq.setSettings(eq.PRESETS.find((p) => p.id === 'bass').settings);
     expect(eq.presetOf(eq.getSettings())).toBe('bass');
   });
@@ -139,8 +139,8 @@ describe('Hi-Fi audio', () => {
   });
 
   test('the old maximum is the new zero: everyone starts on BOA Signature, Flat is truly flat, and Premium-off sends Flat', () => {
-    expect(eq.SIGNATURE).toEqual({ bass: 0, treble: 0, spatial: false, boost: false });
-    expect(eq.FLAT).toEqual({ bass: -1, treble: -1, spatial: false, boost: false });
+    expect(eq.SIGNATURE).toEqual({ bass: 0, treble: 0, loudness: 0, vocals: 0, spatial: false, boost: false, link: true });
+    expect(eq.FLAT).toEqual({ bass: -1, treble: -1, loudness: 0, vocals: 0, spatial: false, boost: false, link: true });
     expect(eq.PRESETS[0]).toEqual(expect.objectContaining({ id: 'signature', settings: eq.SIGNATURE }));
     expect(eq.PRESETS.find((p) => p.id === 'flat').settings).toBe(eq.FLAT);
     eq.setSession(42);
@@ -168,7 +168,7 @@ describe('Hi-Fi audio', () => {
       migrated = require('../src/audio/eq');
     });
     await act(async () => {});
-    expect(migrated.getSettings()).toEqual({ bass: 0, treble: 0, spatial: true, boost: true });
+    expect(migrated.getSettings()).toEqual({ bass: 0, treble: 0, loudness: 0, vocals: 0, spatial: true, boost: true, link: true });
 
     // Saved on the new scale: read as it is.
     await AsyncStorage.setItem('boa.eq.v2', JSON.stringify({ bass: 0.5, treble: 0.2, spatial: false, boost: false }));
@@ -177,7 +177,7 @@ describe('Hi-Fi audio', () => {
       saved = require('../src/audio/eq');
     });
     await act(async () => {});
-    expect(saved.getSettings()).toEqual({ bass: 0.5, treble: 0.2, spatial: false, boost: false });
+    expect(saved.getSettings()).toEqual({ bass: 0.5, treble: 0.2, loudness: 0, vocals: 0, spatial: false, boost: false, link: true });
     await AsyncStorage.clear();
   });
 

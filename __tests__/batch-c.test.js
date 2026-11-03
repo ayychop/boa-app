@@ -95,7 +95,7 @@ describe('Zen screensaver', () => {
 
   test('eleven styles (the two original videos first, then four new night skies), saved, with the choice shared', () => {
     const store = require('../src/data/screensavers');
-    expect(store.SCREENSAVERS.map((s) => s.id)).toEqual(['night', 'rain', 'milkyway', 'joshua', 'desert', 'startrails', 'room', 'aurora', 'halo', 'ember', 'midnight']);
+    expect(store.SCREENSAVERS.map((s) => s.id)).toEqual(['night', 'rain', 'orbit', 'vortex', 'globe', 'perseids', 'room', 'aurora', 'halo', 'ember', 'midnight']);
     // The originals: Starry Night and Rainy Window play their own scene's video, and the first is the default.
     expect(store.SCREENSAVERS.slice(0, 2).map((s) => s.scene)).toEqual(['night', 'rain']);
     expect(store.DEFAULT_SCREENSAVER).toBe('night');

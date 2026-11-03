@@ -22,7 +22,7 @@ const KEY = 'boa.zen.screensaver.v1';
 export const SCREENSAVERS = [
   { id: 'night', scene: 'night', name: 'Starry Night', blurb: 'Your original: the night sky, turning slowly', swatch: ['#0A1230', '#2A3F7A'] },
   { id: 'rain', scene: 'rain', name: 'Rainy Window', blurb: 'Your original: rain on the glass of a night city', swatch: ['#10202B', '#3E6A82'] },
-  { id: 'orbit', scene: 'orbit', name: 'Orbit', blurb: 'Earth’s city lights drifting pastfrom the space station', swatch: ['#060A18', '#C98A3C'] },
+  { id: 'orbit', scene: 'orbit', name: 'Orbit', blurb: 'Earth’s city lights drifting past, seen from the space station', swatch: ['#060A18', '#C98A3C'] },
   { id: 'vortex', scene: 'vortex', name: 'Star Vortex', blurb: 'The whole night sky wheeling in ribbons of light', swatch: ['#05060A', '#9AA6C8'] },
   { id: 'globe', scene: 'globe', name: 'Black Marble', blurb: 'Earth at night, slowly turning', swatch: ['#04060C', '#2E4A7A'] },
   { id: 'perseids', scene: 'perseids', name: 'Perseids', blurb: 'Meteors over a still, dark lake', swatch: ['#06080F', '#3A4258'] },
