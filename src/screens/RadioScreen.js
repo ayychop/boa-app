@@ -114,7 +114,7 @@ function StationText({ station, track, status, meta, compact, saved, onSave, hif
           )}
         </Animated.View>
         <View style={styles.metaRow}>
-          {hifi && <GoldBadge label="HI-FI" />}
+          {hifi && <GoldBadge label="HI FI" />}
           <Text style={styles.meta} numberOfLines={1}>
             {meta}
           </Text>
@@ -455,7 +455,7 @@ export default function RadioScreen({ route, navigation }) {
               <Text style={{ color: colors.textFaint }}> / {String(stations.length).padStart(2, '0')}</Text>
             </Text>
           )}
-          <IconButton icon="options-outline" label="Hi-Fi sound" onPress={() => setEqOpen(true)} testID="radio-eq" />
+          <IconButton icon="options-outline" label="Hi Fi sound" onPress={() => setEqOpen(true)} testID="radio-eq" />
           <ZenButton />
         </View>
       </View>

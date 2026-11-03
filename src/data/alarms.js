@@ -35,7 +35,7 @@ export const ALARM_SOUNDS = [
     file: 'alarm_classic.wav',
     asset: require('../../assets/sounds/alarm_classic.wav'),
     title: 'Alarm Clock',
-    author: 'Yoo-toob-FX (directory.audio)',
+    author: 'Yoo toob FX (directory.audio)',
     license: 'CC0',
     source: 'https://commons.wikimedia.org/wiki/File:Alarm_Clock_(Directory.Audio).mp3',
   },

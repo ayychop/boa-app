@@ -194,7 +194,7 @@ function RadioPill({ onOpenRadio, placement = 'bottom', maxWidth }) {
                 <Text style={[styles.title, { flexShrink: 1 }]} numberOfLines={1}>
                   {current.name}
                 </Text>
-                {isPremium && <GoldBadge label="HI-FI" />}
+                {isPremium && <GoldBadge label="HI FI" />}
               </View>
               <Text style={styles.subtitle} numberOfLines={1}>
                 {subtitle}

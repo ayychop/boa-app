@@ -202,7 +202,7 @@ export default function WidgetSettings({ open, onClose }) {
         <Text style={styles.note}>
           {Platform.OS === 'android'
             ? available
-              ? 'Add it from your home screen: long-press, Widgets, BOA Networks.'
+              ? 'Add it from your home screen: long press, Widgets, BOA Networks.'
               : 'Widget styling needs the installed Android app.'
             : 'The home screen widget is on Android.'}
         </Text>

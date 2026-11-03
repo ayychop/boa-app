@@ -55,7 +55,7 @@ function Probe() {
 describe('BOA Premium', () => {
   test('costs £1.99 a month, and the paywall says so', () => {
     expect(PRICE).toBe('£1.99');
-    expect(PAYWALL_PITCH).toBe('Upgrade to BOA Premium for unlimited HD Video Calls, Hi-Fi Audio, and exclusive filters. £1.99/month.');
+    expect(PAYWALL_PITCH).toBe('Upgrade to BOA Premium for unlimited HD Video Calls, Hi Fi Audio, and exclusive filters. £1.99/month.');
   });
 
   test('the database decides: a trial has access, an expired one does not', async () => {

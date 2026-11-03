@@ -67,7 +67,7 @@ export default function CallWakeUpPrompt() {
             </LinearGradient>
           </View>
           <Slate dot style={{ alignSelf: 'center' }}>
-            Full-screen calls
+            Full screen calls
           </Slate>
           {allowed ? (
             <Animated.View entering={FadeIn.duration(200)}>

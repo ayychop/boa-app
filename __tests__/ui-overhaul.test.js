@@ -38,7 +38,7 @@ describe('12 chat vibes and Custom', () => {
       'Midnight Drive',
       'Turntable',
       'Street Luxury',
-      'Afro-Futurism',
+      'Afro Futurism',
       'Y2K Luxe',
       'Cinema Classic',
       'Golden Hour',

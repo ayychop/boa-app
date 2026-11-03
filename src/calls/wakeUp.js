@@ -5,10 +5,10 @@ import * as BoaCall from '../../modules/boa-call';
 // What a locked Android phone needs to ring a BOA call like a phone call
 // (modules/boa-call): permission to show the call full screen. Nothing else
 // is asked. Calls arrive as high-priority pushes, which Android delivers
-// through Doze and battery saving, and the full-screen intent opens BOA's
+// through Doze and battery saving, and the full screen intent opens BOA's
 // own incoming-call screen without "display over other apps".
 //
-// Android 13 and older grant full-screen calls with the app. On Android 14+
+// Android 13 and older grant full screen calls with the app. On Android 14+
 // it's granted to calling apps too, but people can switch it off; only then
 // is there anything to ask, and it's asked once, plainly, after a call or
 // on opening the Creative Hub where calls live (never at app launch), at
@@ -26,7 +26,7 @@ export const WAKE_STEPS = [
     ok: BoaCall.canUseFullScreen,
     open: BoaCall.openFullScreenSettings,
     title: 'Ring like a phone call?',
-    body: 'Right now BOA calls show as a notification when your phone is locked. Allow full-screen calls and they will light up your screen like a normal call.',
+    body: 'Right now BOA calls show as a notification when your phone is locked. Allow full screen calls and they will light up your screen like a normal call.',
   },
 ];
 
@@ -48,7 +48,7 @@ async function snoozed(id) {
   }
 }
 
-/** The setting still standing between a locked phone and a full-screen call, or null. */
+/** The setting still standing between a locked phone and a full screen call, or null. */
 export async function nextWakeStep() {
   if (Platform.OS !== 'android' || !BoaCall.isAvailable) return null;
   for (const step of WAKE_STEPS) {

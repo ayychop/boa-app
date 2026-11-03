@@ -866,7 +866,7 @@ function TimerRow() {
               key={m ?? 'off'}
               onPress={() => pick(m)}
               accessibilityRole="button"
-              accessibilityLabel={m == null ? 'No fade-out timer' : `Fade out in ${m} minutes`}
+              accessibilityLabel={m == null ? 'No fade out timer' : `Fade out in ${m} minutes`}
               accessibilityState={{ selected: on }}
               style={({ pressed }) => [styles.chip, on && styles.chipOn, pressed && { opacity: 0.7 }]}
             >

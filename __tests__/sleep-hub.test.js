@@ -164,7 +164,7 @@ test('"Off" cancels the timer', async () => {
   await openHub(user);
   await user.press(screen.getByRole('button', { name: 'Fade out in 30 minutes' }));
   expect(screen.getByText(/Fades out in 30:00/)).toBeOnTheScreen();
-  await user.press(screen.getByRole('button', { name: 'No fade-out timer' }));
+  await user.press(screen.getByRole('button', { name: 'No fade out timer' }));
   expect(screen.queryByText(/Fades out in/)).not.toBeOnTheScreen();
 });
 

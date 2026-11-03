@@ -72,13 +72,13 @@ export async function myCalls(userId) {
 export function applicationProblem({ selfTapeUrl, coverNote }) {
   const url = (selfTapeUrl ?? '').trim();
   const note = (coverNote ?? '').trim();
-  if (!url && !note) return 'Add a self-tape link or a cover note.';
-  if (url && !HTTPS.test(url)) return 'The self-tape link needs to be a full https:// address (YouTube, Vimeo, Drive...).';
+  if (!url && !note) return 'Add a self tape link or a cover note.';
+  if (url && !HTTPS.test(url)) return 'The self tape link needs to be a full https:// address (YouTube, Vimeo, Drive...).';
   if (note.length > 1500) return 'Keep the cover note under 1,500 characters.';
   return null;
 }
 
-/** Applies to a call as you, with a self-tape link and/or a cover note. */
+/** Applies to a call as you, with a self tape link and/or a cover note. */
 export async function apply({ castingCallId, userId, selfTapeUrl, coverNote }) {
   const problem = applicationProblem({ selfTapeUrl, coverNote });
   if (problem) throw new Error(problem);

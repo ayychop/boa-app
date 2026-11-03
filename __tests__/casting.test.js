@@ -75,7 +75,7 @@ describe('the budget rules', () => {
   });
 
   test('an application needs a tape or a note, and a tape must be https', () => {
-    expect(casting.applicationProblem({})).toMatch(/self-tape link or a cover note/);
+    expect(casting.applicationProblem({})).toMatch(/self tape link or a cover note/);
     expect(casting.applicationProblem({ selfTapeUrl: 'youtu.be/x' })).toMatch(/https/);
     expect(casting.applicationProblem({ selfTapeUrl: 'javascript:alert(1)' })).toMatch(/https/);
     expect(casting.applicationProblem({ selfTapeUrl: 'https://youtu.be/abc' })).toBeNull();

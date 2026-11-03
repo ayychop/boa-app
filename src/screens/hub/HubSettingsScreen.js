@@ -374,7 +374,7 @@ function HubSettingsScreenBody({ navigation }) {
             ))}
           </View>
           <Text style={styles.credit}>
-            New-message sound.{' '}
+            New message sound.{' '}
             {CHAT_SOUNDS.filter((s) => s.source)
               .map((s) => `${s.label}: ${s.license.toLowerCase()} recording via Wikimedia Commons`)
               .join(' · ')}

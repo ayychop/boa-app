@@ -124,7 +124,7 @@ function Band({ label, kind, value, onPreview, onCommit, locked, testID, minimum
 }
 
 /**
- * BOA Hi-Fi: bass, treble and spatial sound for the radio, with one-tap
+ * BOA Hi Fi: bass, treble and spatial sound for the radio, with one-tap
  * presets. BOA Premium (or the trial); everyone else sees it locked behind
  * "Unlock with BOA Premium".
  */
@@ -142,7 +142,7 @@ export default function EqualizerSheet({ open, onClose }) {
         <LinearGradient colors={['rgba(226,168,75,0.18)', 'rgba(5,5,6,0)']} locations={[0, 0.6]} style={StyleSheet.absoluteFill} />
         <View style={styles.head}>
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Slate dot>BOA Hi-Fi</Slate>
+            <Slate dot>BOA Hi Fi</Slate>
             <Text style={[type.title, { marginTop: space.xs }]}>Sound</Text>
           </View>
           {hasPremium && supported && settings.link && ROUTES[route] ? (
@@ -259,7 +259,7 @@ export default function EqualizerSheet({ open, onClose }) {
                   icon="diamond"
                   onPress={() => {
                     onClose();
-                    requirePremium(() => {}, 'Hi-Fi sound is part of BOA Premium.');
+                    requirePremium(() => {}, 'Hi Fi sound is part of BOA Premium.');
                   }}
                   style={{ marginTop: space.md }}
                   testID="eq-unlock"

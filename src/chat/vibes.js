@@ -197,7 +197,7 @@ export const VIBES = [
   }),
   vibe({
     id: 'afrofuturism',
-    label: 'Afro-Futurism',
+    label: 'Afro Futurism',
     detail: 'Deep purple and gold, geometric lines',
     mesh: ['#5C1F9E', '#2A0E4E', '#7A5410'],
     lights: [

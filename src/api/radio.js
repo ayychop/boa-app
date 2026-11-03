@@ -1,3 +1,4 @@
+import { plainText } from '../utils/plainText';
 import axios from 'axios';
 import { Image, Platform } from 'react-native';
 import { CURATED_GHANA, CURATED_RNB_HIPHOP } from '../data/trendingStations';
@@ -148,7 +149,7 @@ function normalize(station, metadataVerified) {
   return {
     kind: 'radio',
     id: station.stationuuid,
-    name: station.name.trim(),
+    name: plainText(station.name),
     streamUrl: station.url_resolved,
     logo: station.favicon || null,
     homepage: station.homepage || null,

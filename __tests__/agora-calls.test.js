@@ -1366,7 +1366,7 @@ describe('waking a locked Android phone', () => {
     BoaCall.canUseFullScreen.mockReturnValue(false);
     const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
     await askForCallWakeUp();
-    expect(alert).toHaveBeenCalledWith('Ring like a phone call?', expect.stringMatching(/full-screen/), expect.any(Array));
+    expect(alert).toHaveBeenCalledWith('Ring like a phone call?', expect.stringMatching(/full screen/), expect.any(Array));
     alert.mock.calls[0][2].find((b) => b.text === 'Allow').onPress();
     expect(BoaCall.openFullScreenSettings).toHaveBeenCalled();
     await act(async () => {});

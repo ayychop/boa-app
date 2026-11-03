@@ -17,7 +17,7 @@ import { colors, fonts, radius, space, type } from '../theme';
 
 const PremiumContext = createContext(null);
 
-export const PAYWALL_PITCH = `Upgrade to BOA Premium for unlimited HD Video Calls, Hi-Fi Audio, and exclusive filters. ${PRICE}/month.`;
+export const PAYWALL_PITCH = `Upgrade to BOA Premium for unlimited HD Video Calls, Hi Fi Audio, and exclusive filters. ${PRICE}/month.`;
 const NO_ACCESS = { status: 'expired', hasAccess: false, isAdmin: false, trialEndsAt: null };
 const cacheKey = (userId) => `boa.premium.v1:${userId}`;
 
@@ -106,7 +106,7 @@ export function PremiumProvider({ children }) {
   const hasPremium = isAdmin || access.isAdmin || access.hasAccess;
   const openPremium = useCallback(() => setScreenOpen(true), []);
 
-  // Hi-Fi shapes the radio's sound only while you have Premium.
+  // Hi Fi shapes the radio's sound only while you have Premium.
   useEffect(() => eq.setAllowed(hasPremium), [hasPremium]);
 
   const requirePremium = useCallback(
@@ -148,7 +148,7 @@ export function PremiumProvider({ children }) {
             <Ionicons name="diamond" size={26} color={colors.bg} />
           </Animated.View>
           <Slate dot style={{ marginTop: space.lg }}>
-            {trialOver ? 'Your 2-day trial has ended' : 'BOA Premium'}
+            {trialOver ? 'Your 2 day trial has ended' : 'BOA Premium'}
           </Slate>
           {paywall.message ? <Text style={[type.h1, styles.title]}>{paywall.message}</Text> : null}
           <Animated.View entering={FadeInDown.delay(80).springify().damping(18)} style={styles.glass}>
@@ -156,7 +156,7 @@ export function PremiumProvider({ children }) {
             <View style={styles.perks}>
               {[
                 ['videocam', 'HD video calls'],
-                ['pulse', 'Hi-Fi audio'],
+                ['pulse', 'Hi Fi audio'],
                 ['sparkles', 'Exclusive filters'],
               ].map(([icon, label]) => (
                 <View key={label} style={styles.perk}>

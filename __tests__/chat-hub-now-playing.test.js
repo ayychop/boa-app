@@ -67,7 +67,7 @@ describe('urban notification sounds', () => {
     const ids = CHAT_SOUNDS.map((s) => s.id);
     expect(ids).toEqual(expect.arrayContaining(['airhorn', 'scratch', 'cashregister', 'bassdrop']));
     for (const old of RETIRED_CHAT_SOUNDS) expect(ids).not.toContain(old);
-    expect(CHAT_SOUNDS.map((s) => s.label)).toEqual(expect.arrayContaining(['Air horn', 'Record scratch', 'Cha-ching', 'Bass drop']));
+    expect(CHAT_SOUNDS.map((s) => s.label)).toEqual(expect.arrayContaining(['Air horn', 'Record scratch', 'Cha ching', 'Bass drop']));
   });
 
   test('each is a real, short WAV, bundled and built into the app, and credited', () => {

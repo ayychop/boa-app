@@ -22,7 +22,7 @@ export const ROLES = [
   { id: 'music_producer', label: 'Music producer' },
   { id: 'dj', label: 'DJ' },
   { id: 'sound', label: 'Sound' },
-  { id: 'makeup', label: 'Make-up' },
+  { id: 'makeup', label: 'Makeup' },
   { id: 'stylist', label: 'Stylist' },
   { id: 'photographer', label: 'Photographer' },
   { id: 'dancer', label: 'Dancer' },
@@ -746,10 +746,10 @@ export async function mediaUrl(path) {
 // Long enough to load a video; the database only lets the file be read
 // for two minutes after it's opened, and the app deletes it on close.
 const VIEW_ONCE_URL_SECONDS = 120;
-const OUT_OF_DATE_VIEW_ONCE = "The Hub's database isn't up to date yet, so view-once media can't be opened.";
+const OUT_OF_DATE_VIEW_ONCE = "The Hub's database isn't up to date yet, so view once media can't be opened.";
 
 /**
- * Opens a view-once photo or video you were sent: the database marks it
+ * Opens a view once photo or video you were sent: the database marks it
  * opened (so it can't be opened again, here or on another phone) and a
  * short-lived link to the file comes back. Throws a readable Error if it
  * was already opened or is gone.
@@ -765,7 +765,7 @@ export async function openViewOnce(message) {
   return res.data.signedUrl;
 }
 
-/** Deletes an opened view-once file from Storage. Best effort: the database already stops it being read again. */
+/** Deletes an opened view once file from Storage. Best effort: the database already stops it being read again. */
 export async function discardViewOnce(path) {
   if (!path) return;
   signed.delete(path);

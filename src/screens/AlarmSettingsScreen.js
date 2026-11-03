@@ -37,7 +37,7 @@ function useWakeStations() {
   }, [saved]);
 }
 
-// Plays a few seconds of a wake-up sound.
+// Plays a few seconds of a wake up sound.
 function usePreview() {
   const p = useRef(null);
   const timer = useRef(null);
@@ -386,7 +386,7 @@ export default function AlarmSettingsScreen({ navigation }) {
               <Text style={styles.warnText}>
                 {battery === BATTERY.declined
                   ? "Battery saver may stop BOA's alarms. Tap to try again."
-                  : 'For the surest wake-up, let BOA run in the background. Tap to allow.'}
+                  : 'For the surest wake up, let BOA run in the background. Tap to allow.'}
               </Text>
             </Pressable>
             <Pressable

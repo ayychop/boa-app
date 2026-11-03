@@ -21,7 +21,7 @@ export const SCENES = [
     kicker: 'BOA Radio',
     title: 'Your sound,',
     flourish: 'live.',
-    body: 'Afrobeats, Amapiano, R&B, Gospel and more, from stations hand-picked for music, not talk. In the car too, with Android Auto.',
+    body: 'Afrobeats, Amapiano, R&B, Gospel and more, from stations hand picked for music, not talk. In the car too, with Android Auto.',
     glow: '#E2A84B',
   },
   {

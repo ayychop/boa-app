@@ -30,7 +30,7 @@ export const CHAT_SOUNDS = [
   },
   {
     id: 'cashregister',
-    label: 'Cha-ching',
+    label: 'Cha ching',
     detail: 'Money talks',
     icon: 'cash-outline',
     file: 'chat_cashregister.wav',
@@ -53,7 +53,7 @@ export const CHAT_SOUNDS = [
   {
     id: 'pager',
     label: 'Pager ping',
-    detail: 'Two bright pings, old-phone style',
+    detail: 'Two bright pings, old phone style',
     icon: 'phone-portrait-outline',
     file: 'chat_pager.wav',
     asset: require('../../assets/sounds/chat_pager.wav'),
@@ -63,7 +63,7 @@ export const CHAT_SOUNDS = [
   {
     id: 'messenger',
     label: 'Messenger',
-    detail: 'A rising desktop-chat chirp',
+    detail: 'A rising desktop chat chirp',
     icon: 'chatbubbles-outline',
     file: 'chat_messenger.wav',
     asset: require('../../assets/sounds/chat_messenger.wav'),

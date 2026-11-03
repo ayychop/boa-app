@@ -20,7 +20,7 @@ export { PRICE };
 const BENEFITS = [
   { icon: 'videocam', title: 'HD video calls, unlimited', body: '1080p face to face with anyone on the Hub, for as long as you like. Shrink a call and keep using the app.' },
   { icon: 'aperture', title: 'BOA Studio camera', body: 'Six looks from Natural to Cinematic, and real exposure control, done by the camera before your video is sent.' },
-  { icon: 'pulse', title: 'Hi-Fi radio with Bass Boost', body: 'Bass, treble and spatial sound, shaped on every station you play.' },
+  { icon: 'pulse', title: 'Hi Fi radio with Bass Boost', body: 'Bass, treble and spatial sound, shaped on every station you play.' },
   { icon: 'color-palette', title: 'Living chat vibes', body: 'Midnight Drive, Turntable, Golden Hour and more, in motion, or any colour you like.' },
   { icon: 'heart', title: 'Your station library', body: 'Save the stations you love and find them again in a tap, in the app and in your car.' },
 ];
@@ -117,7 +117,7 @@ function PremiumBody({ onClose }) {
               <Text style={[type.display, { textAlign: 'center', marginTop: space.xl }]}>
                 You're <Text style={type.serif}>Premium.</Text>
               </Text>
-              <Text style={[type.bodyMuted, { textAlign: 'center', marginTop: space.md }]}>HD calls, BOA Studio, Hi-Fi and living vibes are on. Look for the gold badge.</Text>
+              <Text style={[type.bodyMuted, { textAlign: 'center', marginTop: space.md }]}>HD calls, BOA Studio, Hi Fi and living vibes are on. Look for the gold badge.</Text>
               <Button label="Start listening" icon="arrow-forward" onPress={close} style={{ marginTop: space.xl, alignSelf: 'stretch' }} />
             </Animated.View>
           ) : (
@@ -130,7 +130,7 @@ function PremiumBody({ onClose }) {
                 <Text style={[type.display, styles.headline]}>
                   The <Text style={type.serif}>best</Text> of all networks.
                 </Text>
-                <Text style={[type.bodyMuted, { marginTop: space.md }]}>The members' side of BOA: HD calls, a studio camera, Hi-Fi radio and chats that come alive.</Text>
+                <Text style={[type.bodyMuted, { marginTop: space.md }]}>The members' side of BOA: HD calls, a studio camera, Hi Fi radio and chats that come alive.</Text>
               </Animated.View>
               <View style={{ marginTop: space.xl, alignItems: 'center' }}>
                 <MemberCard width={contentWidth} member={isPremium ? 'BOA PREMIUM MEMBER' : 'BOA PREMIUM'} status={isPremium ? (access.status === 'trial' && !isAdmin ? 'TRIAL' : 'ACTIVE') : null} />
@@ -174,12 +174,12 @@ function PremiumBody({ onClose }) {
                     onPress={() =>
                       // TODO: Google Play Billing / App Store checkout. Until
                       // then a membership is switched on from the Admin Portal.
-                      Alert.alert('Checkout opens soon', `In-app payments aren't switched on in this build yet. BOA Premium will be ${PRICE}/month.`)
+                      Alert.alert('Checkout opens soon', `In app payments aren't switched on in this build yet. BOA Premium will be ${PRICE}/month.`)
                     }
                     style={{ alignSelf: 'stretch' }}
                     testID="premium-subscribe"
                   />
-                  <Text style={styles.fineText}>{access.status === 'expired' ? 'Your 2-day free trial has ended.' : 'Every new member gets a 2-day free trial.'}</Text>
+                  <Text style={styles.fineText}>{access.status === 'expired' ? 'Your 2 day free trial has ended.' : 'Every new member gets a 2 day free trial.'}</Text>
                 </Animated.View>
               )}
             </View>

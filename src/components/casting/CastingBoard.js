@@ -214,7 +214,7 @@ function ApplySheet({ call, onClose, onSent, onSignIn }) {
             ) : (
               <>
                 <Field
-                  label="Self-tape link"
+                  label="Self tape link"
                   value={tape}
                   onChangeText={setTape}
                   autoCapitalize="none"

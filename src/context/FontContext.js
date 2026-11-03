@@ -77,7 +77,7 @@ export const APP_FONTS = [
   {
     id: 'dmsans',
     label: 'DM Sans',
-    detail: 'Calm and low-contrast',
+    detail: 'Calm and low contrast',
     weights: { regular: 'DMSans_400Regular', medium: 'DMSans_500Medium', semibold: 'DMSans_600SemiBold', bold: 'DMSans_700Bold' },
     files: {
       DMSans_400Regular: () => require('@expo-google-fonts/dm-sans/400Regular/DMSans_400Regular.ttf'),
@@ -113,7 +113,7 @@ export const APP_FONTS = [
   {
     id: 'playfair',
     label: 'Playfair',
-    detail: 'Elegant high-contrast serif',
+    detail: 'Elegant high contrast serif',
     weights: { regular: 'PlayfairDisplay_400Regular', medium: 'PlayfairDisplay_500Medium', semibold: 'PlayfairDisplay_600SemiBold', bold: 'PlayfairDisplay_700Bold' },
     files: {
       PlayfairDisplay_400Regular: () => require('@expo-google-fonts/playfair-display/400Regular/PlayfairDisplay_400Regular.ttf'),
