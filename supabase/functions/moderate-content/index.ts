@@ -1,7 +1,7 @@
 // BOA HUB content moderation: checks text and photos before they are posted.
 //
 //   POST /moderate-content
-//     { "surface": "post" | "message" | "avatar" | "profile" | "casting",
+//     { "surface": "post" | "message" | "avatar" | "profile" | "casting" | "split" | "invoice",
 //       "text": "<what they typed>",                      (optional)
 //       "image": { "bucket": "posts" | "avatars" | "chat-media", "path": "<file>" } }   (optional)
 //   -> { "allowed": true }
@@ -42,7 +42,7 @@ const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const OPENAI_KEY = Deno.env.get('OPENAI_API_KEY') ?? '';
 const MODEL = 'omni-moderation-latest';
 const MODERATIONS = 'https://api.openai.com/v1/moderations';
-const SURFACES = ['post', 'message', 'avatar', 'profile', 'casting'];
+const SURFACES = ['post', 'message', 'avatar', 'profile', 'casting', 'split', 'invoice'];
 const MAX_TEXT = 6000;
 const PROVIDER_TIMEOUT_MS = 12_000;
 const IMAGE_URL_SECONDS = 120;

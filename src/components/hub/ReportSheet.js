@@ -13,7 +13,8 @@ import { colors, fonts, radius, space, type } from '../../theme';
 /**
  * Report a person, one message or one post to BOA's moderators, with a
  * reason and an optional note. Offers to block them too.
- * target: { user: profile }, { message, user } or { post, user }.
+ * target: { user: profile }, { message, user } or { post, user }; an optional
+ * `note` (such as the gig's title) is kept with the report.
  */
 export default function ReportSheet({ target, onClose }) {
   const { block, blocked } = useHub();
@@ -32,7 +33,7 @@ export default function ReportSheet({ target, onClose }) {
   const send = async () => {
     setState('sending');
     try {
-      await report({ userId: target.user?.id, message: target.message, post: target.post, reason, details });
+      await report({ userId: target.user?.id, message: target.message, post: target.post, reason, details: target.note ? `${target.note}${details.trim() ? `: ${details.trim()}` : ''}` : details });
       haptics.success();
       setState('sent');
     } catch (err) {

@@ -9,7 +9,8 @@ import * as casting from '../../api/casting';
 import { isHandled } from '../../safety/errors';
 import { ROLES } from '../../api/hub';
 import BottomSheet from '../BottomSheet';
-import { Chip, Field } from '../kit';
+import { Chip, Field, IconButton } from '../kit';
+import ReportSheet from '../hub/ReportSheet';
 import { Button, Slate } from '../ui';
 import { haptics } from '../../utils/haptics';
 import { colors, fonts, radius, space, type } from '../../theme';
@@ -132,7 +133,7 @@ function Meta({ icon, text }) {
 }
 
 /** An external gig, on frosted glass, with its budget. */
-function GigCard({ call, applied, mine, onApply, index }) {
+function GigCard({ call, applied, mine, onApply, onReport, index }) {
   return (
     <Animated.View
       entering={FadeInDown.delay(index * 70)
@@ -162,6 +163,11 @@ function GigCard({ call, applied, mine, onApply, index }) {
         ) : (
           <Button label="Apply" icon="videocam-outline" variant="ghost" onPress={() => onApply(call)} />
         )}
+        {!mine && call.producer_id ? (
+          <View style={{ marginLeft: 'auto' }}>
+            <IconButton icon="flag-outline" label="Report gig" onPress={() => onReport(call)} testID={`gig-report-${call.id}`} />
+          </View>
+        ) : null}
       </View>
     </Animated.View>
   );
@@ -368,6 +374,7 @@ export default function CastingBoard({ navigation }) {
   const [applying, setApplying] = useState(null);
   const [posting, setPosting] = useState(false);
   const [notice, setNotice] = useState(null);
+  const [reporting, setReporting] = useState(null);
 
   const load = useCallback(async () => {
     try {
@@ -394,6 +401,12 @@ export default function CastingBoard({ navigation }) {
     setApplying(null);
     setPosting(false);
     navigation.navigate('HubWelcome', { next: 'back' });
+  };
+
+  // A gig is someone else's content: anyone signed in can report it.
+  const reportGig = (call) => {
+    if (!userId) return signIn();
+    setReporting({ user: { id: call.producer_id }, note: `Casting gig: ${call.title}` });
   };
 
   // Live calls, plus your own gigs still awaiting review.
@@ -436,11 +449,12 @@ export default function CastingBoard({ navigation }) {
           call.is_boa_original ? (
             <OriginalCard key={call.id} call={call} index={i} applied={applied[call.id]} onApply={setApplying} />
           ) : (
-            <GigCard key={call.id} call={call} index={i} applied={applied[call.id]} mine={mineIds.has(call.id)} onApply={setApplying} />
+            <GigCard key={call.id} call={call} index={i} applied={applied[call.id]} mine={mineIds.has(call.id)} onApply={setApplying} onReport={reportGig} />
           ),
         )
       )}
 
+      <ReportSheet target={reporting} onClose={() => setReporting(null)} />
       <ApplySheet
         call={applying}
         onClose={() => setApplying(null)}

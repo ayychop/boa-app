@@ -1,4 +1,5 @@
 import { check, need } from './posts';
+import * as guard from '../safety/guard';
 
 // Splits: digital split sheets (who owns what share of a song, beat or
 // video) and invoices for the work. The database keeps a signed sheet
@@ -82,6 +83,7 @@ const partyRows = (sheetId, parties) =>
 export async function createSheet(userId, { title, workType = 'song', notes = '', parties }) {
   const problem = splitProblem({ title, parties });
   if (problem) throw new Error(problem);
+  await guard.text('split', title, notes, ...parties.map((p) => p.role));
   const sb = need();
   const sheet = check(
     await sb.from('split_sheets').insert({ created_by: userId, title: title.trim(), work_type: workType, notes: notes.trim().slice(0, 1000) }).select('*').single(),
@@ -94,6 +96,7 @@ export async function createSheet(userId, { title, workType = 'song', notes = ''
 export async function updateSheet(sheetId, { title, workType, notes = '', parties }) {
   const problem = splitProblem({ title, parties });
   if (problem) throw new Error(problem);
+  await guard.text('split', title, notes, ...parties.map((p) => p.role));
   const sb = need();
   check(await sb.from('split_sheets').update({ title: title.trim(), work_type: workType, notes: notes.trim().slice(0, 1000), updated_at: new Date().toISOString() }).eq('id', sheetId));
   check(await sb.from('split_parties').delete().eq('sheet_id', sheetId));
@@ -156,6 +159,7 @@ export async function listInvoices() {
 export async function createInvoice(userId, { number, clientId = null, clientName, clientEmail = '', sheetId = null, items, currency = 'GBP', notes = '', dueDate = null }) {
   const problem = invoiceProblem({ clientName, clientEmail, items });
   if (problem) throw new Error(problem);
+  await guard.text('invoice', clientName, notes, ...items.map((i) => i.description));
   const lines = items
     .filter((i) => i.description?.trim())
     .map((i) => ({ description: i.description.trim().slice(0, 200), qty: Number(i.qty), rate: round2(Number(String(i.rate).replace(/[^0-9.]/g, ''))) }));

@@ -488,3 +488,40 @@ describe('Resuming where you were', () => {
     for (const c of ['screenSize', 'smallestScreenSize', 'screenLayout', 'orientation', 'density', 'uiMode', 'fontScale', 'layoutDirection']) expect(changes).toContain(c);
   });
 });
+
+describe('Final audit: gaps closed', () => {
+  test('the production build has the machine and ABIs the native build needs (the last one died in CMake)', () => {
+    const prod = JSON.parse(read('eas.json')).build.production;
+    expect(prod.android.resourceClass).toBe('large');
+    expect(prod.android.buildType).toBe('app-bundle');
+    expect(prod.env.ORG_GRADLE_PROJECT_reactNativeArchitectures).toBe('armeabi-v7a,arm64-v8a');
+    expect(prod.environment).toBe('production');
+  });
+
+  test('another member\'s casting gig has a flag that reports it', () => {
+    const board = read('src/components/casting/CastingBoard.js');
+    expect(board).toMatch(/icon="flag-outline" label="Report gig"/);
+    expect(board).toMatch(/<ReportSheet target=\{reporting\}/);
+    expect(board).toMatch(/note: `Casting gig: \$\{call\.title\}`/);
+    expect(read('src/components/hub/ReportSheet.js')).toMatch(/target\.note/);
+  });
+
+  test('split sheets and invoices are moderated, and the function accepts those surfaces', () => {
+    const splits = read('src/api/splits.js');
+    expect(splits.match(/guard\.text\('split'/g)).toHaveLength(2);
+    expect(splits).toMatch(/guard\.text\('invoice'/);
+    const fn = read('supabase/functions/moderate-content/index.ts');
+    expect(fn).toMatch(/const SURFACES = \[[^\]]*'split'[^\]]*'invoice'[^\]]*\]/);
+  });
+
+  test('every surface the app sends is one the function allows', () => {
+    const fn = read('supabase/functions/moderate-content/index.ts');
+    const allowed = /const SURFACES = \[([^\]]*)\]/.exec(fn)[1].match(/'(\w+)'/g).map((s) => s.slice(1, -1));
+    const used = new Set();
+    for (const f of ['src/api/hub.js', 'src/api/posts.js', 'src/api/casting.js', 'src/api/splits.js']) {
+      for (const m of read(f).matchAll(/guard\.(?:text|textOnly|media)\('(\w+)'/g)) used.add(m[1]);
+    }
+    expect(used.size).toBeGreaterThan(4);
+    for (const s of used) expect(allowed).toContain(s);
+  });
+});

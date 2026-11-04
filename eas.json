@@ -29,8 +29,15 @@
     },
     "production": {
       "autoIncrement": true,
+      "android": {
+        "buildType": "app-bundle",
+        "resourceClass": "large"
+      },
       "buildArtifactPaths": ["android/app/build/outputs/mapping/release/mapping.txt"],
-      "environment": "production"
+      "environment": "production",
+      "env": {
+        "ORG_GRADLE_PROJECT_reactNativeArchitectures": "armeabi-v7a,arm64-v8a"
+      }
     }
   },
   "submit": {
