@@ -1,12 +1,15 @@
 import { supabase } from '../lib/supabase';
 import { isGifUrl } from '../chat/gifs';
 import { assertCloudUrl, isCloudUrl, readFileBytes } from './upload';
+import * as guard from '../safety/guard';
+import { TERMS_VERSION } from '../safety/terms';
 
 // The Creative Hub's calls to the BOA HUB Supabase project. Access rules
 // live in the database (supabase/migrations); these are thin wrappers that
 // throw a readable Error on failure.
 
-export const TERMS_VERSION = '2026-10-24';
+// What people agree to (src/safety/terms.js), re-exported for the screens that show it.
+export { TERMS_VERSION };
 export const MIN_AGE = 18;
 export const PAGE_SIZE = 20;
 
@@ -35,7 +38,10 @@ export const roleLabel = (id) => ROLES.find((r) => r.id === id)?.label ?? id;
 export const REPORT_REASONS = [
   { id: 'harassment', label: 'Harassment or bullying' },
   { id: 'hate', label: 'Hate speech' },
-  { id: 'sexual', label: 'Sexual content' },
+  { id: 'sexual', label: 'Nudity or sexual content' },
+  { id: 'violence', label: 'Violence or threats' },
+  { id: 'self_harm', label: 'Self harm' },
+  { id: 'illegal', label: 'Illegal activity' },
   { id: 'scam', label: 'Scam or fraud' },
   { id: 'spam', label: 'Spam' },
   { id: 'impersonation', label: 'Pretending to be someone else' },
@@ -156,7 +162,7 @@ export async function signOut() {
 // --------------------------------------------------------------- profiles
 
 const PROFILE_FIELDS =
-  'id, username, display_name, avatar_url, bio, roles, quote_category, is_boa_star, is_featured, banned_at, visible_on_hub, open_for_work, status_kind, status_text, status_updated_at, last_seen_at, created_at';
+  'id, username, display_name, avatar_url, bio, roles, quote_category, is_boa_star, is_featured, banned_at, visible_on_hub, open_for_work, status_kind, status_text, status_updated_at, last_seen_at, created_at, terms_version';
 
 export async function getProfile(id) {
   return check(await need().from('profiles').select(PROFILE_FIELDS).eq('id', id).maybeSingle());
@@ -183,6 +189,8 @@ export async function createProfile(userId, fields, { adultConfirmedAt } = {}) {
     throw new Error('Please confirm you are 18 or over.');
   }
   assertCloudUrl(fields.avatar_url);
+  // The text on a new profile is checked like any other (the agreement is part of the sign up form).
+  await guard.textOnly('profile', fields.display_name, fields.bio, fields.username);
   const row = {
     id: userId,
     ...fields,
@@ -211,6 +219,12 @@ export async function createProfile(userId, fields, { adultConfirmedAt } = {}) {
     Object.assign(err, { code, details, hint });
     throw err;
   }
+  // The agreement also travels with the sign in account. Best effort: the profile row is the record.
+  try {
+    need()
+      .auth.updateUser({ data: { terms_accepted: true, terms_version: TERMS_VERSION, terms_accepted_at: row.terms_accepted_at } })
+      .catch(() => {});
+  } catch {}
   return res.data;
 }
 
@@ -218,6 +232,7 @@ export async function updateProfile(userId, patch) {
   const fields = { ...patch };
   if ('avatar_url' in fields) assertCloudUrl(fields.avatar_url);
   if (fields.username) fields.username = fields.username.toLowerCase();
+  if (fields.display_name || fields.bio) await guard.text('profile', fields.display_name, fields.bio);
   return check(await need().from('profiles').update(fields).eq('id', userId).select(PROFILE_FIELDS).single());
 }
 
@@ -225,6 +240,13 @@ export async function updateProfile(userId, patch) {
 export const MAX_AVATAR_BYTES = 5 * 1024 * 1024;
 const AVATAR_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 const UPLOAD_TIMEOUT_MS = 30000;
+
+/** Removes an uploaded file that is not going to be used (best effort). */
+async function dropFile(bucket, path) {
+  try {
+    await need().storage.from(bucket).remove([path]);
+  } catch {}
+}
 
 /** Whether a picked photo can be uploaded: null if so, else why not. */
 export function avatarProblem(asset) {
@@ -270,6 +292,14 @@ export async function uploadAvatar(userId, asset) {
     throw err;
   } finally {
     clearTimeout(timer);
+  }
+  // The photo is checked before it replaces anything. A refused photo is
+  // deleted by the check itself; if the check can't run, it goes too.
+  try {
+    await guard.media('avatar', { bucket: 'avatars', path });
+  } catch (err) {
+    if (err?.code !== 'violation') await dropFile('avatars', path);
+    throw err;
   }
   // Old pictures go, so only the current one is kept. Best effort: a
   // failure here never undoes the new photo.
@@ -432,14 +462,23 @@ export async function listBlocked(myId) {
   return check(await need().from('blocks').select('blocked_id').eq('blocker_id', myId)).map((r) => r.blocked_id);
 }
 
-export async function report({ userId = null, message = null, reason, details = '' }) {
+/**
+ * Reports a person, a message or a post to BOA's moderators. A post is
+ * { id, author_id, caption }; the caption is kept with the report so
+ * deleting the post doesn't destroy the evidence.
+ */
+export async function report({ userId = null, message = null, post = null, reason, details = '' }) {
+  if (!REPORT_REASONS.some((r) => r.id === reason)) throw new Error('Choose a reason for the report.');
   check(
     await need()
       .from('reports')
       .insert({
-        reported_user_id: userId ?? message?.sender_id ?? null,
+        reported_user_id: userId ?? message?.sender_id ?? post?.author_id ?? null,
         message_id: message?.id ?? null,
         message_excerpt: message?.body?.slice(0, 2000) ?? null,
+        // Only sent for a post, so profile and message reports still work
+        // against a database that hasn't had the post columns added.
+        ...(post ? { post_id: post.id, content_excerpt: post.caption?.slice(0, 2000) || null, content_type: 'post' } : {}),
         reason,
         details: details.trim() || null,
       }),
@@ -542,6 +581,8 @@ export async function listMessages(conversationId, before = null, limit = 40) {
 const replyField = (replyTo) => (replyTo ? { reply_to: replyTo } : {});
 
 export async function sendMessage(conversationId, body, { replyTo = null } = {}) {
+  // Agreement to the Terms, then the text check, before anything is sent.
+  await guard.text('message', body);
   const res = await need()
     .from('messages')
     .insert({ conversation_id: conversationId, body: body.trim(), ...replyField(replyTo) })
@@ -553,6 +594,7 @@ export async function sendMessage(conversationId, body, { replyTo = null } = {})
 
 /** An animated emoji (src/chat/stickers.js); the body is the emoji itself. */
 export async function sendSticker(conversationId, emoji, { replyTo = null } = {}) {
+  await guard.terms();
   const res = await need()
     .from('messages')
     .insert({ conversation_id: conversationId, kind: 'sticker', body: emoji, ...replyField(replyTo) })
@@ -569,6 +611,7 @@ export async function sendSticker(conversationId, emoji, { replyTo = null } = {}
  */
 export async function sendGif(conversationId, gif, { replyTo = null } = {}) {
   if (!isGifUrl(gif?.url)) throw new Error("That GIF can't be sent.");
+  await guard.terms();
   const res = await need()
     .from('messages')
     .insert({
@@ -669,6 +712,8 @@ const EXT = {
  */
 export async function uploadChatMedia(conversationId, userId, { uri, mimeType, kind }) {
   const sb = need();
+  // Nothing is uploaded before they have agreed to the Terms.
+  await guard.terms();
   const limit = MEDIA_LIMITS[kind] ?? MEDIA_LIMITS.image;
   const type = mimeType || (kind === 'video' ? 'video/mp4' : kind === 'voice' ? 'audio/mp4' : 'image/jpeg');
   const path = `${conversationId}/${userId}/${kind}-${Date.now()}.${EXT[type] ?? 'bin'}`;
@@ -697,6 +742,17 @@ export async function uploadChatMedia(conversationId, userId, { uri, mimeType, k
   } finally {
     clearTimeout(timer);
   }
+  // Photos are checked before they can be sent (a refused one is deleted by
+  // the check). Videos and voice notes can't be read by the check; they are
+  // covered by reporting.
+  if (kind === 'image') {
+    try {
+      await guard.media('message', { bucket: CHAT_BUCKET, path });
+    } catch (err) {
+      if (err?.code !== 'violation') await dropFile(CHAT_BUCKET, path);
+      throw err;
+    }
+  }
   return { path, size: body.byteLength, mime: type };
 }
 
@@ -705,6 +761,13 @@ export async function uploadChatMedia(conversationId, userId, { uri, mimeType, k
  * videos can be opened once, by the person they're sent to.
  */
 export async function sendMedia(conversationId, { kind, path, mime, size, width = null, height = null, durationMs = null, waveform = null, caption = '', viewOnce = false }) {
+  try {
+    await guard.text('message', caption);
+  } catch (err) {
+    // The file is already uploaded; a message that is not going out must not leave it behind.
+    await dropFile(CHAT_BUCKET, path);
+    throw err;
+  }
   const res = await need()
     .from('messages')
     .insert({
@@ -889,11 +952,20 @@ export async function exportMyData() {
   return check(await need().rpc('export_my_data'));
 }
 
-/** Removes the avatar files, then the account and everything that cascades from it. */
+/**
+ * Deletes the account for good, through the delete-account Edge Function
+ * (supabase/functions/delete-account): the sign in, the profile, posts,
+ * every conversation and its media, and the person's files. Not just a sign
+ * out. Needs the person to have typed DELETE (the screen asks).
+ */
 export async function deleteMyAccount(userId) {
   const sb = need();
-  const files = (await sb.storage.from('avatars').list(userId)).data ?? [];
-  if (files.length) await sb.storage.from('avatars').remove(files.map((f) => `${userId}/${f.name}`));
-  check(await sb.rpc('delete_my_account'));
-  await sb.auth.signOut().catch(() => {});
+  const { error } = await sb.functions.invoke('delete-account', { body: { confirm: 'DELETE' } });
+  if (error) {
+    // The function's own reason ("Too many attempts...") is in the response body.
+    const reason = await error.context?.json?.().catch(() => null);
+    throw new Error(reason?.error || error.message || "Couldn't delete your account. Try again.");
+  }
+  // The account is gone on the server; this clears the session from the phone.
+  await sb.auth.signOut({ scope: 'local' }).catch(() => {});
 }

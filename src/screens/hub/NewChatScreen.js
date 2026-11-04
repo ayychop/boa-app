@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { isHandled } from '../../safety/errors';
 import { Alert, FlatList, Keyboard, KeyboardAvoidingView, Platform, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 import Text, { FontScope } from '../../components/ScopedText';
 import { READING } from '../../hooks/useLayout';
@@ -720,6 +721,13 @@ function Thread({ navigation, route }) {
   };
   const fail = (tempId, title, err) => {
     if (!alive.current) return;
+    // Refused by the safety layer (the agreement was declined, or the content
+    // check said no) and the person has already been told on screen: the
+    // message is dropped, not left behind as something to retry.
+    if (isHandled(err)) {
+      setMessages((l) => l.filter((m) => m.id !== tempId));
+      return;
+    }
     setMessages((l) => l.map((m) => (m.id === tempId ? { ...m, pending: false, failed: true } : m)));
     Alert.alert(title, err.message);
   };

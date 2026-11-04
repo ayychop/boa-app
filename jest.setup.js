@@ -533,3 +533,13 @@ jest.mock('jail-monkey', () => {
   };
 });
 jest.mock('expo-device', () => ({ isDevice: true }));
+
+// The safety layer (src/safety): the Terms agreement and the content check
+// both talk to the network and put a card on screen, so API tests run with
+// them passing. __tests__/play-compliance.test.js exercises the real ones.
+jest.mock('./src/safety/guard', () => ({
+  terms: jest.fn(async () => {}),
+  text: jest.fn(async () => {}),
+  textOnly: jest.fn(async () => {}),
+  media: jest.fn(async () => {}),
+}));

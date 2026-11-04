@@ -7,6 +7,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { useHub } from '../../context/HubContext';
 import { mediaKind, MEDIA_QUALITY } from '../../api/hub';
+import { isHandled } from '../../safety/errors';
 import { CAPTION_MAX, createPost, parseTags, postProblem, resolveUsernames } from '../../api/posts';
 import { Field, PageHeader } from '../../components/kit';
 import { Button, Slate } from '../../components/ui';
@@ -59,7 +60,8 @@ export default function HubNewPostScreen({ navigation }) {
       await createPost(userId, asset, { caption, tagged: found.map((f) => f.id).filter((id) => id !== userId) });
       navigation.goBack();
     } catch (err) {
-      Alert.alert("Couldn't post", err.message);
+      // A refusal from the safety layer (the agreement, or "Content Violates Guidelines") is already on screen.
+      if (!isHandled(err)) Alert.alert("Couldn't post", err.message);
       setBusy(false);
     }
   };

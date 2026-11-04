@@ -11,9 +11,9 @@ import { haptics } from '../../utils/haptics';
 import { colors, fonts, radius, space, type } from '../../theme';
 
 /**
- * Report a person or one message to BOA's moderators, with a reason and
- * an optional note. Offers to block them too.
- * target: { user: profile } or { message, user }.
+ * Report a person, one message or one post to BOA's moderators, with a
+ * reason and an optional note. Offers to block them too.
+ * target: { user: profile }, { message, user } or { post, user }.
  */
 export default function ReportSheet({ target, onClose }) {
   const { block, blocked } = useHub();
@@ -32,7 +32,7 @@ export default function ReportSheet({ target, onClose }) {
   const send = async () => {
     setState('sending');
     try {
-      await report({ userId: target.user?.id, message: target.message, reason, details });
+      await report({ userId: target.user?.id, message: target.message, post: target.post, reason, details });
       haptics.success();
       setState('sent');
     } catch (err) {
@@ -68,11 +68,16 @@ export default function ReportSheet({ target, onClose }) {
           </>
         ) : (
           <>
-            <Slate dot>{target?.message ? 'Report message' : 'Report user'}</Slate>
+            <Slate dot>{target?.message ? 'Report message' : target?.post ? 'Report post' : 'Report user'}</Slate>
             <Text style={[type.title, { marginTop: space.sm }]}>What's wrong?</Text>
             {target?.message ? (
               <Text style={styles.quote} numberOfLines={3}>
                 "{target.message.body}"
+              </Text>
+            ) : null}
+            {target?.post?.caption ? (
+              <Text style={styles.quote} numberOfLines={3}>
+                "{target.post.caption}"
               </Text>
             ) : null}
             <View style={styles.reasons}>

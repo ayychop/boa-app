@@ -6,6 +6,7 @@ import * as ImagePicker from 'expo-image-picker';
 import Animated, { FadeInDown, FadeInRight, FadeOutLeft } from 'react-native-reanimated';
 import { useHub } from '../../context/HubContext';
 import * as hub from '../../api/hub';
+import { isHandled } from '../../safety/errors';
 import { Avatar, Chip, Field, PageHeader } from '../../components/kit';
 import { Button, Fog, Slate, Viewfinder } from '../../components/ui';
 import BoaLogo from '../../components/BoaLogo';
@@ -315,7 +316,8 @@ function Onboarding({ onDone }) {
         try {
           avatar_url = await hub.uploadAvatar(userId, avatar);
         } catch (err) {
-          photoFailed = err?.message || "Couldn't upload the photo.";
+          // A photo the content check refused already has its own card on screen.
+          photoFailed = isHandled(err) ? null : err?.message || "Couldn't upload the photo.";
         }
       }
       await finishOnboarding({ username: handle, display_name: displayName.trim() || null, avatar_url, bio: bio.trim() || null, roles, quote_category: spark }, { adultConfirmedAt: agreedAt });

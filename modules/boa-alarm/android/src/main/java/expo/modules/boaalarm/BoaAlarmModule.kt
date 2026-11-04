@@ -122,29 +122,23 @@ class BoaAlarmModule : Module() {
     }
 
     /**
-     * Android's own "Let BOA always run in the background?" box
-     * (ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS), a one-tap Allow / Deny.
-     * Where a phone has no such box, its list of battery-optimised apps opens
-     * instead. Returns "dialog", "list" or "none" for what was shown.
+     * Opens the phone's own list of battery-optimised apps, where BOA can be
+     * set to "Don't optimise". Google Play restricts the one-tap box
+     * (ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, which needs a restricted
+     * permission), and alarms set with setAlarmClock ring through Doze
+     * without it, so the list is all this asks of the phone. Returns "list"
+     * or "none" for what was shown ("dialog" is no longer ever returned).
      */
     Function("requestIgnoreBatteryOptimizations") {
       if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
         "none"
       } else {
-        val pkg = context.packageName
-        val ask = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:$pkg"))
-          .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         val list = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         try {
-          context.startActivity(ask)
-          "dialog"
+          context.startActivity(list)
+          "list"
         } catch (_: Exception) {
-          try {
-            context.startActivity(list)
-            "list"
-          } catch (_: Exception) {
-            "none"
-          }
+          "none"
         }
       }
     }

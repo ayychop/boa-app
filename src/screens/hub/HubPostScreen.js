@@ -7,6 +7,7 @@ import { getProfile } from '../../api/hub';
 import { deletePost } from '../../api/posts';
 import { heart, heartsOnPost, myHearts, unheart } from '../../api/hearts';
 import { HeartBurst, HeartButton } from '../../components/HeartBurst';
+import ReportSheet from '../../components/hub/ReportSheet';
 import { haptics } from '../../utils/haptics';
 import { Avatar, BoaStarBadge, IconButton, PageHeader } from '../../components/kit';
 import { Ionicons } from '@expo/vector-icons';
@@ -60,6 +61,7 @@ export default function HubPostScreen({ navigation, route }) {
   const mine = post?.author_id === userId;
   const [loved, setLoved] = useState(false);
   const [hearts, setHearts] = useState(null);
+  const [reporting, setReporting] = useState(null);
   const burst = useRef(null);
   const lastTap = useRef(0);
 
@@ -141,7 +143,13 @@ export default function HubPostScreen({ navigation, route }) {
         kicker={post.kind === 'video' ? 'Reel' : 'Post'}
         title={name || 'Post'}
         onBack={() => navigation.goBack()}
-        right={mine ? <IconButton icon="trash-outline" label="Delete post" onPress={remove} testID="post-delete" /> : undefined}
+        right={
+          mine ? (
+            <IconButton icon="trash-outline" label="Delete post" onPress={remove} testID="post-delete" />
+          ) : (
+            <IconButton icon="flag-outline" label="Report post" onPress={() => setReporting({ post, user: author ?? { id: post.author_id } })} testID="post-report" />
+          )
+        }
       />
       <ScrollView contentContainerStyle={{ alignItems: 'center', paddingBottom: insets.bottom + space.xxl }}>
         <View style={{ width, height: width * ratio, backgroundColor: '#000' }}>
@@ -187,6 +195,7 @@ export default function HubPostScreen({ navigation, route }) {
           <Text style={styles.date}>{when(post.created_at)}</Text>
         </View>
       </ScrollView>
+      <ReportSheet target={reporting} onClose={(didBlock) => (setReporting(null), didBlock && navigation.goBack())} />
     </View>
   );
 }

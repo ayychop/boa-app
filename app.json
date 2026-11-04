@@ -24,6 +24,17 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "package": "com.boanetsteam.boaapp",
+      "blockedPermissions": [
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VIDEO",
+        "android.permission.READ_MEDIA_AUDIO",
+        "android.permission.READ_PHONE_STATE",
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"
+      ],
       "permissions": [
         "android.permission.MODIFY_AUDIO_SETTINGS",
         "android.permission.FOREGROUND_SERVICE",
@@ -75,6 +86,8 @@
         "expo-build-properties",
         {
           "android": {
+            "targetSdkVersion": 36,
+            "compileSdkVersion": 37,
             "kotlinVersion": "2.0.21",
             "enableProguardInReleaseBuilds": true,
             "enableR8InReleaseBuilds": true,
@@ -104,7 +117,13 @@
             "screenLayout",
             "smallestScreenSize",
             "uiMode",
-            "density"
+            "density",
+            "fontScale",
+            "layoutDirection",
+            "locale",
+            "colorMode",
+            "navigation",
+            "touchscreen"
           ]
         }
       ],

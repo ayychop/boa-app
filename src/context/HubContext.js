@@ -7,6 +7,8 @@ import { createAudioPlayer } from 'expo-audio';
 import { isConfigured, supabase } from '../lib/supabase';
 import { ownChannel } from '../lib/realtime';
 import * as hub from '../api/hub';
+import * as consent from '../safety/consent';
+import { triggerEdgeLighting } from '../data/edgeLighting';
 import { claimDayOne, forgetDayOnes } from '../api/dayOne';
 import * as hearts from '../api/hearts';
 import { useUser } from './UserContext';
@@ -102,6 +104,12 @@ export function HubProvider({ children }) {
   useEffect(() => {
     if (supabase) loadProfile();
   }, [loadProfile]);
+
+  // The safety layer (src/safety) needs to know who is signed in and which
+  // version of the Terms they've agreed to.
+  useEffect(() => {
+    consent.sync({ user: session?.user ?? null, profile: profile && profile.id === userId ? profile : null });
+  }, [session, profile, userId]);
 
   // Presence: everyone signed in to the Hub joins one channel; whoever is
   // in it is online. Leaving the app leaves the channel.
@@ -340,7 +348,10 @@ export function HubProvider({ children }) {
     };
     const channel = ownChannel(`hub:inbox:${userId}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, async ({ new: m }) => {
-        if (!m || m.sender_id === userId || pushToken.current || hub.isExpired(m)) return;
+        if (!m || m.sender_id === userId || hub.isExpired(m)) return;
+        // Edge Lighting: a new message, unless you're already reading that thread.
+        if (chat.getOpenThread() !== m.conversation_id) triggerEdgeLighting('message');
+        if (pushToken.current) return;
         chat.notifyLocal({
           title: await nameOf(m.sender_id),
           body: chat.previewOf(m),
@@ -369,6 +380,7 @@ export function HubProvider({ children }) {
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'hearts', filter: `owner_id=eq.${userId}` }, async ({ new: h }) => {
         if (!h || h.liker_id === userId) return;
         setHeartsUnseen((n) => n + 1);
+        triggerEdgeLighting('heart');
         if (pushToken.current) return;
         const p = await hub.getProfile(h.liker_id).catch(() => null);
         chat.notifyHeart({ name: p?.display_name || (p?.username ? `@${p.username}` : 'Someone'), likerId: h.liker_id, sound: chatSoundRef.current });

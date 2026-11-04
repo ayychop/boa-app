@@ -6,6 +6,7 @@ import Animated, { Easing, FadeInDown, useAnimatedStyle, useSharedValue, withRep
 import Svg, { Circle, Defs, Line, LinearGradient as SvgLinearGradient, Path, RadialGradient, Rect, Stop } from 'react-native-svg';
 import { useHub } from '../../context/HubContext';
 import * as casting from '../../api/casting';
+import { isHandled } from '../../safety/errors';
 import { ROLES } from '../../api/hub';
 import BottomSheet from '../BottomSheet';
 import { Chip, Field } from '../kit';
@@ -189,7 +190,7 @@ function ApplySheet({ call, onClose, onSent, onSignIn }) {
       haptics.success();
       onSent(call.id);
     } catch (err) {
-      setError(err.message);
+      if (!isHandled(err)) setError(err.message);
     } finally {
       setBusy(false);
     }
@@ -277,7 +278,7 @@ function PostSheet({ open, onClose, onPosted, onSignIn }) {
       setForm({ title: '', role: null, description: '', budget: '', location: '' });
       onPosted();
     } catch (err) {
-      setError(err.message);
+      if (!isHandled(err)) setError(err.message);
     } finally {
       setBusy(false);
     }
@@ -359,7 +360,7 @@ function PostSheet({ open, onClose, onPosted, onSignIn }) {
  * link or a cover note; Hub members can post a gig for BOA to review.
  */
 export default function CastingBoard({ navigation }) {
-  const { userId, stage } = useHub();
+  const { userId, stage, blocked } = useHub();
   const [calls, setCalls] = useState(null); // null loading | [] | rows
   const [mine, setMine] = useState([]);
   const [applied, setApplied] = useState({});
@@ -396,8 +397,10 @@ export default function CastingBoard({ navigation }) {
   };
 
   // Live calls, plus your own gigs still awaiting review.
-  const liveIds = new Set((calls ?? []).map((c) => c.id));
-  const board = [...(calls ?? []), ...mine.filter((c) => !liveIds.has(c.id))];
+  // Gigs from people you've blocked are hidden.
+  const visibleCalls = (calls ?? []).filter((c) => !blocked?.has?.(c.producer_id));
+  const liveIds = new Set(visibleCalls.map((c) => c.id));
+  const board = [...visibleCalls, ...mine.filter((c) => !liveIds.has(c.id))];
   const mineIds = new Set(mine.map((c) => c.id));
 
   return (

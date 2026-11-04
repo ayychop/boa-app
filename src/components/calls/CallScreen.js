@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import EdgeLighting from '../EdgeLighting';
 import { Image, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
@@ -942,6 +943,8 @@ export default function CallScreen({ me }) {
     // Edge to edge: the picture runs under the status bar and the navigation bar, with no bands.
     <Modal visible transparent animationType="fade" statusBarTranslucent navigationBarTranslucent onRequestClose={incoming ? decline : canShrink ? backToChat : hangUp}>
       <GestureHandlerRootView style={{ flex: 1 }}>
+        {/* The call screen is a window of its own, so Edge Lighting needs its own overlay here to show over it. */}
+        <EdgeLighting />
         <View style={styles.screen} testID="call-screen">
           {/* Their picture, blurred, fills the screen until their video does. */}
           {theirs ? (

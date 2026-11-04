@@ -195,14 +195,18 @@ describe('battery optimisation: asked once, by the official intent, never nagged
     expect(BoaAlarm.openBatterySettings).toHaveBeenCalledTimes(1);
   });
 
-  test('native: the official intent, with a list fallback, and the permission in the alarm module manifest', () => {
+  test('native: opens the battery list (Google Play restricts the one-tap box), and no module declares its permission', () => {
     const kt = read('modules/boa-alarm/android/src/main/java/expo/modules/boaalarm/BoaAlarmModule.kt');
-    expect(kt).toMatch(/Settings\.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri\.parse\("package:\$pkg"\)/);
+    expect(kt).not.toMatch(/Settings\.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS/);
     expect(kt).toMatch(/Settings\.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS/);
     expect(kt).toMatch(/isIgnoringBatteryOptimizations\(context\.packageName\)/);
-    expect(read('modules/boa-alarm/android/src/main/AndroidManifest.xml')).toMatch(/REQUEST_IGNORE_BATTERY_OPTIMIZATIONS/);
-    // Only the alarm module declares it (the build merges it in); the call module and app.json stay free of it.
-    expect(read('app.json')).not.toMatch(/REQUEST_IGNORE_BATTERY_OPTIMIZATIONS/);
+    // Alarms ring through Doze with setAlarmClock, so the restricted permission is declared nowhere
+    // (and app.json removes it from anything a library merges in).
+    expect(JSON.parse(read('app.json')).expo.android.permissions).not.toContain('android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS');
+    expect(JSON.parse(read('app.json')).expo.android.blockedPermissions).toContain('android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS');
+    for (const file of ['modules/boa-alarm/android/src/main/AndroidManifest.xml', 'modules/boa-call/android/src/main/AndroidManifest.xml']) {
+      expect(read(file)).not.toMatch(/<uses-permission[^>]*REQUEST_IGNORE_BATTERY_OPTIMIZATIONS/);
+    }
     expect(read('modules/boa-call/android/src/main/AndroidManifest.xml')).not.toMatch(/BATTERY/);
   });
 

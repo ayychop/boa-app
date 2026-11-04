@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, Share, StyleSheet, View } from 'react-native';
+import { Alert, KeyboardAvoidingView, Linking, Platform, Pressable, ScrollView, Share, StyleSheet, View } from 'react-native';
 import Text, { FontScope } from '../../components/ScopedText';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,6 +18,9 @@ import VibePicker from '../../components/chat/VibePicker';
 import { ringtoneById } from '../../calls/ringtone';
 import { colors, fonts, radius, space } from '../../theme';
 import { LoadingDots } from '../../components/Skeleton';
+import DeleteAccountSheet from '../../components/safety/DeleteAccountSheet';
+import { isHandled } from '../../safety/errors';
+import { DELETE_ACCOUNT_URL, GUIDELINES_URL, PRIVACY_URL, TERMS_URL } from '../../safety/terms';
 
 /**
  * Your Hub profile and privacy: name, photo, bio and roles; your Daily
@@ -84,6 +87,7 @@ function HubSettingsScreenBody({ navigation }) {
   const pickProfileVibe = (id) => setProfileVibe(id);
   const pickProfileCustom = (hex) => setProfileCustom(hex);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [busy, setBusy] = useState(null);
   const [blockedPeople, setBlockedPeople] = useState([]);
   const [privacy, setPrivacy] = useState('everyone');
@@ -158,7 +162,7 @@ function HubSettingsScreenBody({ navigation }) {
       const url = await hub.uploadAvatar(userId, res.assets[0]);
       await saveProfile({ avatar_url: url });
     } catch (err) {
-      Alert.alert('Upload failed', err.message);
+      if (!isHandled(err)) Alert.alert('Upload failed', err.message);
     } finally {
       setBusy(null);
     }
@@ -176,24 +180,13 @@ function HubSettingsScreenBody({ navigation }) {
     }
   };
 
-  const confirmDelete = () =>
-    Alert.alert('Delete your Hub account?', 'This permanently erases your profile, photo, conversations and messages from BOA HUB. It cannot be undone.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete everything',
-        style: 'destructive',
-        onPress: async () => {
-          setBusy('delete');
-          try {
-            await deleteAccount();
-            navigation.popToTop();
-          } catch (err) {
-            Alert.alert('Delete failed', err.message);
-            setBusy(null);
-          }
-        },
-      },
-    ]);
+  // Deleting is typed out in a sheet (components/safety/DeleteAccountSheet), then the
+  // delete-account Edge Function erases everything; this only follows it with the navigation.
+  const removeAccount = async () => {
+    await deleteAccount();
+    setDeleting(false);
+    navigation.popToTop();
+  };
 
   return (
     <View style={styles.screen} testID="hub-settings">
@@ -237,7 +230,7 @@ function HubSettingsScreenBody({ navigation }) {
                   await saveProfile({ display_name: form.display_name.trim() || null, bio: form.bio.trim() || null, roles: form.roles });
                   haptics.success();
                 } catch (err) {
-                  Alert.alert("Couldn't save", err.message);
+                  if (!isHandled(err)) Alert.alert("Couldn't save", err.message);
                 } finally {
                   setSaving(false);
                 }
@@ -400,10 +393,25 @@ function HubSettingsScreenBody({ navigation }) {
               {busy === 'export' ? <LoadingDots size={5} /> : <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />}
             </SettingRow>
             <SettingRow icon="log-out-outline" title="Sign out" onPress={() => signOut().then(() => navigation.popToTop())} />
-            <SettingRow icon="trash-outline" title="Delete my Hub account" detail="Erases your profile and all your conversations." danger onPress={confirmDelete} last>
-              {busy === 'delete' ? <LoadingDots color="#FF6B6B" size={5} /> : null}
+            <SettingRow icon="trash-outline" title="Delete Account" detail="Permanently erases your account, posts and conversations." danger onPress={() => setDeleting(true)} last />
+          </View>
+
+          <Slate style={styles.section}>Legal and safety</Slate>
+          <View style={styles.group}>
+            <SettingRow icon="document-text-outline" title="Terms of Service" onPress={() => Linking.openURL(TERMS_URL).catch(() => {})}>
+              <Ionicons name="open-outline" size={16} color={colors.textFaint} />
+            </SettingRow>
+            <SettingRow icon="shield-checkmark-outline" title="Community Guidelines" onPress={() => Linking.openURL(GUIDELINES_URL).catch(() => {})}>
+              <Ionicons name="open-outline" size={16} color={colors.textFaint} />
+            </SettingRow>
+            <SettingRow icon="lock-closed-outline" title="Privacy Policy" onPress={() => Linking.openURL(PRIVACY_URL).catch(() => {})}>
+              <Ionicons name="open-outline" size={16} color={colors.textFaint} />
+            </SettingRow>
+            <SettingRow icon="globe-outline" title="Delete account on the web" detail={DELETE_ACCOUNT_URL.replace('https://', '')} onPress={() => Linking.openURL(DELETE_ACCOUNT_URL).catch(() => {})} last>
+              <Ionicons name="open-outline" size={16} color={colors.textFaint} />
             </SettingRow>
           </View>
+          <DeleteAccountSheet open={deleting} onClose={() => setDeleting(false)} onDelete={removeAccount} />
         </ScrollView>
       </KeyboardAvoidingView>
     </View>

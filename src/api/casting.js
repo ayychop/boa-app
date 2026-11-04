@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import * as guard from '../safety/guard';
 
 // The Casting Board: curated, paid casting calls and gigs, and applications
 // to them (supabase/migrations/20261025090000_casting_board_and_admin.sql).
@@ -82,6 +83,7 @@ export function applicationProblem({ selfTapeUrl, coverNote }) {
 export async function apply({ castingCallId, userId, selfTapeUrl, coverNote }) {
   const problem = applicationProblem({ selfTapeUrl, coverNote });
   if (problem) throw new Error(problem);
+  await guard.text('casting', coverNote);
   const { error } = await need()
     .from('applications')
     .insert({
@@ -104,6 +106,7 @@ export async function postCastingCall({ producerId, title, description, roleNeed
   const amount = parseBudget(budget);
   const problem = budgetProblem({ isBoaOriginal: false, budget: amount });
   if (problem) throw new Error(problem);
+  await guard.text('casting', title, description, roleNeeded, location);
   const { data, error } = await need()
     .from('casting_calls')
     .insert({

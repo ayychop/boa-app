@@ -38,8 +38,10 @@ import { HubProvider } from './src/context/HubContext';
 import { CallProvider } from './src/context/CallContext';
 import { FontProvider } from './src/context/FontContext';
 import CallWakeUpPrompt from './src/components/calls/CallWakeUpPrompt';
+import SafetyHost from './src/components/safety/SafetyHost';
 import { reportDeviceThreats } from './src/security/integrity';
 import { currentTab, goToTab, navigationRef, openPage } from './src/navigation/ref';
+import { loadNavState, saveNavState } from './src/navigation/persist';
 import { completeAuthLink, profileIdByUsername } from './src/api/hub';
 import OnboardingScreen from './src/screens/OnboardingScreen';
 import Intro from './src/components/Intro';
@@ -460,8 +462,27 @@ const MEDIA_OPTIONS = { animation: 'fade_from_bottom' };
 // Hub) stacked over them.
 function MainTabs({ freshInstall = false }) {
   const [navReady, setNavReady] = useState(false);
+  // Where you were, if Android restarted the app a moment ago (src/navigation/persist.js).
+  // A link that opened the app wins over it. undefined while it loads, null for a normal start.
+  const [initialState, setInitialState] = useState(undefined);
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      let state = null;
+      try {
+        const url = await Linking.getInitialURL();
+        if (!url) state = (await loadNavState()) ?? null;
+      } catch {}
+      if (alive) setInitialState(state);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+  // A blank stage-coloured frame for the instant it takes to read it.
+  if (initialState === undefined) return <View style={{ flex: 1, backgroundColor: colors.bg }} />;
   return (
-    <NavigationContainer ref={navigationRef} theme={navTheme} onReady={() => setNavReady(true)}>
+    <NavigationContainer ref={navigationRef} theme={navTheme} initialState={initialState ?? undefined} onStateChange={(state) => saveNavState(state)} onReady={() => setNavReady(true)}>
       <StatusBar style="light" />
       <Stack.Navigator screenOptions={PAGE_OPTIONS}>
         <Stack.Screen name="Tabs">{() => <Tabs />}</Stack.Screen>
@@ -618,6 +639,8 @@ function Root() {
                               <OfflineMode />
                               {/* Reminders for your scheduled calls, and what a tapped reminder opens. */}
                               <ScheduledCallSync />
+                              {/* The Terms agreement before posting or messaging, and "Content Violates Guidelines". */}
+                              <SafetyHost />
                               </CallProvider>
                             </PremiumProvider>
                           </HubProvider>

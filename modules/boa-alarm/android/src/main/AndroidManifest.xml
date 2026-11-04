@@ -9,9 +9,9 @@
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
   <uses-permission android:name="android.permission.WAKE_LOCK" />
-  <!-- Lets the app show Android's one-tap "always run in the background?" box,
-       so an alarm still rings with the phone asleep. Asked once, never nagged. -->
-  <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+  <!-- Deliberately NOT declared: REQUEST_IGNORE_BATTERY_OPTIMIZATIONS. Google Play
+       restricts it, and an alarm set with AlarmManager.setAlarmClock rings through
+       Doze without it. The app only opens the phone's own battery settings list. -->
   <uses-permission android:name="android.permission.TURN_SCREEN_ON" />
   <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
   <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />

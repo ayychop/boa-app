@@ -101,10 +101,10 @@ export function isIgnoringBatteryOptimizations() {
 }
 
 /**
- * Shows Android's own "always run in the background?" box (the official
- * ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS intent). Resolves to what
- * opened: 'dialog', 'list' (the phone's battery list, when it has no box) or
- * 'none'.
+ * Opens the phone's own list of battery-optimised apps, where BOA can be set
+ * to "Don't optimise". (Not the one-tap box: its permission is restricted by
+ * Google Play, and alarms set with setAlarmClock ring through Doze without
+ * it.) Resolves to what opened: 'list' or 'none'.
  */
 export function requestIgnoreBatteryOptimizations() {
   try {

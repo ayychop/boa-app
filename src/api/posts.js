@@ -1,6 +1,7 @@
 import { supabase } from '../lib/supabase';
 import { MEDIA_LIMITS, mediaKind } from './hub';
 import { assertCloudUrl, readFileBytes } from './upload';
+import * as guard from '../safety/guard';
 
 // Photos and videos on Hub profiles (supabase/migrations: posts). Posts
 // live in the public posts bucket, under the author's own folder; who can
@@ -62,6 +63,8 @@ export async function createPost(userId, asset, { caption = '', tagged = [] } = 
   const sb = need();
   const problem = postProblem(asset);
   if (problem) throw new Error(problem);
+  // Nothing is uploaded before they have agreed to the Terms and Community Guidelines.
+  await guard.terms();
   const kind = mediaKind(asset);
   const type = asset.mimeType || (kind === 'video' ? 'video/mp4' : 'image/jpeg');
   const path = `${userId}/${kind}-${Date.now()}.${EXT[type] ?? (kind === 'video' ? 'mp4' : 'jpg')}`;
@@ -89,6 +92,17 @@ export async function createPost(userId, asset, { caption = '', tagged = [] } = 
     throw err;
   } finally {
     clearTimeout(timer);
+  }
+  // The photo and caption are checked before the post exists. A refused
+  // photo is deleted by the check; anything else that stops the post removes
+  // the file, so nothing is left behind. (Videos can't be read by the check;
+  // their caption is, and they are covered by reporting.)
+  try {
+    if (kind === 'image') await guard.media('post', { bucket: POSTS_BUCKET, path }, caption);
+    else await guard.text('post', caption);
+  } catch (err) {
+    if (err?.code !== 'violation' || kind !== 'image') await sb.storage.from(POSTS_BUCKET).remove([path]).catch(() => {});
+    throw err;
   }
   const url = sb.storage.from(POSTS_BUCKET).getPublicUrl(path).data.publicUrl;
   assertCloudUrl(url, 'That post');

@@ -121,7 +121,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    height: 46,
+    // Grows with a larger system font or a long label instead of clipping it.
+    minHeight: 46,
+    paddingVertical: 10,
     paddingHorizontal: 22,
     borderRadius: radius.pill,
   },
@@ -131,7 +133,7 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.borderStrong,
   },
-  buttonText: { fontFamily: fonts.semibold, fontSize: 14.5, letterSpacing: -0.15 },
+  buttonText: { fontFamily: fonts.semibold, fontSize: 14.5, lineHeight: 20, letterSpacing: -0.15, textAlign: 'center', flexShrink: 1 },
   section: {
     flexDirection: 'row',
     alignItems: 'flex-end',

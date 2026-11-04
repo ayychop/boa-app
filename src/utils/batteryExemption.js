@@ -6,8 +6,9 @@ import * as BoaAlarm from '../../modules/boa-alarm';
  * Android's "always run in the background?" box, handled the polite way.
  *
  * The phone can put BOA to sleep, and then an alarm doesn't ring. Android has
- * an official box for that (ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS). The
- * rules here keep it from turning into a nag:
+ * a list of battery-optimised apps for that (Google Play restricts the one-tap
+ * box's permission, and alarms set with setAlarmClock ring through Doze
+ * regardless). The rules here keep it from turning into a nag:
  *
  *  - it comes up on its own ONCE, at a sensible moment (the first time the
  *    user turns on a radio alarm), never again by itself, whatever the answer;

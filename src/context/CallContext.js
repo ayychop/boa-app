@@ -14,6 +14,7 @@ import { DEFAULT_BACKGROUND, fromStored as backgroundFromStored } from '../calls
 import CallScreen from '../components/calls/CallScreen';
 import { haptics } from '../utils/haptics';
 import { blockScreenshots } from '../calls/privacy';
+import { EDGE_RING_REPEAT_MS, triggerEdgeLighting } from '../data/edgeLighting';
 import { notifyMissedCall } from '../chat/notifications';
 import * as BoaCall from '../../modules/boa-call';
 import { setAppCall } from '../audio/interruptions';
@@ -207,6 +208,15 @@ export function CallProvider({ children }) {
   const [pip, setPip] = useState(false);
   useEffect(() => BoaCall.addPipListener(setPip), []);
   const onCall = !!call && call.phase !== 'ended' && !(call.direction === 'in' && call.phase === 'ringing');
+  // Edge Lighting: a call or video call ringing in pulses the screen's edge, and
+  // again every few seconds for as long as it rings.
+  const ringingIn = !!call && call.direction === 'in' && call.phase === 'ringing';
+  useEffect(() => {
+    if (!ringingIn) return undefined;
+    triggerEdgeLighting('call');
+    const id = setInterval(() => triggerEdgeLighting('call'), EDGE_RING_REPEAT_MS);
+    return () => clearInterval(id);
+  }, [ringingIn, callId]);
   // The radio and Zen hold for a BOA call from the moment it rings or is
   // placed until it ends (src/audio/interruptions.js).
   const callActive = !!call && call.phase !== 'ended';
@@ -322,12 +332,14 @@ export function CallProvider({ children }) {
     const c = callRef.current;
     if (c?.direction === 'in') stopRingNotification(c.id);
     // A call that rang here and wasn't picked up stays in the notification shade.
-    if (c && c.phase === 'ringing' && c.direction === 'in' && reason === 'missed')
+    if (c && c.phase === 'ringing' && c.direction === 'in' && reason === 'missed') {
+      triggerEdgeLighting('missed-call');
       notifyMissedCall({
         name: c.peer.name,
         peerId: c.peer.id,
         sound: chatSoundRef.current,
       });
+    }
     // The ref too, at once: a new call can start before React renders.
     if (c && c.phase !== 'ended') callRef.current = { ...c, phase: 'ended', reason };
     setCall((cur) => (cur && cur.phase !== 'ended' ? { ...cur, phase: 'ended', reason } : cur));
