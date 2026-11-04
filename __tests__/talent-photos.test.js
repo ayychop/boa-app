@@ -12,9 +12,10 @@ describe('real photos on the casting board', () => {
     expect(phillip).toMatchObject({ name: 'Phillip Quartey' });
     expect(phillip.headshot).toBeTruthy();
     expect(talent.find((t) => t.id === 'rebecca-soper').headshot).toBeTruthy();
-    for (const f of ['david-o', 'jeremy-owusu', 'joseph-boat', 'ngor-yel', 'phillip-quartey', 'prince-boamah', 'rebecca-soper', 'sabeian-gilzene']) {
+    for (const f of ['chan-yel', 'david-o', 'jeremy-owusu', 'joseph-boat', 'ngor-yel', 'phillip-quartey', 'prince-boamah', 'rebecca-soper', 'sabeian-gilzene']) {
       expect(fs.existsSync(path.join(__dirname, '..', 'assets', 'talent', `${f}.jpg`))).toBe(true);
     }
+    expect(talent.find((t) => t.id === 'chan-yel').headshot).toBeTruthy();
     expect(founders.every((f) => f.headshot)).toBe(true);
   });
 

@@ -43,12 +43,12 @@ export const fonts = {
 // Custom fonts carry their weight in the family name, so these presets never
 // set fontWeight (Android would otherwise fall back to the system font).
 export const type = {
-  display: { fontFamily: fonts.semibold, fontSize: 44, lineHeight: 46, letterSpacing: -2, color: colors.text },
-  h1: { fontFamily: fonts.semibold, fontSize: 32, lineHeight: 36, letterSpacing: -1.3, color: colors.text },
-  title: { fontFamily: fonts.semibold, fontSize: 21, lineHeight: 26, letterSpacing: -0.6, color: colors.text },
-  body: { fontFamily: fonts.medium, fontSize: 15, lineHeight: 22, color: colors.text },
-  bodyMuted: { fontFamily: fonts.regular, fontSize: 14.5, lineHeight: 22, color: colors.textMuted },
-  caption: { fontFamily: fonts.medium, fontSize: 12.5, color: colors.textMuted },
+  display: { fontFamily: fonts.semibold, fontSize: 44, lineHeight: 51, letterSpacing: -1.4, color: colors.text },
+  h1: { fontFamily: fonts.semibold, fontSize: 32, lineHeight: 39, letterSpacing: -0.9, color: colors.text },
+  title: { fontFamily: fonts.semibold, fontSize: 21, lineHeight: 27, letterSpacing: -0.35, color: colors.text },
+  body: { fontFamily: fonts.medium, fontSize: 15, lineHeight: 23, color: colors.text },
+  bodyMuted: { fontFamily: fonts.regular, fontSize: 14.5, lineHeight: 23, color: colors.textMuted },
+  caption: { fontFamily: fonts.medium, fontSize: 12.5, lineHeight: 18, color: colors.textMuted },
   // The site's "SCENE 01 · TAKE 01" slate labels.
   slate: {
     fontFamily: fonts.mono,

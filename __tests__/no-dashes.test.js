@@ -85,12 +85,12 @@ describe('the roster', () => {
     expect(hits).toEqual([]);
   });
 
-  test('photos stay for Rebecca, Sabeian and Jeremy Owusu; initials for Jeremy Benson and Chan Yel', () => {
+  test('photos stay for Rebecca, Sabeian, Jeremy Owusu and Chan Yel; initials for Jeremy Benson', () => {
     const by = (id) => talent.find((t) => t.id === id);
     expect(by('rebecca-soper').headshot).toBeTruthy();
     expect(by('sabeian-gilzene').headshot).toBeTruthy();
     expect(by('jeremy-owusu').headshot).toBeTruthy();
     expect(by('jeremy-benson').headshot).toBeNull();
-    expect(by('chan-yel').headshot).toBeNull();
+    expect(by('chan-yel').headshot).toBeTruthy();
   });
 });

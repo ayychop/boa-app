@@ -96,6 +96,7 @@ const PHOTOS = {
   'sabeian-gilzene': require('../../assets/talent/sabeian-gilzene.jpg'),
   'jeremy-owusu': require('../../assets/talent/jeremy-owusu.jpg'),
   'ngor-yel': require('../../assets/talent/ngor-yel.jpg'),
+  'chan-yel': require('../../assets/talent/chan-yel.jpg'),
   'prince-boamah': require('../../assets/talent/prince-boamah.jpg'),
   'rebecca-soper': require('../../assets/talent/rebecca-soper.jpg'),
   'phillip-quartey': require('../../assets/talent/phillip-quartey.jpg'),
