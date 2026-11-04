@@ -6,7 +6,7 @@ import { supabase } from '../lib/supabase';
 // Certificate never leaves the server. Returns { appId, token, uid }.
 export async function fetchToken(channel) {
   if (!supabase) throw new Error('The Hub is not connected yet.');
-  const { data, error } = await supabase.functions.invoke('agora-token', { body: { channel } });
+  const { data, error } = await supabase.functions.invoke('agora-token', { body: { channel }, headers: callHeaders() });
   if (error) {
     const reason = await whyFailed(error);
     console.error('[call] agora-token failed', { channel, ...reason });
@@ -17,6 +17,16 @@ export async function fetchToken(channel) {
     throw new Error("Couldn't start the video");
   }
   return data;
+}
+
+/**
+ * The function can ask for an app key (a secret set on the server). It
+ * ships in the app, so it only turns away casual scripts; the function still
+ * checks the signed-in account and rate limits it. No key set, no header.
+ */
+export function callHeaders() {
+  const key = process.env.EXPO_PUBLIC_BOA_CALLS_KEY;
+  return key ? { 'x-boa-key': key } : {};
 }
 
 // supabase-js only says "Edge Function returned a non-2xx status code"; the
