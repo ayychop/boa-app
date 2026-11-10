@@ -3,6 +3,12 @@
 //   POST /call-push   { "to": "<their user id>", "callId": "<call id>" }
 //   -> { "sent", "removed" }
 //
+//   POST /call-push   { "to": "<user id>", "callId": "<call id>", "action": "cancel" }
+//   -> { "sent" }
+//   Stops a ring on phones that are asleep (Android, data-only push): the
+//   caller hung up before an answer (to is the person they rang), or you
+//   answered on one phone and your other phone is still ringing (to is you).
+//
 // A call rings over Realtime (src/calls/signaling.js), but Android freezes
 // an app in the background and its Realtime socket with it, so a phone in
 // a pocket only heard the ring once it was opened. This sends the same ring
@@ -57,16 +63,19 @@ Deno.serve(async (req) => {
     const { data: me, error: authError } = await caller.auth.getUser();
     if (!me?.user) return refuse(401, 'Sign in first.', authError?.message);
 
-    let to: string, callId: string;
+    let to: string, callId: string, action: string;
     try {
       const body = await req.json();
       console.log('[call-push] payload', { caller: me.user.id, body });
       to = String(body?.to ?? '');
       callId = String(body?.callId ?? '');
+      action = String(body?.action ?? '');
     } catch (err) {
       return refuse(400, 'bad body', String(err));
     }
-    if (!UUID.test(to) || to === me.user.id) return refuse(400, 'bad recipient', to);
+    const cancel = action === 'cancel';
+    // A cancel may go to yourself (your other phones); a ring never does.
+    if (!UUID.test(to) || (to === me.user.id && !cancel)) return refuse(400, 'bad recipient', to);
     if (!CHANNEL.test(callId)) return refuse(400, 'bad call', callId);
 
     const [{ data: from }, { data: them }, { data: blocked }, { data: tokens, error: tokenError }] = await Promise.all([
@@ -86,6 +95,20 @@ Deno.serve(async (req) => {
       // in the build): nothing can wake it.
       console.warn('[call-push] skipped: no push token for user', to);
       return json({ skipped: 'no phones' });
+    }
+
+    if (cancel) {
+      // Quiet, data-only, Android phones: the app's task stops the ringing notification.
+      const stops = tokens.filter((t) => t.platform === 'android').map((t) => ({ to: t.token, priority: 'high', ttl: RING_SECONDS, data: { type: 'call-cancel', callId, reason: to === me.user.id ? 'elsewhere' : 'cancelled' } }));
+      if (stops.length) {
+        const sent = await fetch(EXPO_PUSH, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify(stops),
+        });
+        console.log('[call-push] cancel', callId, sent.status);
+      }
+      return json({ sent: stops.length });
     }
 
     const name = from.display_name?.trim() || (from.username ? `@${from.username}` : 'BOA HUB member');

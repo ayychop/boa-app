@@ -69,6 +69,21 @@ export function callFromPush(data) {
   return { callId: String(d.callId), from, sentAt: Number(d.sentAt) || Date.now(), ringtone: d.ringtone ?? null };
 }
 
+/**
+ * The call a cancel push stops (supabase/functions/call-push, action
+ * cancel), or null if it isn't one: { callId, reason }. reason is 'elsewhere'
+ * (you answered on your other phone) or 'cancelled' (the caller hung up).
+ * Reads the push however it arrived, like callFromPush.
+ */
+export function cancelFromPush(data) {
+  let d = data ?? {};
+  if (d.type !== 'call-cancel' && d.data && typeof d.data === 'object') d = d.data;
+  if (d.dataString) d = parse(d.dataString) ?? {};
+  if (d.type !== 'call-cancel' && d.body) d = parse(d.body) ?? d;
+  if (d.type !== 'call-cancel' || !d.callId) return null;
+  return { callId: String(d.callId), reason: d.reason === 'elsewhere' ? 'elsewhere' : 'cancelled' };
+}
+
 /** How long a call sent at sentAt has left to ring. */
 export const ringLeft = (sentAt) => RING_MS - Math.max(0, Date.now() - (Number(sentAt) || Date.now()));
 

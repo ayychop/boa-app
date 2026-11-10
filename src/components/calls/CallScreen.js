@@ -32,6 +32,7 @@ import { goToTab } from '../../navigation/ref';
 import { TACTICAL, settle, usePress } from '../../utils/motion';
 import { Avatar, Toggle } from '../kit';
 import { GoldBadge } from '../ui';
+import { CallWaitingBanner, ConferenceTiles } from './CallExtras';
 import { colors, fonts, radius, space } from '../../theme';
 
 const RED = '#FF3B4E';
@@ -872,8 +873,10 @@ export default function CallScreen({ me }) {
   if (!call) return null;
 
   const { peer, phase, direction } = call;
+  // A merged call names everyone on it.
+  const names = [peer.name, ...(call.parties ?? []).map((p) => p.name)].filter(Boolean).join(' and ');
   const incoming = direction === 'in' && phase === 'ringing';
-  const status = phase === 'ended' ? (END_REASONS[call.reason] ?? END_REASONS.ended) : phase === 'active' ? clock(elapsed) : incoming ? (call.voice ? 'Incoming voice call' : 'Incoming video call') : 'Ringing…';
+  const status = phase === 'ended' ? (END_REASONS[call.reason] ?? END_REASONS.ended) : phase === 'active' ? clock(elapsed) : incoming ? (call.voice ? 'Incoming voice call' : 'Incoming video call') : call.theirsWaiting ? 'Call waiting…' : 'Ringing…';
   // A call you're on (not one ringing in) can shrink to a floating window.
   const canShrink = !incoming && phase !== 'ended';
   const shrink = () => {
@@ -970,6 +973,10 @@ export default function CallScreen({ me }) {
             />
           ) : null}
 
+          {theirs && video?.uids?.length > 1 ? <ConferenceTiles uids={video.uids} main={video.remoteUid} top={top + 64} /> : null}
+          {/* Someone else is ringing while you're on this call. */}
+          {!incoming && phase !== 'ended' ? <CallWaitingBanner /> : null}
+
           {incoming ? (
             <View
               style={[
@@ -1004,7 +1011,7 @@ export default function CallScreen({ me }) {
                   <View style={styles.liveDot} />
                   <View style={{ flexShrink: 1 }}>
                     <Text style={styles.liveName} numberOfLines={1} testID="call-name">
-                      {peer.name}
+                      {names}
                     </Text>
                     <Text style={styles.liveClock} testID="call-status">
                       {status}
@@ -1032,7 +1039,7 @@ export default function CallScreen({ me }) {
                       </View>
                     </View>
                     <Text style={styles.name} numberOfLines={2} testID="call-name">
-                      {peer.name}
+                      {names}
                     </Text>
                     <Animated.Text key={phase} entering={FadeIn.duration(250)} style={[styles.status, phase === 'ended' && { color: colors.textMuted }]} testID="call-status">
                       {status}

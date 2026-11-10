@@ -64,7 +64,8 @@ test('rings go to the private inbox, with the session attached', async () => {
   expect(out.name).toBe('boa-call:22222222-2222-4222-8222-222222222222');
   expect(out.opts.config.private).toBe(true);
   expect(mockSupabase.realtime.setAuth.mock.invocationCallOrder[0]).toBeLessThan(out.httpSend.mock.invocationCallOrder[0]);
-  expect(out.httpSend).toHaveBeenCalledWith('ring', { callId: 'c-2' }, { timeout: 8000 });
+  // Every signal says which phone sent it (two phones, one inbox).
+  expect(out.httpSend).toHaveBeenCalledWith('ring', { callId: 'c-2', device: expect.any(String) }, { timeout: 8000 });
 });
 
 test('a refused send (no permission) ends quietly as not sent', async () => {

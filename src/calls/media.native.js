@@ -634,7 +634,7 @@ export async function join(channel, opts, attempt = 0) {
     },
     onUserJoined: (_c, remoteUid) => {
       console.log('[call] other person joined', { channel, remoteUid });
-      onEvent({ remoteUid });
+      onEvent({ remoteUid, joined: remoteUid });
       // Whoever joins second still hears that Privacy Mode is on.
       if (s.privacy) sendPrivacy(s);
     },
@@ -647,7 +647,10 @@ export async function join(channel, opts, attempt = 0) {
     onLocalVideoStateChanged: (source, state) => {
       if (state === LOCAL_VIDEO_CAPTURING && session === s) reapply();
     },
-    onRemoteVideoStateChanged: (_c, remoteUid, state) => onEvent({ remoteUid, remoteVideo: state !== REMOTE_STOPPED && state !== REMOTE_FAILED }),
+    onRemoteVideoStateChanged: (_c, remoteUid, state) => {
+      const on = state !== REMOTE_STOPPED && state !== REMOTE_FAILED;
+      onEvent({ remoteUid, remoteVideo: on, videoState: { uid: remoteUid, on } });
+    },
     onConnectionStateChanged: (_c, state, reason) => {
       console.log('[call] connection state', { state, reason });
       if (state === CONNECTION_RECONNECTING) onEvent({ status: 'reconnecting' });

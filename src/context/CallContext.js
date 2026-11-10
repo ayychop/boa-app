@@ -11,6 +11,7 @@ import { startRingtone, stopRingtone } from '../calls/ringtone';
 import { DEFAULT_BEAUTY, fromStored, toStored } from '../calls/beauty';
 import { DEFAULT_BACKGROUND, fromStored as backgroundFromStored } from '../calls/backgrounds';
 import CallScreen from '../components/calls/CallScreen';
+import { TransferPrompt } from '../components/calls/CallExtras';
 import { haptics } from '../utils/haptics';
 import { blockScreenshots } from '../calls/privacy';
 import { EDGE_RING_REPEAT_MS, triggerEdgeLighting } from '../data/edgeLighting';
@@ -20,7 +21,9 @@ import { setAppCall } from '../audio/interruptions';
 import { askForCallWakeUp } from '../calls/wakeUp';
 import { startConversation } from '../api/hub';
 import { goToTab, navigationRef, openPage } from '../navigation/ref';
-import { RING_MS, callFromPush, parseCallLink, pendingCall, ringLeft, ringNotification, stopRingNotification } from '../calls/incoming';
+import { RING_MS, callFromPush, cancelFromPush, parseCallLink, pendingCall, ringLeft, ringNotification, stopRingNotification } from '../calls/incoming';
+import { BEAT_MS, announce, otherPhoneCall, retract } from '../calls/presence';
+import { startWaitingTone, stopWaitingTone } from '../calls/waitingTone';
 
 const CallContext = createContext(null);
 
@@ -62,12 +65,17 @@ export const END_REASONS = {
   ended: 'Call ended',
   declined: 'Declined',
   busy: 'On another call',
+  elsewhere: 'Answered on your other phone',
+  transferred: 'Moved to your other phone',
   missed: 'No answer',
   unreachable: "Couldn't reach them",
 };
 
 const NO_MEDIA = Object.freeze({
   status: 'idle',
+  // Everyone else in the channel (more than one in a conference).
+  uids: [],
+  videos: {},
   remoteUid: null,
   remoteVideo: false,
   remotePrivacy: false,
@@ -116,6 +124,21 @@ export function CallProvider({ children }) {
   const primed = useRef(null);
   const [prep, setPrep] = useState('idle'); // idle | preparing | ready | error
   const [starting, setStarting] = useState(false);
+  // A second caller while you are on a call: { id, peer, sentAt, voice, device }.
+  // It rings as a call waiting banner over the call (End and accept, Merge, Decline).
+  const [waiting, setWaitingState] = useState(null);
+  const waitingRef = useRef(null);
+  const waitTimer = useRef(null);
+  const setWaiting = useCallback((w) => {
+    waitingRef.current = w;
+    setWaitingState(w);
+  }, []);
+  // The call your OTHER phone has: { callId, channel, device, voice, startedAt, peer }.
+  const [otherPhone, setOtherPhone] = useState(null);
+  const [transferring, setTransferring] = useState(false);
+  // Calls whose "move it here?" you said no to, so it asks once.
+  const keptElsewhere = useRef(new Set());
+  const releasedWait = useRef(null);
 
   const [selfHidden, setSelfHiddenState] = useState(false);
   const [lockDuringPip, setLockDuringPipState] = useState(false);
@@ -317,6 +340,20 @@ export function CallProvider({ children }) {
     stopRingtone();
   };
 
+  // Says something to the call's other person. When we know which of their phones
+  // has the call (they may be signed in on two), it is for that phone only.
+  const reply = (c, event, payload) => signal.send(c.peer.id, event, c.peerDevice ? { ...payload, toDevice: c.peerDevice } : payload);
+
+  // A waiting caller who is no longer waiting (answered, declined, hung up, or gone): the beeps stop.
+  const clearWaiting = useCallback(() => {
+    clearTimeout(waitTimer.current);
+    waitTimer.current = null;
+    stopWaitingTone();
+    setWaiting(null);
+  }, [setWaiting]);
+  // The call your waiting caller becomes once the call you were on is over.
+  const promoteRef = useRef(null);
+
   // A call ends: say why for a moment, then close the screen.
   const finish = useCallback((reason = 'ended') => {
     clearTimers();
@@ -346,17 +383,24 @@ export function CallProvider({ children }) {
       setVideo(NO_MEDIA);
       // A call that opened the app over the lock screen leaves it there.
       BoaCall.leaveLockScreen();
+      // Someone was waiting: now that your call is over, theirs rings as an ordinary call.
+      if (waitingRef.current) {
+        promoteRef.current?.();
+        return;
+      }
       // After a call you were part of, and only if this phone would stop the
       // next one from ringing full screen, one plain question about it.
       if (c && reason === 'ended' && AppState.currentState === 'active') askForCallWakeUp();
     }, ENDED_MS);
   }, []);
 
-  const goLive = useCallback(() => {
+  // startedAt: a call moved here from your other phone keeps its clock.
+  const goLive = useCallback(({ startedAt } = {}) => {
     clearTimers();
     haptics.success();
     const c = callRef.current;
-    setCall((cur) => (cur ? { ...cur, phase: 'active', startedAt: Date.now() } : cur));
+    const began = startedAt ?? Date.now();
+    setCall((cur) => (cur ? { ...cur, phase: 'active', startedAt: began } : cur));
     if (!c) return;
     // A voice call starts with the camera off (the camera button still turns it on).
     if (c.voice && !controlsRef.current.cameraOff) {
@@ -367,16 +411,29 @@ export function CallProvider({ children }) {
     // They answered while your phone was locked: the screen lights up on the
     // call, over the lock screen, like a phone call (off again once it's over).
     if (c.direction === 'out' && !screenOnRef.current) BoaCall.wakeForCall();
-    media.join(c.id, {
+    // A merged call's picture and sound travel on the channel it was merged into.
+    media.join(c.channel ?? c.id, {
       beauty: beautyRef.current,
       controls: controlsRef.current,
       onEvent: (patch) => {
-        if (callRef.current?.id !== c.id) return;
+        // The channel names the call: a call that kept going as someone else (a merged call's other person left) is the same one.
+        if ((callRef.current?.channel ?? callRef.current?.id) !== (c.channel ?? c.id)) return;
         setVideo((v) => {
+          const { gone, joined, videoState, ...rest } = patch;
+          // Everyone else in the channel: two or more is a conference.
+          let uids = v.uids ?? [];
+          if (joined != null && !uids.includes(joined)) uids = [...uids, joined];
+          if (gone != null) uids = uids.filter((u) => u !== gone);
+          const videos = videoState ? { ...(v.videos ?? {}), [videoState.uid]: videoState.on } : (v.videos ?? {});
+          if (uids.length > 1 || (v.uids ?? []).length > 1) {
+            // The first person to join stays the big picture; when they leave the next takes over.
+            const main = uids.includes(v.remoteUid) ? v.remoteUid : (uids[0] ?? null);
+            const { remoteUid: _u, remoteVideo: _v, ...others } = rest;
+            return { ...v, ...others, uids, videos, remoteUid: main, remoteVideo: main != null && !!videos[main] };
+          }
           // Someone else leaving (a stale uid) doesn't take their picture away.
-          if (patch.gone != null && v.remoteUid != null && patch.gone !== v.remoteUid) return v;
-          const { gone, ...rest } = patch;
-          return { ...v, ...rest };
+          if (gone != null && v.remoteUid != null && gone !== v.remoteUid) return { ...v, uids, videos };
+          return { ...v, ...rest, uids, videos };
         });
       },
     });
@@ -409,7 +466,11 @@ export function CallProvider({ children }) {
   const stale = (c) => c?.phase === 'ringing' && ringLeft(c.sentAt) <= 0;
   const expire = useCallback(
     (c) => {
-      if (c.direction === 'out') signal.send(c.peer.id, 'end', { callId: c.id });
+      if (c.direction === 'out') {
+        reply(c, 'end', { callId: c.id });
+        // Their phone may be asleep, ringing by notification: stop that too.
+        signal.pushCancel?.(c.peer.id, c.id);
+      }
       finish('missed');
     },
     [finish],
@@ -461,30 +522,31 @@ export function CallProvider({ children }) {
     [goLive],
   );
 
-  /**
-   * Someone is calling: ring, unless it's a call already heard or we're
-   * busy. ms: how long it has left. quiet: it's being answered right now
-   * (Answer on the lock screen opened the app), so it doesn't ring at all.
-   */
-  const ringIn = useCallback(
-    ({ callId, from, video: wantsVideo }, ms = RING_MS, { quiet = false } = {}) => {
-      if (!from?.id || !callId || blockedRef.current.has(from.id) || seen.current.has(callId)) return;
-      seen.current.add(callId);
-      let current = callRef.current;
-      if (stale(current)) {
-        expire(current);
-        current = null;
-      }
-      if (current && current.phase !== 'ended') {
-        if (current.direction === 'out' && current.phase === 'ringing' && current.peer.id === from.id) crossed(current, callId, from);
-        else signal.send(from.id, 'busy', { callId });
-        return;
-      }
+  // A call that ends here without a word to anyone: its camera, token and ring
+  // are let go and the screen is clear for the next. For a call that is over
+  // anyway (the same person ringing again) or that has gone to another phone.
+  const dropCall = (c) => {
+    clearTimers();
+    media.reset();
+    media.forget(c.id);
+    if (c.direction === 'in') stopRingNotification(c.id);
+    if (controlsRef.current.privacy) blockScreenshots(false);
+    setControls(NO_CONTROLS);
+    setVideo(NO_MEDIA);
+    callRef.current = null;
+    setCall(null);
+  };
+
+  // A call is ringing in with nothing else going on: set it up and ring.
+  const beginIncoming = useCallback(
+    ({ callId, from, video: wantsVideo, device }, ms = RING_MS, { quiet = false } = {}) => {
       clearTimers();
       // The ref too, at once: it can be answered (from the notification) before React renders.
       callRef.current = {
         id: callId,
         peer: from,
+        // Which of their phones is calling (they may be signed in on two).
+        peerDevice: device ?? undefined,
         direction: 'in',
         phase: 'ringing',
         startedAt: null,
@@ -505,7 +567,91 @@ export function CallProvider({ children }) {
       } else ringAway(callRef.current);
       timers.current.ring = setTimeout(() => finish('missed'), ms);
     },
-    [finish, expire, crossed],
+    [finish],
+  );
+
+  // A second caller while you are on a call: a call waiting. It beeps over the
+  // call and the call screen shows the banner (End and accept, Merge, Decline).
+  const beginWaiting = useCallback(
+    ({ callId, from, video: wantsVideo, device }, ms) => {
+      const w = { id: callId, peer: from, peerDevice: device ?? undefined, sentAt: Date.now() - (RING_MS - ms), voice: wantsVideo === false };
+      setWaiting(w);
+      // They hear "call waiting" instead of silence, and know you're on a call.
+      signal.send(from.id, 'waiting', device ? { callId, toDevice: device } : { callId });
+      media.warmUp(callId, { engine: false }).catch(() => {});
+      setMinimized(false);
+      triggerEdgeLighting('call');
+      if (onScreen()) startWaitingTone();
+      else ringAway({ id: callId, peer: from, sentAt: w.sentAt });
+      clearTimeout(waitTimer.current);
+      waitTimer.current = setTimeout(() => {
+        const now = waitingRef.current;
+        if (now?.id !== callId) return;
+        clearWaiting();
+        // Nobody picked it up in time: it is a missed call, on the shade.
+        stopRingNotification(callId);
+        triggerEdgeLighting('missed-call');
+        notifyMissedCall({ name: from.name, peerId: from.id, sound: chatSoundRef.current });
+      }, ms);
+    },
+    [setWaiting, clearWaiting],
+  );
+
+  // The call you were on is over and someone was waiting: theirs rings as a call.
+  promoteRef.current = () => {
+    const w = waitingRef.current;
+    if (!w) return;
+    clearWaiting();
+    const left = ringLeft(w.sentAt);
+    if (left < 2000) return;
+    beginIncoming({ callId: w.id, from: w.peer, video: !w.voice, device: w.peerDevice }, left);
+  };
+
+  /**
+   * Someone is calling: ring, unless it's a call already heard. ms: how long
+   * it has left. quiet: it's being answered right now (Answer on the lock
+   * screen opened the app), so it doesn't ring at all.
+   *
+   * Already on a call with someone else, it is a call waiting (a banner over
+   * the call, with a beep). Busy is only for a second waiting caller, or when
+   * you are still ringing out to somebody else.
+   *
+   * The same person ringing again is a new attempt: whatever call you had
+   * with them is over (their hang up never reached you), so it never turns
+   * them away as "on another call" (a missed call, and a call back).
+   */
+  const ringIn = useCallback(
+    ({ callId, from, video: wantsVideo, device }, ms = RING_MS, { quiet = false } = {}) => {
+      if (!from?.id || !callId || blockedRef.current.has(from.id) || seen.current.has(callId)) return;
+      seen.current.add(callId);
+      let current = callRef.current;
+      if (stale(current)) {
+        expire(current);
+        current = null;
+      }
+      if (current && current.phase !== 'ended') {
+        const same = current.peer.id === from.id || (current.legs ?? []).some((l) => l.peer.id === from.id);
+        if (current.direction === 'out' && current.phase === 'ringing' && current.peer.id === from.id) {
+          crossed(current, callId, from);
+          return;
+        }
+        if (same && !(current.legs ?? []).some((l) => l.peer.id === from.id)) {
+          // Their old call is over: this one replaces it.
+          dropCall(current);
+          current = null;
+        } else if (current.phase === 'active' && !same && !waitingRef.current) {
+          beginWaiting({ callId, from, video: wantsVideo, device }, ms);
+          return;
+        } else {
+          signal.send(from.id, 'busy', device ? { callId, toDevice: device } : { callId });
+          return;
+        }
+      }
+      // Someone waiting from before, now ringing as a plain call, makes room for the new one.
+      if (waitingRef.current?.peer.id === from.id) clearWaiting();
+      beginIncoming({ callId, from, video: wantsVideo, device }, ms, { quiet });
+    },
+    [finish, expire, crossed, beginIncoming, beginWaiting, clearWaiting],
   );
 
   // Ringing follows the app: back on screen, the call screen rings it (the
@@ -533,6 +679,53 @@ export function CallProvider({ children }) {
     return () => sub.remove();
   }, [expire]);
 
+  // Which of your phones has a call right now (src/calls/presence.js), so this
+  // one can offer to take it over. Only asked while this phone has no call of its own.
+  const refreshOther = useCallback(async () => {
+    if (!userId || (callRef.current && callRef.current.phase !== 'ended')) {
+      setOtherPhone(null);
+      return;
+    }
+    const found = await otherPhoneCall(userId);
+    // A call may have started here while that was being asked.
+    if (callRef.current && callRef.current.phase !== 'ended') return;
+    setOtherPhone((cur) => (found && cur?.callId === found.callId && cur.device === found.device ? { ...cur, ...found } : found));
+  }, [userId]);
+
+  // Your call's other person left and someone merged in is still there: they are the call now.
+  const promoteLeg = useCallback((c) => {
+    const [leg, ...rest] = c.legs;
+    callRef.current = {
+      ...c,
+      id: leg.id,
+      peer: leg.peer,
+      peerDevice: leg.peerDevice,
+      // The picture and sound stay on the channel they are all in.
+      channel: c.channel ?? c.id,
+      legs: rest,
+      parties: (c.parties ?? []).filter((x) => x.id !== leg.peer.id),
+    };
+    setCall(callRef.current);
+  }, []);
+
+  // A call waiting follows the app too: on screen it beeps over the call; sent
+  // to the background, the notification rings it instead.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      const w = waitingRef.current;
+      if (!w) return;
+      if (state === 'active') {
+        stopRingNotification(w.id);
+        setMinimized(false);
+        startWaitingTone();
+      } else if (state === 'background') {
+        stopWaitingTone();
+        ringAway({ id: w.id, peer: w.peer, sentAt: w.sentAt });
+      }
+    });
+    return () => sub?.remove?.();
+  }, []);
+
   // Signals sent to this phone, over Realtime (the app in the foreground).
   useEffect(() => {
     if (!userId) return undefined;
@@ -550,9 +743,83 @@ export function CallProvider({ children }) {
         if (left >= 2000) ringIn(p, left);
         return;
       }
+
+      // Signed in on two phones.
+      if (event === 'nudge') {
+        // Your other phone started or ended a call: look at which phone has it.
+        refreshOther();
+        return;
+      }
+      if (event === 'answered') {
+        // This ring was answered or declined on your other phone: stop ringing, quietly.
+        seen.current.add(p.callId);
+        if (current?.id === p.callId && current.direction === 'in' && current.phase === 'ringing') finish('elsewhere');
+        else if (waitingRef.current?.id === p.callId) {
+          clearWaiting();
+          stopRingNotification(p.callId);
+        } else if (pendingCall(p.callId)) stopRingNotification(p.callId);
+        return;
+      }
+      if (event === 'transfer') {
+        // Your other phone asks for the call that is live here: let go of it
+        // without a word to the other person, and say so.
+        if (current?.id === p.callId && current.phase === 'active') {
+          finish('transferred');
+          signal.send(userId, 'released', { callId: p.callId, toDevice: p.device });
+        }
+        return;
+      }
+      if (event === 'released') {
+        releasedWait.current?.(p);
+        return;
+      }
+      if (event === 'moved') {
+        // They moved the call to their other phone: their answers come from there now.
+        if (current?.id === p.callId && p.device) {
+          callRef.current = { ...current, peerDevice: p.device };
+          setCall(callRef.current);
+        }
+        return;
+      }
+      if (event === 'party') {
+        // Someone was merged into your call: shown beside the other person.
+        if (current?.id === p.callId && p.party?.id) {
+          const parties = (current.parties ?? []).filter((x) => x.id !== p.party.id).concat(p.party);
+          callRef.current = { ...current, parties };
+          setCall(callRef.current);
+        }
+        return;
+      }
+      if (event === 'waiting') {
+        // They are on a call: yours rings as a call waiting.
+        if (current?.id === p.callId && current.direction === 'out' && current.phase === 'ringing') {
+          callRef.current = { ...current, theirsWaiting: true };
+          setCall(callRef.current);
+        }
+        return;
+      }
+
       // They answered a call that's already over here (a late push): tell them.
       if (event === 'accept' && p.by && (!current || p.callId !== current.id)) {
-        signal.send(p.by, 'end', { callId: p.callId });
+        signal.send(p.by, 'end', p.device ? { callId: p.callId, toDevice: p.device } : { callId: p.callId });
+        return;
+      }
+
+      // Someone merged into your call hangs up or turns it away: the call carries on without them.
+      const leg = current?.legs?.find((l) => l.id === p.callId);
+      if (leg && (event === 'end' || event === 'decline')) {
+        callRef.current = { ...current, legs: current.legs.filter((l) => l.id !== leg.id), parties: (current.parties ?? []).filter((x) => x.id !== leg.peer.id) };
+        setCall(callRef.current);
+        return;
+      }
+      // The caller who was waiting hung up before you chose.
+      const w = waitingRef.current;
+      if (w && p.callId === w.id && (event === 'end' || event === 'decline')) {
+        seen.current.add(w.id);
+        clearWaiting();
+        stopRingNotification(w.id);
+        triggerEdgeLighting('missed-call');
+        notifyMissedCall({ name: w.peer.name, peerId: w.peer.id, sound: chatSoundRef.current });
         return;
       }
       if (!current || p.callId !== current.id || current.phase === 'ended') {
@@ -564,12 +831,27 @@ export function CallProvider({ children }) {
         }
         return;
       }
-      if (event === 'accept' && current.direction === 'out') goLive();
-      else if (event === 'decline') finish('declined');
+      if (event === 'accept' && current.direction === 'out') {
+        // Their answer says which of their phones has the call, and, when you
+        // were a call waiting they merged in, which call to join.
+        if (p.device || p.join) {
+          callRef.current = { ...current, peerDevice: p.device ?? current.peerDevice, ...(p.join ? { channel: p.join, merged: true } : null) };
+          setCall(callRef.current);
+        }
+        if (p.join) {
+          // Your preview was on your own channel: start over on theirs.
+          media.reset();
+          media.forget(current.id);
+        }
+        goLive();
+      } else if (event === 'decline') finish('declined');
       else if (event === 'busy') finish('busy');
-      else if (event === 'end') finish(current.phase === 'ringing' && current.direction === 'in' ? 'missed' : 'ended');
+      else if (event === 'end') {
+        if (current.phase === 'active' && current.legs?.length) promoteLeg(current);
+        else finish(current.phase === 'ringing' && current.direction === 'in' ? 'missed' : 'ended');
+      }
     });
-  }, [userId, ringIn, finish, goLive]);
+  }, [userId, ringIn, finish, goLive, clearWaiting, promoteLeg, refreshOther]);
 
   // The same ring by push (supabase/functions/call-push): it wakes the
   // phone when Android has frozen the app. Received with the app open, it
@@ -578,6 +860,22 @@ export function CallProvider({ children }) {
   useEffect(() => {
     if (!userId) return undefined;
     const fromPush = (n) => {
+      // Stop a ring: the caller hung up, or you answered on your other phone.
+      const stop = cancelFromPush(n?.request?.content?.data);
+      if (stop) {
+        Notifications.dismissNotificationAsync?.(n.request.identifier)?.catch?.(() => {});
+        seen.current.add(stop.callId);
+        const cur = callRef.current;
+        const missed = stop.reason !== 'elsewhere';
+        if (cur?.id === stop.callId && cur.direction === 'in' && cur.phase === 'ringing') finish(missed ? 'missed' : 'elsewhere');
+        else if (waitingRef.current?.id === stop.callId) {
+          const w = waitingRef.current;
+          clearWaiting();
+          if (missed) notifyMissedCall({ name: w.peer.name, peerId: w.peer.id, sound: chatSoundRef.current });
+        }
+        if (pendingCall(stop.callId)) stopRingNotification(stop.callId);
+        return;
+      }
       const c = callFromPush(n?.request?.content?.data);
       if (!c) return;
       Notifications.dismissNotificationAsync?.(n.request.identifier)?.catch?.(() => {});
@@ -594,11 +892,13 @@ export function CallProvider({ children }) {
       received.remove();
       tapped.remove();
     };
-  }, [userId, ringIn]);
+  }, [userId, ringIn, finish, clearWaiting]);
 
   useEffect(
     () => () => {
       clearTimers();
+      clearTimeout(waitTimer.current);
+      stopWaitingTone();
       media.reset();
       if (controlsRef.current.privacy) blockScreenshots(false);
     },
@@ -689,18 +989,29 @@ export function CallProvider({ children }) {
       if (!live && !pushed) return finish('unreachable');
       timers.current.ring = setTimeout(() => {
         signal.send(peer.id, 'end', { callId: id });
+        signal.pushCancel?.(peer.id, id);
         finish('missed');
       }, ringLeft(sentAt));
     },
     [userId, finish, expire],
   );
 
+  // Signed in on two phones: this ring is dealt with here, so the other one
+  // stops ringing (at once over Realtime; by push if its app is asleep).
+  const tellMyPhones = useCallback((callId) => {
+    const me = userIdRef.current;
+    if (!me) return;
+    signal.send(me, 'answered', { callId });
+    signal.pushCancel?.(me, callId);
+  }, []);
+
   const accept = useCallback(() => {
     const c = callRef.current;
     if (!c || c.direction !== 'in' || c.phase !== 'ringing') return;
-    signal.send(c.peer.id, 'accept', { callId: c.id, by: userId });
+    tellMyPhones(c.id);
+    reply(c, 'accept', { callId: c.id, by: userId });
     goLive();
-  }, [goLive, userId]);
+  }, [goLive, userId, tellMyPhones]);
 
   /**
    * Joins a scheduled room that has started: the link, or the countdown
@@ -738,16 +1049,206 @@ export function CallProvider({ children }) {
   const decline = useCallback(() => {
     const c = callRef.current;
     if (!c) return;
-    signal.send(c.peer.id, 'decline', { callId: c.id });
+    if (c.direction === 'in' && c.phase === 'ringing') tellMyPhones(c.id);
+    reply(c, 'decline', { callId: c.id });
     finish('declined');
-  }, [finish]);
+  }, [finish, tellMyPhones]);
 
   const hangUp = useCallback(() => {
     const c = callRef.current;
     if (!c || c.phase === 'ended') return;
-    signal.send(c.peer.id, 'end', { callId: c.id });
+    // Anyone merged into the call is told too: hanging up ends it for everyone.
+    (c.legs ?? []).forEach((l) => signal.send(l.peer.id, 'end', l.peerDevice ? { callId: l.id, toDevice: l.peerDevice } : { callId: l.id }));
+    reply(c, 'end', { callId: c.id });
+    // Hung up while it rings: their phone may be asleep and ringing by notification.
+    if (c.direction === 'out' && c.phase === 'ringing') signal.pushCancel?.(c.peer.id, c.id);
     finish('ended');
   }, [finish]);
+
+  // ---- Call waiting ----------------------------------------------------
+  // You're on a call and someone else rings: a banner over the call, and
+  // three choices. Nothing is ever answered by accident: until you choose,
+  // your call carries on, and the caller hears "call waiting".
+
+  /** Decline: they hear busy (their call ends "On another call") and it shows as a missed call. */
+  const declineWaiting = useCallback(() => {
+    const w = waitingRef.current;
+    if (!w) return;
+    tellMyPhones(w.id);
+    signal.send(w.peer.id, 'busy', w.peerDevice ? { callId: w.id, toDevice: w.peerDevice } : { callId: w.id });
+    seen.current.add(w.id);
+    clearWaiting();
+    stopRingNotification(w.id);
+    media.forget(w.id);
+    notifyMissedCall({ name: w.peer.name, peerId: w.peer.id, sound: chatSoundRef.current });
+  }, [clearWaiting, tellMyPhones]);
+
+  /** End and accept: hang up on the call you're on and answer the one waiting. */
+  const endAndAccept = useCallback(() => {
+    const w = waitingRef.current;
+    const c = callRef.current;
+    if (!w || !c || c.phase === 'ended') return;
+    tellMyPhones(w.id);
+    // Hang up the current call (and anyone merged into it), silently on screen: no "Call ended" in between.
+    (c.legs ?? []).forEach((l) => signal.send(l.peer.id, 'end', l.peerDevice ? { callId: l.id, toDevice: l.peerDevice } : { callId: l.id }));
+    reply(c, 'end', { callId: c.id });
+    clearWaiting();
+    clearTimers();
+    media.reset();
+    media.forget(c.id);
+    if (controlsRef.current.privacy) blockScreenshots(false);
+    controlsRef.current = NO_CONTROLS;
+    setControls(NO_CONTROLS);
+    setVideo(NO_MEDIA);
+    stopRingNotification(w.id);
+    callRef.current = {
+      id: w.id,
+      peer: w.peer,
+      peerDevice: w.peerDevice,
+      direction: 'in',
+      phase: 'ringing',
+      startedAt: null,
+      reason: null,
+      sentAt: Date.now(),
+      voice: w.voice,
+    };
+    setCall(callRef.current);
+    reply(callRef.current, 'accept', { callId: w.id, by: userIdRef.current });
+    goLive();
+  }, [clearWaiting, goLive, tellMyPhones]);
+
+  /**
+   * Merge: both calls become one three way conference. The caller who was
+   * waiting joins the channel your call is already on; everyone is told who
+   * else is there. Hanging up ends it for all three.
+   */
+  const mergeWaiting = useCallback(() => {
+    const w = waitingRef.current;
+    const c = callRef.current;
+    if (!w || !c || c.phase !== 'active') return;
+    tellMyPhones(w.id);
+    const channel = c.channel ?? c.id;
+    const toNew = (payload) => signal.send(w.peer.id, ...payload);
+    // They join your channel; they and your caller are introduced.
+    signal.send(w.peer.id, 'accept', { callId: w.id, by: userIdRef.current, join: channel, ...(w.peerDevice ? { toDevice: w.peerDevice } : null) });
+    toNew(['party', { callId: w.id, party: c.peer, ...(w.peerDevice ? { toDevice: w.peerDevice } : null) }]);
+    reply(c, 'party', { callId: c.id, party: w.peer });
+    seen.current.add(w.id);
+    clearWaiting();
+    stopRingNotification(w.id);
+    media.forget(w.id);
+    callRef.current = {
+      ...c,
+      legs: [...(c.legs ?? []), { id: w.id, peer: w.peer, peerDevice: w.peerDevice }],
+      parties: [...(c.parties ?? []).filter((x) => x.id !== w.peer.id), w.peer],
+    };
+    setCall(callRef.current);
+    haptics.success();
+  }, [clearWaiting, tellMyPhones]);
+
+  // ---- Your other phone -------------------------------------------------
+  // The phone with a live call says so (src/calls/presence.js); your other
+  // phone offers to take it over the moment you pick it up.
+
+  const live2 = !!call && call.phase === 'active';
+  useEffect(() => {
+    if (!userId || !live2) return undefined;
+    let alive = true;
+    let told = false;
+    const beat = () =>
+      announce(userId, callRef.current).then((ok) => {
+        // First time: nudge your other phone, so it asks at once if it is on screen.
+        if (ok && alive && !told) {
+          told = true;
+          signal.send(userId, 'nudge', {});
+        }
+      });
+    beat();
+    const id = setInterval(beat, BEAT_MS);
+    return () => {
+      alive = false;
+      clearInterval(id);
+      retract(userId).then((ok) => ok && signal.send(userId, 'nudge', {}));
+    };
+  }, [userId, live2, callId]);
+
+  // Ask whenever this phone comes to the front with no call of its own.
+  useEffect(() => {
+    if (!userId) return undefined;
+    refreshOther();
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') refreshOther();
+    });
+    return () => sub?.remove?.();
+  }, [userId, refreshOther, callId]);
+  // And keep checking while it is offering, so the offer goes when their call ends.
+  const offering = otherPhone?.callId ?? null;
+  useEffect(() => {
+    if (!offering) return undefined;
+    const id = setInterval(refreshOther, BEAT_MS);
+    return () => clearInterval(id);
+  }, [offering, refreshOther]);
+  // Phones that were never told the call ended (a phone that died): the offer lapses on its own.
+  useEffect(() => {
+    if (!offering) return undefined;
+    const id = setTimeout(() => setOtherPhone(null), 40000);
+    return () => clearTimeout(id);
+  }, [offering, otherPhone?.startedAt]);
+
+  /** The prompt: shown only while this phone is on screen and has no call, and asked once per call. */
+  const transferOffer = otherPhone && !call && appState !== 'background' && appState !== 'inactive' && !keptElsewhere.current.has(otherPhone.callId) ? otherPhone : null;
+
+  /** No: leave the call where it is. */
+  const keepOnOtherPhone = useCallback(() => {
+    setOtherPhone((cur) => {
+      if (cur) keptElsewhere.current.add(cur.callId);
+      return null;
+    });
+  }, []);
+
+  /**
+   * Yes: the call moves to this phone. The other phone is asked to let go
+   * (it leaves without ending anything, so the other person stays on the
+   * line), this one joins the same channel with the same clock, and the
+   * other person is told which phone to answer to.
+   */
+  const transferHere = useCallback(async () => {
+    const o = otherPhone;
+    if (!o || !userId || (callRef.current && callRef.current.phase !== 'ended')) return;
+    setTransferring(true);
+    try {
+      // One uid per account: the other phone has to be out of the channel before this one joins.
+      const released = new Promise((resolve) => {
+        releasedWait.current = resolve;
+      });
+      signal.send(userId, 'transfer', { callId: o.callId, toDevice: o.device });
+      await Promise.race([released, new Promise((resolve) => setTimeout(resolve, 3500))]);
+      releasedWait.current = null;
+      if (callRef.current && callRef.current.phase !== 'ended') return;
+      clearTimers();
+      seen.current.add(o.callId);
+      callRef.current = {
+        id: o.callId,
+        channel: o.channel,
+        peer: o.peer,
+        direction: 'in',
+        phase: 'ringing',
+        startedAt: null,
+        reason: null,
+        sentAt: Date.now(),
+        voice: o.voice,
+        moved: true,
+      };
+      setCall(callRef.current);
+      setVideo(NO_MEDIA);
+      setOtherPhone(null);
+      // They answer to this phone from now on.
+      signal.send(o.peer.id, 'moved', { callId: o.callId });
+      goLive({ startedAt: o.startedAt });
+    } finally {
+      setTransferring(false);
+    }
+  }, [otherPhone, userId, goLive]);
 
   // The call notification (src/calls/incoming.js): tapping it or the
   // full-screen intent opens the app on a call link, which rings the call
@@ -776,12 +1277,13 @@ export function CallProvider({ children }) {
     () =>
       BoaCall.addDeclineListener((callId) => {
         if (callRef.current?.id === callId) return decline();
+        if (waitingRef.current?.id === callId) return declineWaiting();
         const p = pendingCall(callId);
         stopRingNotification(callId);
         seen.current.add(callId);
         if (p) signal.send(p.from.id, 'decline', { callId });
       }),
-    [decline],
+    [decline, declineWaiting],
   );
 
   // Hang up on the ongoing-call notification.
@@ -867,6 +1369,14 @@ export function CallProvider({ children }) {
       flipCamera,
       primeCall,
       callPrep: starting ? 'starting' : prep,
+      waiting,
+      declineWaiting,
+      endAndAccept,
+      mergeWaiting,
+      transferOffer,
+      transferring,
+      transferHere,
+      keepOnOtherPhone,
     }),
     [
       call,
@@ -901,6 +1411,14 @@ export function CallProvider({ children }) {
       primeCall,
       starting,
       prep,
+      waiting,
+      declineWaiting,
+      endAndAccept,
+      mergeWaiting,
+      transferOffer,
+      transferring,
+      transferHere,
+      keepOnOtherPhone,
     ],
   );
 
@@ -908,6 +1426,7 @@ export function CallProvider({ children }) {
     <CallContext.Provider value={value}>
       {children}
       <CallScreen me={personOf(profile)} />
+      <TransferPrompt />
     </CallContext.Provider>
   );
 }
