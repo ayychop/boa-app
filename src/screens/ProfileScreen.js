@@ -6,14 +6,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { founders, SITE_URL } from '../data/boaContent';
 import { useForms } from '../context/FormsContext';
 import { useUser } from '../context/UserContext';
-import { usePremium } from '../context/PremiumContext';
 import { usePlayer } from '../context/PlayerContext';
-import { PRICE } from '../components/premium/PremiumScreen';
 import StationLogo from '../components/StationLogo';
 import FounderCard from '../components/FounderCard';
 import { VIBES } from './OnboardingScreen';
 import BoaLogo from '../components/BoaLogo';
-import { Button, EmptyState, Fog, GoldBadge, LogoWatermark, Slate, Tappable, Viewfinder } from '../components/ui';
+import { Button, EmptyState, Fog, LogoWatermark, Slate, Tappable, Viewfinder } from '../components/ui';
 import useBottomSpace from '../hooks/useBottomSpace';
 import useLayout from '../hooks/useLayout';
 import { useZen } from '../context/ZenContext';
@@ -56,7 +54,6 @@ export default function ProfileScreen({ navigation }) {
   const forms = useForms();
   const user = useUser();
   const player = usePlayer();
-  const { openPremium, hasPremium } = usePremium();
 
   // Grouped lists, as on a phone; wide screens turn each list into a grid
   // of tiles (two columns, three once there's room).
@@ -128,8 +125,8 @@ export default function ProfileScreen({ navigation }) {
             {signedIn ? (
               <Avatar uri={profile.avatar_url} name={name} size={56} />
             ) : (
-              <View style={[styles.avatar, hasPremium && styles.avatarPremium]}>
-                <Ionicons name="person" size={26} color={hasPremium ? colors.bg : colors.textMuted} />
+              <View style={styles.avatar}>
+                <Ionicons name="person" size={26} color={colors.textMuted} />
               </View>
             )}
             <View style={{ flex: 1, minWidth: 0 }}>
@@ -137,7 +134,6 @@ export default function ProfileScreen({ navigation }) {
                 <Text style={styles.name} numberOfLines={1}>
                   {name}
                 </Text>
-                {hasPremium && <GoldBadge label="PREMIUM" icon="diamond" />}
                 {signedIn && profile.is_boa_star ? <BoaStarBadge size={20} /> : null}
               </View>
               <Text style={styles.nameSub}>{nameSub}</Text>
@@ -181,36 +177,6 @@ export default function ProfileScreen({ navigation }) {
           category={signedIn ? profile.quote_category : null}
           hint={signedIn ? (profile.quote_category ? null : 'Choose your kind in Hub settings.') : 'Sign in to choose your kind: Love, Wealth, Health or Career.'}
         />
-
-        {hasPremium ? (
-          <Pressable onPress={openPremium} accessibilityRole="button" style={({ pressed }) => [styles.premiumActive, pressed && { opacity: 0.85 }]}>
-            <Ionicons name="diamond" size={18} color={colors.gold} />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.linkText}>BOA Premium is active</Text>
-              <Text style={styles.linkDetail}>HD calls, BOA Studio, Hi Fi and living vibes unlocked</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
-          </Pressable>
-        ) : (
-          <Tappable onPress={openPremium} accessibilityRole="button" accessibilityLabel="Go Premium" style={styles.banner}>
-            <LinearGradient
-              colors={[colors.gold, '#C98A2E', colors.goldDeep]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={StyleSheet.absoluteFill}
-            />
-            <Fog opacity={0.18} />
-            <View style={styles.bannerIcon}>
-              <Ionicons name="diamond" size={22} color={colors.gold} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.bannerKicker}>BOA PREMIUM · {PRICE}/MONTH</Text>
-              <Text style={styles.bannerTitle}>Go Premium</Text>
-              <Text style={styles.bannerBody}>HD video calls, BOA Studio camera, Hi Fi radio and living chat vibes.</Text>
-            </View>
-            <Ionicons name="arrow-forward" size={20} color={colors.bg} />
-          </Tappable>
-        )}
 
         {lastLoved ? (
           <>
@@ -286,11 +252,7 @@ export default function ProfileScreen({ navigation }) {
           </View>
         ) : (
           <EmptyState
-            body={
-              hasPremium
-                ? 'Tap the heart next to a station on Radio to save it here.'
-                : 'Save your favourite stations with BOA Premium.'
-            }
+            body="Tap the heart next to a station on Radio to save it here."
           />
         )}
 
@@ -427,38 +389,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.borderStrong,
   },
-  avatarPremium: { backgroundColor: colors.gold, borderColor: colors.gold, boxShadow: '0px 6px 20px rgba(226,168,75,0.45)' },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   name: { fontFamily: fonts.semibold, fontSize: 22, letterSpacing: -0.6, color: colors.text, flexShrink: 1 },
   nameSub: { fontFamily: fonts.medium, fontSize: 12, color: colors.textFaint, marginTop: 3 },
   vibes: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: space.lg },
   vibe: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: radius.pill, backgroundColor: colors.goldSoft },
   vibeText: { fontFamily: fonts.semibold, fontSize: 12, color: colors.gold },
-  banner: {
-    marginTop: space.xl,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.md,
-    padding: space.lg,
-    borderRadius: radius.lg,
-    overflow: 'hidden',
-    boxShadow: '0px 12px 34px rgba(226,168,75,0.3)',
-  },
-  bannerIcon: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg },
-  bannerKicker: { fontFamily: fonts.monoMedium, fontSize: 9.5, letterSpacing: 1.4, color: 'rgba(5,5,6,0.7)' },
-  bannerTitle: { fontFamily: fonts.bold, fontSize: 20, letterSpacing: -0.5, color: colors.bg, marginTop: 2 },
-  bannerBody: { fontFamily: fonts.medium, fontSize: 12.5, color: 'rgba(5,5,6,0.75)', marginTop: 2 },
-  premiumActive: {
-    marginTop: space.xl,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.md,
-    padding: space.lg,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: 'rgba(226,168,75,0.45)',
-    backgroundColor: colors.goldSoft,
-  },
   list: {
     borderRadius: radius.lg,
     overflow: 'hidden',

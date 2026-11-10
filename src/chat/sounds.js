@@ -80,5 +80,17 @@ export const RETIRED_CHAT_SOUNDS = ['beep', 'rimshot', 'laugh', 'trombone', 'boi
 /** A sound by id; an unknown (or retired) one is the default. */
 export const chatSoundById = (id) => CHAT_SOUNDS.find((s) => s.id === id) ?? CHAT_SOUNDS.find((s) => s.id === DEFAULT_CHAT_SOUND);
 
+/**
+ * The phone's own notification sound: a channel with the default sound, so it
+ * follows whatever the listener has chosen in Android's settings.
+ */
+export const SYSTEM_CHANNEL = 'boa-chat-system';
+/**
+ * Your own clip: a channel that pops up and buzzes but is silent, because the
+ * app plays the clip itself (src/chat/soundPrefs.js). Android can't point a
+ * channel at a file the app made.
+ */
+export const CUSTOM_CHANNEL = 'boa-chat-custom';
+
 /** The Android notification channel for a sound. */
 export const chatChannel = (id) => `boa-chat-${chatSoundById(id).id}`;

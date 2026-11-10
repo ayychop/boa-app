@@ -61,8 +61,7 @@ import ChatBackdrop from '../../components/chat/ChatBackdrop';
 import Composer from '../../components/chat/Composer';
 import TypingIndicator, { TypingDots } from '../../components/chat/TypingIndicator';
 import ChatVibeSheet from '../../components/chat/ChatVibeSheet';
-import useChatVibe, { allowedVibe, MOTION, vibeById } from '../../chat/vibes';
-import { usePremiumUnlocked } from '../../context/PremiumContext';
+import useChatVibe, { MOTION, vibeById } from '../../chat/vibes';
 import { useHeadlineFont } from '../../context/FontContext';
 import { withChatTheme } from '../../chat/bubbleTheme';
 import { MediaTile, MediaViewer, VoiceNote } from '../../components/chat/media';
@@ -477,9 +476,7 @@ function Thread({ navigation, route }) {
   // The header and composer float over the list, so it keeps their heights clear at its ends.
   const [headerH, setHeaderH] = useState(insets.top + 60);
   const [composerH, setComposerH] = useState(64);
-  const { vibe: savedVibe, motion } = useChatVibe();
-  // A Premium vibe shows only while Premium is on; otherwise Noir, with your choice kept for when it's back.
-  const chatVibe = allowedVibe(savedVibe, usePremiumUnlocked());
+  const { vibe: chatVibe, motion } = useChatVibe();
   // Your own bubbles in your Chat Appearance colour, if you've chosen one.
   // The first vibes predate ink; they're dark, so they take the app's.
   const vibe = useMemo(() => ({ ink: colors.text, inkMuted: colors.textMuted, ...withChatTheme(chatVibe, chatTheme) }), [chatVibe, chatTheme]);

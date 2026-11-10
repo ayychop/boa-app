@@ -5,7 +5,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import * as Crypto from 'expo-crypto';
 import { useHub } from './HubContext';
-import { usePremium } from './PremiumContext';
 import * as signal from '../calls/signaling';
 import * as media from '../calls/media';
 import { startRingtone, stopRingtone } from '../calls/ringtone';
@@ -86,7 +85,6 @@ const NO_CONTROLS = Object.freeze({
  * which way, ringing, connecting, live, ended), the in-call controls (mute,
  * camera, speaker) and the beauty filters. Ringing travels over
  * src/calls/signaling.js; picture and sound over Agora (src/calls/media).
- * Starting a call is BOA Premium; answering one never is.
  */
 export function CallProvider({ children }) {
   const { userId, profile, blocked, ringtone, chatSound } = useHub();
@@ -94,7 +92,6 @@ export function CallProvider({ children }) {
   chatSoundRef.current = chatSound;
   const ringtoneRef = useRef(ringtone);
   ringtoneRef.current = ringtone;
-  const { requirePremium } = usePremium();
   const userIdRef = useRef(userId);
   userIdRef.current = userId;
   const profileRef = useRef(profile);
@@ -640,63 +637,62 @@ export function CallProvider({ children }) {
     );
   }, [userId]);
 
-  /** Calls someone (BOA Premium). person: their profile. */
+  /** Calls someone. person: their profile. */
   const startCall = useCallback(
-    (person, { voice = false, roomId = null, onStarted = null } = {}) =>
-      requirePremium(async () => {
-        const peer = personOf(person);
-        if (!peer || !userId || peer.id === userId) return;
-        if (stale(callRef.current)) expire(callRef.current);
+    async (person, { voice = false, roomId = null, onStarted = null } = {}) => {
+      const peer = personOf(person);
+      if (!peer || !userId || peer.id === userId) return;
+      if (stale(callRef.current)) expire(callRef.current);
+      if (callRef.current && callRef.current.phase !== 'ended') return;
+      // Use the call got ready ahead; if it's still getting ready, say
+      // "Preparing call..." on the button and wait for it. A scheduled
+      // room (roomId) has its own id, so the one made ahead is left for later.
+      const ahead = roomId ? null : primed.current;
+      if (!roomId) {
+        primed.current = null;
+        setPrep('idle');
+      }
+      if (ahead?.ready) {
+        setStarting(true);
+        await ahead.ready;
+        setStarting(false);
         if (callRef.current && callRef.current.phase !== 'ended') return;
-        // Use the call got ready ahead; if it's still getting ready, say
-        // "Preparing call..." on the button and wait for it. A scheduled
-        // room (roomId) has its own id, so the one made ahead is left for later.
-        const ahead = roomId ? null : primed.current;
-        if (!roomId) {
-          primed.current = null;
-          setPrep('idle');
-        }
-        if (ahead?.ready) {
-          setStarting(true);
-          await ahead.ready;
-          setStarting(false);
-          if (callRef.current && callRef.current.phase !== 'ended') return;
-        }
-        clearTimers();
-        const id = roomId ?? ahead?.id ?? newId();
-        // The ref too, at once: the ring can be answered before React renders.
-        const sentAt = Date.now();
-        callRef.current = {
-          id,
-          peer,
-          direction: 'out',
-          phase: 'ringing',
-          startedAt: null,
-          reason: null,
-          sentAt,
-          voice: !!voice,
-        };
-        setCall(callRef.current);
-        setVideo(NO_MEDIA);
-        haptics.selection();
-        // The scheduled call's host: the call is on, so the room turns 'active' and everyone waiting on the countdown joins.
-        onStarted?.(id);
-        // Your camera comes on while it rings, so you can check how you look.
-        // A voice call has no picture to check: the camera stays off.
-        if (voice) {
-          controlsRef.current = { ...controlsRef.current, cameraOff: true };
-          setControls(controlsRef.current);
-        } else media.prepare(id, beautyRef.current).catch(() => {});
-        // Realtime reaches a phone with the app open; the push wakes one in a pocket.
-        const [live, pushed] = await Promise.all([signal.send(peer.id, 'ring', ringPayload(id, sentAt, voice)), signal.pushRing(peer.id, id)]);
-        if (callRef.current?.id !== id) return;
-        if (!live && !pushed) return finish('unreachable');
-        timers.current.ring = setTimeout(() => {
-          signal.send(peer.id, 'end', { callId: id });
-          finish('missed');
-        }, ringLeft(sentAt));
-      }, 'Video calls are part of BOA Premium.'),
-    [requirePremium, userId, finish, expire],
+      }
+      clearTimers();
+      const id = roomId ?? ahead?.id ?? newId();
+      // The ref too, at once: the ring can be answered before React renders.
+      const sentAt = Date.now();
+      callRef.current = {
+        id,
+        peer,
+        direction: 'out',
+        phase: 'ringing',
+        startedAt: null,
+        reason: null,
+        sentAt,
+        voice: !!voice,
+      };
+      setCall(callRef.current);
+      setVideo(NO_MEDIA);
+      haptics.selection();
+      // The scheduled call's host: the call is on, so the room turns 'active' and everyone waiting on the countdown joins.
+      onStarted?.(id);
+      // Your camera comes on while it rings, so you can check how you look.
+      // A voice call has no picture to check: the camera stays off.
+      if (voice) {
+        controlsRef.current = { ...controlsRef.current, cameraOff: true };
+        setControls(controlsRef.current);
+      } else media.prepare(id, beautyRef.current).catch(() => {});
+      // Realtime reaches a phone with the app open; the push wakes one in a pocket.
+      const [live, pushed] = await Promise.all([signal.send(peer.id, 'ring', ringPayload(id, sentAt, voice)), signal.pushRing(peer.id, id)]);
+      if (callRef.current?.id !== id) return;
+      if (!live && !pushed) return finish('unreachable');
+      timers.current.ring = setTimeout(() => {
+        signal.send(peer.id, 'end', { callId: id });
+        finish('missed');
+      }, ringLeft(sentAt));
+    },
+    [userId, finish, expire],
   );
 
   const accept = useCallback(() => {

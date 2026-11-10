@@ -25,8 +25,7 @@ import ProfileVibeSheet from '../../components/chat/ProfileVibeSheet';
 import { GridEmpty, PostGrid, ProfileTabs } from '../../components/profile/PostGrid';
 import Favourites from '../../components/profile/Favourites';
 import { GoldBadge, LogoWatermark, Tappable } from '../../components/ui';
-import { allowedVibe, useProfileVibe } from '../../chat/vibes';
-import { usePremiumUnlocked } from '../../context/PremiumContext';
+import { useProfileVibe } from '../../chat/vibes';
 import { useHeadlineFont } from '../../context/FontContext';
 import { colors, fonts, radius, space, type } from '../../theme';
 import { GridSkeleton, ProfileSkeleton } from '../../components/Skeleton';
@@ -191,11 +190,9 @@ function HubProfileScreenBody({ navigation, route }) {
   const [contactOpen, setContactOpen] = useState(false);
 
   // The Profile Vibe: this profile's own look, separate from the Chat Vibe,
-  // so theming the profile never touches how chats look and vice versa (a
-  // Premium vibe shows only while Premium is on, else Noir). The header mesh
+  // so theming the profile never touches how chats look and vice versa. The header mesh
   // and the accents below all follow it; the BOA wordmark never does.
-  const { vibe: savedVibe } = useProfileVibe();
-  const vibe = allowedVibe(savedVibe, usePremiumUnlocked());
+  const { vibe } = useProfileVibe();
   const accent = chromeAccent(vibe);
   // The default Noir keeps the app's white header icons; a vibe tints them.
   const iconTone = vibe.id === 'noir' ? colors.text : accent;

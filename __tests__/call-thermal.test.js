@@ -7,7 +7,6 @@ let mockHub;
 jest.mock('../src/context/HubContext', () => ({ useHub: () => mockHub }));
 jest.mock('../src/api/hub', () => ({
   ...jest.requireActual('../src/api/hub'),
-  getPremiumAccess: jest.fn(),
   amIAdmin: jest.fn(async () => false),
 }));
 let mockSignal = null;
@@ -29,7 +28,6 @@ const { __engine: engine } = require('react-native-agora');
 const thermal = require('../src/calls/thermal');
 const media = require('../src/calls/media.native');
 const { COLD_ENCODER, COOL_ENCODER, ENCODER, PREVIEW, WARM_ENCODER, encoderForThermal } = require('../src/calls/quality');
-const { PremiumProvider } = require('../src/context/PremiumContext');
 const { CallProvider, useCall } = require('../src/context/CallContext');
 
 const KOFI = { id: 'user-kofi', username: 'kofi', display_name: 'Kofi Boateng', avatar_url: null };
@@ -38,7 +36,6 @@ let appListeners;
 let appSpy;
 beforeEach(() => {
   mockHub = { userId: 'user-me', profile: { id: 'user-me', username: 'ama', display_name: 'Ama' }, isAdmin: false, blocked: new Set(), block: jest.fn(async () => {}) };
-  hub.getPremiumAccess.mockResolvedValue({ status: 'trial', hasAccess: true, isAdmin: false, trialEndsAt: new Date(Date.now() + 47 * 3600e3).toISOString() });
   appListeners = [];
   appSpy = jest.spyOn(AppState, 'addEventListener').mockImplementation((type, fn) => {
     appListeners.push(fn);
@@ -57,11 +54,9 @@ function Dial() {
 }
 const mount = () =>
   render(
-    <PremiumProvider>
       <CallProvider>
         <Dial />
       </CallProvider>
-    </PremiumProvider>,
   );
 const handler = () => engine.registerEventHandler.mock.calls.at(-1)[0];
 const appGoes = (state) => act(async () => appListeners.slice().forEach((fn) => fn(state)));
@@ -76,13 +71,13 @@ async function liveCall(user) {
 }
 
 describe('the encoder for a hot phone', () => {
-  test('every step up in heat cuts the work: 720p30, then 540p24, then 360p15; only a cool phone runs 1080p30', () => {
+  test('every step up in heat cuts the work: 540p24, then 360p24, then 270p15; only a cool phone runs 720p30', () => {
     const work = (e) => e.dimensions.width * e.dimensions.height * e.frameRate;
-    expect(WARM_ENCODER.dimensions).toEqual({ width: 1280, height: 720 });
-    expect(WARM_ENCODER.frameRate).toBe(30);
-    expect(COOL_ENCODER.dimensions).toEqual({ width: 960, height: 540 });
+    expect(WARM_ENCODER.dimensions).toEqual({ width: 960, height: 540 });
+    expect(WARM_ENCODER.frameRate).toBe(24);
+    expect(COOL_ENCODER.dimensions).toEqual({ width: 640, height: 360 });
     expect(COOL_ENCODER.frameRate).toBe(24);
-    expect(COLD_ENCODER.dimensions).toEqual({ width: 640, height: 360 });
+    expect(COLD_ENCODER.dimensions).toEqual({ width: 480, height: 270 });
     expect(COLD_ENCODER.frameRate).toBe(15);
     // MaintainFramerate: frames are kept, sharpness gives way.
     expect(COOL_ENCODER.degradationPreference).toBe(1);

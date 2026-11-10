@@ -1048,7 +1048,10 @@ function ZenRoom() {
   // Every soundscape downloads quietly once you're here, so the next tap
   // plays from the phone.
   useEffect(() => {
-    if (focused) ambientAudio.warmUp();
+    if (!focused) return;
+    ambientAudio.warmUp();
+    // The first sound of the kind on screen is loaded and waiting.
+    ambientAudio.prime(ambientAudio.chosenIn('frequencies'));
   }, [focused]);
 
   const sceneId = soundscapeById(sound.id)?.scene ?? 'night';

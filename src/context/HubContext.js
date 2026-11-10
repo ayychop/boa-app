@@ -14,6 +14,7 @@ import * as hearts from '../api/hearts';
 import { useUser } from './UserContext';
 import * as chat from '../chat/notifications';
 import { chatSoundById, DEFAULT_CHAT_SOUND } from '../chat/sounds';
+import { loadSoundPrefs, onSoundPrefs, pushSound, setSoundMode } from '../chat/soundPrefs';
 import { cleanTheme } from '../chat/bubbleTheme';
 import { DEFAULT_RINGTONE, adoptChosenRingtone, ringtoneById } from '../calls/ringtone';
 import { openPage } from '../navigation/ref';
@@ -305,6 +306,20 @@ export function HubProvider({ children }) {
     return () => tapped.remove();
   }, []);
 
+  // A change to the notification sound (Settings) reaches the database too, so
+  // pushes with the app closed follow it.
+  const pushedSound = useRef(null);
+  useEffect(
+    () =>
+      onSoundPrefs(() => {
+        const next = pushSound();
+        if (!pushToken.current || next === pushedSound.current) return;
+        pushedSound.current = next;
+        hub.savePushToken(pushToken.current, Platform.OS, next).catch(() => {});
+      }),
+    [],
+  );
+
   useEffect(() => {
     if (!supabase || stage !== 'ready' || !userId) return undefined;
     let alive = true;
@@ -314,7 +329,11 @@ export function HubProvider({ children }) {
       const token = await chat.getPushToken();
       if (!token || !alive) return;
       try {
-        await hub.savePushToken(token, Platform.OS, chatSoundRef.current);
+        // The sound the database pushes with: your BOA sound, or the phone's own
+        // (the phone's sound and your own clip both go out as 'system').
+        await loadSoundPrefs();
+        pushedSound.current = pushSound();
+        await hub.savePushToken(token, Platform.OS, pushedSound.current);
         pushToken.current = token;
       } catch (err) {
         console.warn('[chat] push registration failed', err.message);
@@ -426,14 +445,15 @@ export function HubProvider({ children }) {
     const sound = chatSoundById(id);
     chatSoundRef.current = sound.id;
     setChatSoundState(sound.id);
+    // Picking a BOA sound makes BOA sounds the choice (over the phone's own or your clip).
     chat.saveChatSound(sound.id);
+    setSoundMode('boa');
     try {
       if (!preview.current) preview.current = createAudioPlayer(sound.asset);
       else preview.current.replace(sound.asset);
       preview.current.seekTo?.(0);
       preview.current.play();
     } catch {}
-    if (pushToken.current) hub.savePushToken(pushToken.current, Platform.OS, sound.id).catch(() => {});
   }, []);
 
   // Disappearing messages: your setting, kept in the database (it stamps
@@ -588,6 +608,11 @@ export function HubProvider({ children }) {
     [heartsUnseen, seeHearts, dayOneNews, clearDayOneNews, chatSound, setChatSound, disappearing, setDisappearing, chatTheme, setChatTheme, ringtone, setRingtone, isAdmin, stage, session, userId, profile, online, blocked, shareStatus, setShareStatus, loadProfile, saveProfile, finishOnboarding, block, unblock, signOut, deleteAccount],
   );
   return <HubContext.Provider value={value}>{children}</HubContext.Provider>;
+}
+
+/** The Hub context, or null outside the provider (screens rendered on their own). */
+export function useHubMaybe() {
+  return useContext(HubContext);
 }
 
 export function useHub() {

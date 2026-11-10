@@ -9,7 +9,6 @@ let mockHub;
 jest.mock('../src/context/HubContext', () => ({ useHub: () => mockHub }));
 jest.mock('../src/api/hub', () => ({
   ...jest.requireActual('../src/api/hub'),
-  getPremiumAccess: jest.fn(),
   amIAdmin: jest.fn(async () => false),
 }));
 let mockSignal = null;
@@ -30,7 +29,6 @@ const signal = require('../src/calls/signaling');
 const { __engine: engine } = require('react-native-agora');
 const KeepAwake = require('expo-keep-awake');
 const BoaCall = require('../modules/boa-call');
-const { PremiumProvider } = require('../src/context/PremiumContext');
 const { CallProvider, useCall } = require('../src/context/CallContext');
 
 const ME = { id: 'user-me', username: 'ama', display_name: 'Ama Mensah', avatar_url: null };
@@ -40,7 +38,6 @@ let appListeners;
 let appSpy;
 beforeEach(() => {
   mockHub = { userId: 'user-me', profile: ME, isAdmin: false, blocked: new Set(), block: jest.fn(async () => {}) };
-  hub.getPremiumAccess.mockResolvedValue({ status: 'trial', hasAccess: true, isAdmin: false, trialEndsAt: new Date(Date.now() + 47 * 3600e3).toISOString() });
   appListeners = [];
   appSpy = jest.spyOn(AppState, 'addEventListener').mockImplementation((type, fn) => {
     appListeners.push(fn);
@@ -56,11 +53,9 @@ function Dial() {
 }
 const mount = () =>
   render(
-    <PremiumProvider>
       <CallProvider>
         <Dial />
       </CallProvider>
-    </PremiumProvider>,
   );
 const handler = () => engine.registerEventHandler.mock.calls.at(-1)[0];
 const appGoes = (state) => act(async () => appListeners.slice().forEach((fn) => fn(state)));

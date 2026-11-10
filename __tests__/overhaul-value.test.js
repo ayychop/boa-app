@@ -7,7 +7,7 @@ jest.useFakeTimers();
 const { shapeConversation, inboxOf, INBOX_FILTERS } = require('../src/api/hub');
 const { RINGTONE_HAPTICS } = require('../src/calls/ringtoneHaptics');
 const { RINGTONES, ringtoneHaptics } = require('../src/calls/ringtone');
-const { VIBES, FREE_VIBES, allowedVibe, isPremiumVibe, vibeById } = require('../src/chat/vibes');
+const { VIBES } = require('../src/chat/vibes');
 
 const ME = 'user-me';
 const THEM = 'user-them';
@@ -90,38 +90,16 @@ describe('ringtones: the buzz lands on the bass', () => {
   });
 });
 
-describe('Premium chat vibes', () => {
-  test('four free vibes; the rest, and Custom, are Premium', () => {
-    expect(FREE_VIBES).toEqual(['noir', 'neon', 'minimalist', 'the-block']);
-    expect(VIBES.filter((v) => isPremiumVibe(v.id)).length).toBe(8);
-    expect(isPremiumVibe('custom')).toBe(true);
-  });
-
-  test('a saved Premium vibe shows as Noir while Premium is locked, and comes back with it', () => {
-    const midnight = vibeById('midnight');
-    expect(allowedVibe(midnight, false).id).toBe('noir');
-    expect(allowedVibe(midnight, true).id).toBe('midnight');
-    expect(allowedVibe(vibeById('neon'), false).id).toBe('neon');
-  });
-
-  test('locked: Premium cards wear a lock, and a tap asks instead of opening the colour picker', async () => {
+describe('chat vibes are free', () => {
+  test('no vibe is locked: the picker shows none, and Custom opens the colour picker', async () => {
     const VibePicker = require('../src/components/chat/VibePicker').default;
     const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
     const onChange = jest.fn();
-    await render(<VibePicker value="noir" onChange={onChange} locked />);
-    expect(screen.getByTestId('chat-vibe-midnight-locked')).toBeOnTheScreen();
-    expect(screen.queryByTestId('chat-vibe-neon-locked')).toBeNull();
+    await render(<VibePicker value="noir" onChange={onChange} />);
+    for (const v of VIBES) expect(screen.queryByTestId(`chat-vibe-${v.id}-locked`)).toBeNull();
+    await user.press(screen.getByTestId('chat-vibe-midnight'));
+    expect(onChange).toHaveBeenCalledWith('midnight');
     await user.press(screen.getByTestId('chat-vibe-custom'));
     expect(onChange).toHaveBeenCalledWith('custom');
-    expect(screen.queryByTestId('chat-color-picker')).toBeNull();
-  });
-});
-
-describe('the paywall only promises what Premium unlocks', () => {
-  test('no ads, early access or downloads claimed anywhere', () => {
-    const files = ['src/components/premium/PremiumScreen.js', 'src/screens/ProfileScreen.js'].map((f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8')).join('\n');
-    expect(files).not.toMatch(/ad-free|early access|offline downloads/i);
-    // The price comes from the one constant.
-    expect(files).not.toMatch(/£\d/);
   });
 });

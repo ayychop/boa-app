@@ -177,8 +177,10 @@ export const SCENES = {
 
 // Four kinds of sound, six sounds each. Tapping a kind plays its first
 // sound (or the one you last chose there); the other five are a tap away.
-// Recordings stream and are cached on the phone; BOA's generated tones and
-// noise (assets/sounds/zen, sample-exact 16 s loops) are bundled.
+// The six frequencies (assets/zen, loop-ready masters) and BOA's generated
+// noise (assets/sounds/zen, sample-exact 16 s loops) are bundled, so they play
+// at once and offline. The other recordings stream, and are cached on the
+// phone in the background (audio/ambient.js warmUp) so a second play is instant.
 export const ZEN_CATEGORIES = [
   {
     id: 'rain',
@@ -328,11 +330,15 @@ export const ZEN_CATEGORIES = [
     tone: '#E2A84B',
     scene: 'aurora',
     sounds: [
+      // Six instrumentals by Megis (Jamendo, CC BY 3.0), bundled in assets/zen so
+      // they play at once, offline, from the first tap. Each is a loop-ready
+      // master (scripts/zen-masters.sh): the end is crossfaded into the start,
+      // so the loop has no gap and no click, and the six sit at one loudness.
       {
         id: '432hz',
         label: '432 Hz',
         detail: 'Deep healing',
-        uri: 'https://archive.org/download/jamendo-621224/01-2292847-Megis-Deep%20Healing%20432Hz%20_1_.mp3',
+        asset: require('../../assets/zen/frequency-1.mp3'),
         title: 'Deep Healing 432Hz (1)',
         author: 'Megis',
         license: 'CC BY 3.0',
@@ -342,51 +348,51 @@ export const ZEN_CATEGORIES = [
         id: '396hz',
         label: '396 Hz',
         detail: 'Letting go',
-        asset: require('../../assets/sounds/zen/tone-396.wav'),
-        title: '396 Hz tone',
-        author: 'BOA Networks',
-        license: 'CC0 1.0',
-        source: null,
+        asset: require('../../assets/zen/frequency-2.mp3'),
+        title: 'Binaural Healing Sleep',
+        author: 'Megis',
+        license: 'CC BY 3.0',
+        source: 'https://www.jamendo.com/album/638406',
       },
       {
         id: '417hz',
         label: '417 Hz',
         detail: 'A fresh start',
-        asset: require('../../assets/sounds/zen/tone-417.wav'),
-        title: '417 Hz tone',
-        author: 'BOA Networks',
-        license: 'CC0 1.0',
-        source: null,
+        asset: require('../../assets/zen/frequency-3.mp3'),
+        title: '432Hz Quantum Healing Meditation',
+        author: 'Megis',
+        license: 'CC BY 3.0',
+        source: 'https://www.jamendo.com/album/638091',
       },
       {
         id: '528hz',
         label: '528 Hz',
         detail: 'Calm and clarity',
-        asset: require('../../assets/sounds/zen/tone-528.wav'),
-        title: '528 Hz tone',
-        author: 'BOA Networks',
-        license: 'CC0 1.0',
-        source: null,
+        asset: require('../../assets/zen/frequency-4.mp3'),
+        title: '432Hz Zen Meditation',
+        author: 'Megis',
+        license: 'CC BY 3.0',
+        source: 'https://www.jamendo.com/album/639480',
       },
       {
         id: '639hz',
         label: '639 Hz',
         detail: 'Connection',
-        asset: require('../../assets/sounds/zen/tone-639.wav'),
-        title: '639 Hz tone',
-        author: 'BOA Networks',
-        license: 'CC0 1.0',
-        source: null,
+        asset: require('../../assets/zen/frequency-5.mp3'),
+        title: 'Zen Harmony',
+        author: 'Megis',
+        license: 'CC BY 3.0',
+        source: 'https://www.jamendo.com/album/621045',
       },
       {
         id: '741hz',
         label: '741 Hz',
         detail: 'Focus',
-        asset: require('../../assets/sounds/zen/tone-741.wav'),
-        title: '741 Hz tone',
-        author: 'BOA Networks',
-        license: 'CC0 1.0',
-        source: null,
+        asset: require('../../assets/zen/frequency-6.mp3'),
+        title: 'Theta Binaural Meditation',
+        author: 'Megis',
+        license: 'CC BY 3.0',
+        source: 'https://www.jamendo.com/album/638405',
       },
     ],
   },

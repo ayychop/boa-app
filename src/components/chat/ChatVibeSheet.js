@@ -2,8 +2,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import Text from '../ScopedText';
 import { Ionicons } from '@expo/vector-icons';
 import { useHub } from '../../context/HubContext';
-import useChatVibe, { isPremiumVibe, MOTION, STATIC } from '../../chat/vibes';
-import { usePremiumMaybe } from '../../context/PremiumContext';
+import useChatVibe, { MOTION, STATIC } from '../../chat/vibes';
 import BottomSheet from '../BottomSheet';
 import VibePicker from './VibePicker';
 import { haptics } from '../../utils/haptics';
@@ -23,21 +22,14 @@ const MODES = [
 export default function ChatVibeSheet({ open, onClose }) {
   const { chatTheme, setChatTheme } = useHub();
   const { vibe, setVibe, customColor, setCustomColor, motion, setMotion } = useChatVibe();
-  // Premium vibes and Custom: members only. Outside the Premium provider, and
-  // until it has answered, nothing is locked.
-  const premium = usePremiumMaybe();
-  const locked = !!premium && premium.checked && !premium.hasPremium;
-  const gate = (id, apply) => (locked && isPremiumVibe(id) ? premium.requirePremium(apply, 'Living chat vibes and your own colour are part of BOA Premium.') : apply());
-  const pickVibe = (id) =>
-    gate(id, () => {
-      setVibe(id);
-      if (chatTheme) setChatTheme?.(null)?.catch?.(() => {});
-    });
-  const pickCustom = (hex) =>
-    gate('custom', () => {
-      setCustomColor(hex);
-      if (chatTheme) setChatTheme?.(null)?.catch?.(() => {});
-    });
+  const pickVibe = (id) => {
+    setVibe(id);
+    if (chatTheme) setChatTheme?.(null)?.catch?.(() => {});
+  };
+  const pickCustom = (hex) => {
+    setCustomColor(hex);
+    if (chatTheme) setChatTheme?.(null)?.catch?.(() => {});
+  };
   const pickMode = (id) => {
     if (id === motion) return;
     haptics.selection();
@@ -72,7 +64,7 @@ export default function ChatVibeSheet({ open, onClose }) {
             );
           })}
         </View>
-        <VibePicker value={vibe.id} onChange={pickVibe} customColor={customColor} onCustomColor={pickCustom} locked={locked} />
+        <VibePicker value={vibe.id} onChange={pickVibe} customColor={customColor} onCustomColor={pickCustom} />
       </View>
     </BottomSheet>
   );

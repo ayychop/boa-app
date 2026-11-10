@@ -14,7 +14,6 @@ const eq = require('../src/audio/eq');
 
 describe('BOA Hi-Fi: the slider is live and saves on release', () => {
   test('preview shapes the sound at once without saving; setSettings saves', async () => {
-    eq.setAllowed(true);
     eq.setSession(42);
     const setItem = jest.spyOn(AsyncStorage, 'setItem');
     setItem.mockClear();

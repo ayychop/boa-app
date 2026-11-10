@@ -9,7 +9,6 @@ let mockHub;
 jest.mock('../src/context/HubContext', () => ({ useHub: () => mockHub }));
 jest.mock('../src/api/hub', () => ({
   ...jest.requireActual('../src/api/hub'),
-  getPremiumAccess: jest.fn(),
   amIAdmin: jest.fn(async () => false),
   uploadBlockEvidence: jest.fn(async () => 'https://x.supabase.co/storage/v1/object/public/block-evidence/user-me/block-1.jpg'),
 }));
@@ -33,8 +32,6 @@ jest.mock('expo-image-picker', () => ({
 const hub = require('../src/api/hub');
 const signal = require('../src/calls/signaling');
 const eqNative = require('../modules/boa-eq');
-const { PremiumProvider, usePremium, trialLeft, PAYWALL_PITCH } = require('../src/context/PremiumContext');
-const { PRICE } = require('../src/components/premium/price');
 
 const ME = { id: 'user-me', username: 'ama', display_name: 'Ama Mensah', avatar_url: null };
 const KOFI = { id: 'user-kofi', username: 'kofi', display_name: 'Kofi Boateng', avatar_url: null };
@@ -42,69 +39,37 @@ const SQL = fs.readFileSync(path.join(__dirname, '../supabase/migrations/2026102
 
 beforeEach(() => {
   mockHub = { userId: 'user-me', profile: ME, isAdmin: false, blocked: new Set(), block: jest.fn(async () => {}) };
-  hub.getPremiumAccess.mockResolvedValue({ status: 'trial', hasAccess: true, isAdmin: false, trialEndsAt: new Date(Date.now() + 47 * 3600e3).toISOString() });
   hub.amIAdmin.mockResolvedValue(false);
 });
 
-// Shows what the provider says about Premium.
-function Probe() {
-  const { hasPremium, access } = usePremium();
-  return <Text testID="probe">{`${hasPremium ? 'yes' : 'no'}:${access.status}`}</Text>;
-}
+describe('the whole app is free', () => {
+  const SRC = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+  const walk = (dir) => fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(path.join(dir, e.name)) : [path.join(dir, e.name)]));
 
-describe('BOA Premium', () => {
-  test('costs £1.99 a month, and the paywall says so', () => {
-    expect(PRICE).toBe('£1.99');
-    expect(PAYWALL_PITCH).toBe('Upgrade to BOA Premium for unlimited HD Video Calls, Hi Fi Audio, and exclusive filters. £1.99/month.');
+  test('no paywall, price, plan or payment code is left in the app', () => {
+    expect(fs.existsSync(path.join(__dirname, '../src/context/PremiumContext.js'))).toBe(false);
+    expect(fs.existsSync(path.join(__dirname, '../src/components/premium'))).toBe(false);
+    const files = [...walk(path.join(__dirname, '../src')), path.join(__dirname, '../App.js')].filter((f) => /\.js$/.test(f));
+    for (const f of files) {
+      const text = fs.readFileSync(f, 'utf8');
+      expect(text).not.toMatch(/PremiumContext|PremiumProvider|requirePremium|usePremium|PAYWALL|isPremiumVibe/);
+      expect(text).not.toMatch(/Go Premium|Upgrade to BOA|Unlock with BOA|part of BOA Premium/);
+      expect(text).not.toMatch(/stripe|revenuecat|react-native-purchases/i);
+    }
+    const pkg = SRC('package.json');
+    expect(pkg).not.toMatch(/stripe|revenuecat|react-native-purchases/i);
   });
 
-  test('the database decides: a trial has access, an expired one does not', async () => {
-    await render(
-      <PremiumProvider>
-        <Probe />
-      </PremiumProvider>,
-    );
-    expect(screen.getByTestId('probe')).toHaveTextContent('yes:trial');
-
-    hub.getPremiumAccess.mockResolvedValue({ status: 'expired', hasAccess: false, isAdmin: false, trialEndsAt: null });
-    mockHub = { ...mockHub, userId: 'user-other' };
-    await render(
-      <PremiumProvider>
-        <Probe />
-      </PremiumProvider>,
-    );
-    expect(screen.getByTestId('probe')).toHaveTextContent('no:expired');
+  test('Profile has no upgrade banner and the Hi Fi sheet has no lock', () => {
+    expect(SRC('src/screens/ProfileScreen.js')).not.toMatch(/premium/i);
+    expect(SRC('src/components/radio/EqualizerSheet.js')).not.toMatch(/premium|eq-locked|lock-closed/i);
   });
 
-  test('admins skip the paywall whatever their status', async () => {
-    hub.getPremiumAccess.mockResolvedValue({ status: 'expired', hasAccess: false, isAdmin: false, trialEndsAt: null });
-    mockHub = { ...mockHub, isAdmin: true };
-    await render(
-      <PremiumProvider>
-        <Probe />
-      </PremiumProvider>,
-    );
-    expect(screen.getByTestId('probe')).toHaveTextContent('yes:expired');
-  });
-
-  test('trial time left reads naturally', () => {
-    const now = Date.parse('2026-10-26T12:00:00Z');
-    expect(trialLeft('2026-10-28T12:00:00Z', now)).toBe('2 days left');
-    expect(trialLeft('2026-10-27T16:00:00Z', now)).toBe('1 day 4 hrs left');
-    expect(trialLeft('2026-10-26T15:00:00Z', now)).toBe('3 hrs left');
-    expect(trialLeft('2026-10-26T12:40:00Z', now)).toBe('40 min left');
-    expect(trialLeft('2026-10-26T11:00:00Z', now)).toBeNull();
-  });
-
-  test('the migration starts everyone on a 48-hour trial the app cannot change', () => {
-    expect(SQL).toMatch(/subscription_status text not null default 'trial'/);
-    expect(SQL).toMatch(/check \(subscription_status in \('trial', 'active', 'expired'\)\)/);
-    expect(SQL).toMatch(/trial_start_date timestamptz not null default now\(\)/);
-    expect(SQL).toMatch(/interval '48 hours'/);
-    // The guard puts a new profile on a fresh trial and freezes both columns for non-admins.
-    expect(SQL).toMatch(/new\.subscription_status := 'trial';\s*new\.trial_start_date := now\(\);/);
-    expect(SQL).toMatch(/new\.subscription_status := old\.subscription_status;/);
-    expect(SQL).toMatch(/'has_access', admin or status = 'active' or status = 'trial'/);
+  test('every chat vibe, and Custom, is open to everyone', () => {
+    const vibes = require('../src/chat/vibes');
+    expect(vibes.isPremiumVibe).toBeUndefined();
+    expect(vibes.allowedVibe).toBeUndefined();
+    expect(vibes.FREE_VIBES).toBeUndefined();
   });
 });
 
@@ -112,13 +77,11 @@ describe('Hi-Fi audio', () => {
   const eq = require('../src/audio/eq');
   const EqualizerSheet = require('../src/components/radio/EqualizerSheet').default;
 
-  test('settings clamp to -1..1, and without Premium the sound stays flat', () => {
+  test('settings clamp to -1..1 and shape the sound for everyone', () => {
     eq.setSession(42);
-    eq.setAllowed(false);
     eq.setSettings({ bass: 3, treble: -0.5, spatial: true });
     expect(eq.getSettings()).toEqual({ bass: 1, treble: -0.5, loudness: 0, vocals: 0, spatial: true, boost: false, link: true });
-    expect(eqNative.apply).toHaveBeenLastCalledWith(42, eq.FLAT);
-    eq.setAllowed(true);
+    expect(eq.setAllowed).toBeUndefined();
     expect(eqNative.apply).toHaveBeenLastCalledWith(42, { bass: 1, treble: -0.5, loudness: 0, vocals: 0, spatial: true, boost: false, link: true });
     eq.setSettings(eq.PRESETS.find((p) => p.id === 'bass').settings);
     expect(eq.presetOf(eq.getSettings())).toBe('bass');
@@ -126,7 +89,6 @@ describe('Hi-Fi audio', () => {
 
   test('Bass Boost: a preset and a switch, reaching the native effects (BassBoost and LoudnessEnhancer)', () => {
     eq.setSession(42);
-    eq.setAllowed(true);
     eq.setSettings(eq.PRESETS.find((p) => p.id === 'boost').settings);
     expect(eq.presetOf(eq.getSettings())).toBe('boost');
     expect(eqNative.apply).toHaveBeenLastCalledWith(42, expect.objectContaining({ bass: 1, boost: true }));
@@ -138,16 +100,15 @@ describe('Hi-Fi audio', () => {
     eq.setSettings(eq.SIGNATURE);
   });
 
-  test('the old maximum is the new zero: everyone starts on BOA Signature, Flat is truly flat, and Premium-off sends Flat', () => {
+  test('the old maximum is the new zero: everyone starts on BOA Signature, and Flat is truly flat', () => {
     expect(eq.SIGNATURE).toEqual({ bass: 0, treble: 0, loudness: 0, vocals: 0, spatial: false, boost: false, link: true });
     expect(eq.FLAT).toEqual({ bass: -1, treble: -1, loudness: 0, vocals: 0, spatial: false, boost: false, link: true });
     expect(eq.PRESETS[0]).toEqual(expect.objectContaining({ id: 'signature', settings: eq.SIGNATURE }));
     expect(eq.PRESETS.find((p) => p.id === 'flat').settings).toBe(eq.FLAT);
     eq.setSession(42);
-    eq.setAllowed(false);
-    eq.setSettings(eq.SIGNATURE);
+    eq.setSettings(eq.FLAT);
     expect(eqNative.apply).toHaveBeenLastCalledWith(42, eq.FLAT);
-    eq.setAllowed(true);
+    eq.setSettings(eq.SIGNATURE);
     expect(eqNative.apply).toHaveBeenLastCalledWith(42, eq.SIGNATURE);
     expect(eq.presetOf(eq.getSettings())).toBe('signature');
   });
@@ -181,23 +142,10 @@ describe('Hi-Fi audio', () => {
     await AsyncStorage.clear();
   });
 
-  test('locked behind "Unlock with BOA Premium" without access', async () => {
-    hub.getPremiumAccess.mockResolvedValue({ status: 'expired', hasAccess: false, isAdmin: false, trialEndsAt: null });
-    await render(
-      <PremiumProvider>
-        <EqualizerSheet open onClose={() => {}} />
-      </PremiumProvider>,
-    );
-    expect(screen.getByTestId('eq-locked')).toBeOnTheScreen();
-    expect(screen.getByText('Unlock with BOA Premium')).toBeOnTheScreen();
-  });
-
-  test('open with Premium: no lock, and presets shape the sound', async () => {
+  test('open to everyone: no lock, and presets shape the sound', async () => {
     const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
     await render(
-      <PremiumProvider>
-        <EqualizerSheet open onClose={() => {}} />
-      </PremiumProvider>,
+        <EqualizerSheet open onClose={() => {}} />,
     );
     expect(screen.queryByTestId('eq-locked')).toBeNull();
     await user.press(screen.getByTestId('eq-preset-vocal'));
@@ -206,9 +154,7 @@ describe('Hi-Fi audio', () => {
 
   test('maxing the bass: the card lights gold, says PAST STOCK and reads +12 dB; Signature reads as such', async () => {
     await render(
-      <PremiumProvider>
-        <EqualizerSheet open onClose={() => {}} />
-      </PremiumProvider>,
+        <EqualizerSheet open onClose={() => {}} />,
     );
     await act(async () => eq.setSettings(eq.SIGNATURE));
     expect(screen.getByTestId('eq-bass-value')).toHaveTextContent('Signature');
@@ -261,11 +207,9 @@ describe('video calls', () => {
   }
   const mount = () =>
     render(
-      <PremiumProvider>
-        <CallProvider>
-          <Dial />
-        </CallProvider>
-      </PremiumProvider>,
+      <CallProvider>
+        <Dial />
+      </CallProvider>,
     );
 
   test('ringing out, answered, live controls, filters, then hanging up', async () => {
@@ -311,15 +255,13 @@ describe('video calls', () => {
     expect(screen.queryByTestId('call-screen')).toBeNull();
   });
 
-  test('without Premium, calling shows the paywall instead', async () => {
+  test('anyone can start a call: there is no plan to check', async () => {
     const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
-    hub.getPremiumAccess.mockResolvedValue({ status: 'expired', hasAccess: false, isAdmin: false, trialEndsAt: null });
     signal.send.mockClear();
     await mount();
     await user.press(screen.getByText('Call Kofi'));
-    expect(signal.send).not.toHaveBeenCalled();
-    expect(screen.getByTestId('premium-paywall')).toBeOnTheScreen();
-    expect(screen.getByText(PAYWALL_PITCH)).toBeOnTheScreen();
+    expect(signal.send).toHaveBeenCalledWith('user-kofi', 'ring', expect.anything());
+    expect(screen.queryByTestId('premium-paywall')).toBeNull();
   });
 });
 
@@ -369,71 +311,5 @@ describe('push notifications', () => {
     // One compact white glyph (the skyline O), never the whole wordmark squeezed into 24dp.
     expect(notif.icon).toBe('./assets/notification-small-icon.png');
     expect(fs.existsSync(path.join(__dirname, '../assets/notification-small-icon.png'))).toBe(true);
-  });
-});
-
-describe('the admin account skips every paywall', () => {
-  const { CallProvider, useCall } = require('../src/context/CallContext');
-  const EqualizerSheet = require('../src/components/radio/EqualizerSheet').default;
-  function Dial() {
-    const { startCall } = useCall();
-    return <Text onPress={() => startCall(KOFI)}>Call Kofi</Text>;
-  }
-  const mount = () =>
-    render(
-      <PremiumProvider>
-        <CallProvider>
-          <Dial />
-          <EqualizerSheet open onClose={() => {}} />
-        </CallProvider>
-      </PremiumProvider>,
-    );
-
-  beforeEach(() => {
-    // Trial long over, and even with the Premium migration not yet run:
-    // the database's admin check alone unlocks everything.
-    hub.getPremiumAccess.mockRejectedValue(new Error('function premium_access() does not exist'));
-    hub.amIAdmin.mockResolvedValue(true);
-    signal.send.mockClear();
-    return require('@react-native-async-storage/async-storage').clear();
-  });
-
-  test('Hi-Fi, video calls and beauty filters open straight away, with no paywall', async () => {
-    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
-    await mount();
-    expect(screen.queryByTestId('eq-locked')).toBeNull();
-    await user.press(screen.getByText('Call Kofi'));
-    expect(screen.queryByTestId('premium-paywall')).toBeNull();
-    expect(signal.send).toHaveBeenCalledWith('user-kofi', 'ring', expect.anything());
-    const { callId } = signal.send.mock.calls.at(-1)[2];
-    await act(async () => mockSignal('accept', { callId }));
-    await user.press(screen.getByTestId('call-filters-button'));
-    expect(screen.getByTestId('call-filters')).toBeOnTheScreen();
-    expect(screen.queryByTestId('premium-paywall')).toBeNull();
-  });
-
-  test('tapping before the database has answered waits for it instead of flashing the paywall', async () => {
-    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
-    let answer;
-    hub.amIAdmin.mockReturnValue(new Promise((r) => (answer = r)));
-    await mount();
-    expect(screen.queryByTestId('eq-locked')).toBeNull();
-    await user.press(screen.getByText('Call Kofi'));
-    expect(screen.queryByTestId('premium-paywall')).toBeNull();
-    expect(signal.send).not.toHaveBeenCalled();
-    await act(async () => answer(true));
-    expect(signal.send).toHaveBeenCalledWith('user-kofi', 'ring', expect.anything());
-    expect(screen.queryByTestId('premium-paywall')).toBeNull();
-  });
-
-  test('the same taps from a non-admin with an expired trial do show the paywall', async () => {
-    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
-    hub.amIAdmin.mockResolvedValue(false);
-    hub.getPremiumAccess.mockResolvedValue({ status: 'expired', hasAccess: false, isAdmin: false, trialEndsAt: null });
-    await mount();
-    expect(screen.getByTestId('eq-locked')).toBeOnTheScreen();
-    await user.press(screen.getByText('Call Kofi'));
-    expect(signal.send).not.toHaveBeenCalled();
-    expect(screen.getByTestId('premium-paywall')).toBeOnTheScreen();
   });
 });

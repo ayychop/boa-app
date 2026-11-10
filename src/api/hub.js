@@ -372,22 +372,6 @@ export async function listFeatured({ limit = 12, excludeId } = {}) {
  * Whether you're a BOA admin. The database decides (your confirmed sign-in
  * email is in its admin list); the app never holds that list.
  */
-/**
- * Your BOA Premium standing, from the database: { status: 'trial' |
- * 'active' | 'expired', hasAccess, isAdmin, trialEndsAt }. Admins always
- * have access. Signed out, or unreachable: no access.
- */
-export async function getPremiumAccess() {
-  const { data, error } = await need().rpc('premium_access');
-  if (error || !data) return { status: 'expired', hasAccess: false, isAdmin: false, trialEndsAt: null };
-  return {
-    status: data.status ?? 'expired',
-    hasAccess: data.has_access === true,
-    isAdmin: data.is_admin === true,
-    trialEndsAt: data.trial_ends_at ?? null,
-  };
-}
-
 export async function amIAdmin() {
   const { data, error } = await need().rpc('is_admin');
   if (error) return false;

@@ -368,22 +368,9 @@ export const CUSTOM_ID = 'custom';
 export const DEFAULT_CUSTOM_COLOR = '#2F7BFF';
 
 export const DEFAULT_VIBE = 'noir';
-/**
- * Where someone who has never picked a vibe starts: a Premium one, so a new
- * member's free trial opens on the full experience. If Premium isn't on,
- * allowedVibe shows Noir in its place.
- */
+/** Where someone who has never picked a vibe starts: the living turntable. */
 export const WELCOME_VIBE = 'turntable';
 
-/**
- * The vibes anyone can use; every other one, and Custom, is BOA Premium.
- * Premium vibes show with a lock in the picker, and a saved one falls back
- * to Noir (on this phone's screen only, the choice is kept) if Premium ends.
- */
-export const FREE_VIBES = ['noir', 'neon', 'minimalist', 'the-block'];
-export const isPremiumVibe = (id) => !FREE_VIBES.includes(id);
-/** The vibe to draw: yours, or Noir if it's a Premium one and Premium is locked. */
-export const allowedVibe = (vibe, unlocked) => (unlocked || !isPremiumVibe(vibe.id) ? vibe : VIBES[0]);
 export const vibeById = (id, customColor = DEFAULT_CUSTOM_COLOR) => (id === CUSTOM_ID ? customVibe(customColor) : (VIBES.find((v) => v.id === id) ?? VIBES[0]));
 
 /**

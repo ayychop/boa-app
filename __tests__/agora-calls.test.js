@@ -11,7 +11,6 @@ let mockHub;
 jest.mock('../src/context/HubContext', () => ({ useHub: () => mockHub }));
 jest.mock('../src/api/hub', () => ({
   ...jest.requireActual('../src/api/hub'),
-  getPremiumAccess: jest.fn(),
   amIAdmin: jest.fn(async () => false),
   startConversation: jest.fn(async () => 'conv-kofi'),
 }));
@@ -46,7 +45,6 @@ const hub = require('../src/api/hub');
 const signal = require('../src/calls/signaling');
 const { fetchToken } = require('../src/calls/token');
 const { __engine: engine, createAgoraRtcEngine } = require('react-native-agora');
-const { PremiumProvider } = require('../src/context/PremiumContext');
 const { CallProvider, useCall } = require('../src/context/CallContext');
 const { ENCODER, CAPTURE, DENOISER, LOW_LIGHT, HD, PREVIEW, STABILIZATION_OFF, AUDIO, AUDIO_PROCESSING, VIDEO_SCENARIO } = require('../src/calls/quality');
 const { createAudioPlayer } = require('expo-audio');
@@ -57,7 +55,6 @@ const KOFI = { id: 'user-kofi', username: 'kofi', display_name: 'Kofi Boateng', 
 
 beforeEach(() => {
   mockHub = { userId: 'user-me', profile: ME, isAdmin: false, blocked: new Set(), block: jest.fn(async () => {}) };
-  hub.getPremiumAccess.mockResolvedValue({ status: 'trial', hasAccess: true, isAdmin: false, trialEndsAt: new Date(Date.now() + 47 * 3600e3).toISOString() });
 });
 
 function Dial() {
@@ -74,23 +71,21 @@ const mount = () =>
     // The app has a gesture root at its root (App.js); mirror it so the
     // floating call window's drag gesture resolves in tests too.
     <GestureHandlerRootView>
-      <PremiumProvider>
         <CallProvider>
           <Dial />
         </CallProvider>
-      </PremiumProvider>
     </GestureHandlerRootView>,
   );
 const handler = () => engine.registerEventHandler.mock.calls.at(-1)[0];
 
 describe('HD in any light', () => {
-  test('1080p30 once live, quality first, never trading sharpness for frames', () => {
-    expect(HD).toEqual({ width: 1920, height: 1080, fps: 30 });
-    expect(ENCODER.dimensions).toEqual({ width: 1920, height: 1080 });
+  test('720p30 once live, motion first, never trading frames for sharpness', () => {
+    expect(HD).toEqual({ width: 1280, height: 720, fps: 30 });
+    expect(ENCODER.dimensions).toEqual({ width: 1280, height: 720 });
     expect(ENCODER.frameRate).toBe(30);
-    expect(ENCODER.bitrate).toBe(3150);
-    expect(ENCODER.degradationPreference).toBe(0); // MaintainQuality
-    expect(ENCODER.advanceOptions.compressionPreference).toBe(1); // PreferQuality
+    expect(ENCODER.bitrate).toBe(1800);
+    expect(ENCODER.degradationPreference).toBe(1); // MaintainFramerate
+    expect(ENCODER.advanceOptions.compressionPreference).toBe(0); // PreferLowLatency
     expect(CAPTURE.cameraDirection).toBe(1); // front
   });
 
@@ -108,8 +103,8 @@ describe('HD in any light', () => {
   });
 
   test('noise reduction and low light step in only when needed, so fine detail is kept, both high quality', () => {
-    expect(LOW_LIGHT).toEqual({ mode: 0, level: 0 }); // auto
-    expect(DENOISER).toEqual({ mode: 0, level: 0 }); // auto: a clean picture is left alone
+    expect(LOW_LIGHT).toEqual({ mode: 0, level: 1 }); // auto, fast: no extra frame of delay
+    expect(DENOISER).toEqual({ mode: 0, level: 1 }); // auto, fast: a clean picture is left alone
   });
 });
 
@@ -919,11 +914,9 @@ describe('the first call works first time', () => {
   }
   const mountPrimed = () =>
     render(
-      <PremiumProvider>
         <CallProvider>
           <Primed />
         </CallProvider>
-      </PremiumProvider>,
     );
 
   test('the token and engine are ready before the tap, the call uses them, and a missed call tears the engine down', async () => {
@@ -1128,11 +1121,9 @@ describe('opening a chat never starts the camera', () => {
     engine.initialize.mockClear();
     engine.startPreview.mockClear();
     await render(
-      <PremiumProvider>
         <CallProvider>
           <Primed />
         </CallProvider>
-      </PremiumProvider>,
     );
     await user.press(screen.getByText('Prime'));
     await act(async () => {});

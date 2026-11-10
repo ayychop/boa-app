@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useUser } from '../context/UserContext';
-import { usePremium } from '../context/PremiumContext';
 import { useHub } from '../context/HubContext';
 import { hypeStation, myRecentHype } from '../api/hype';
 import * as car from '../audio/car';
@@ -9,12 +8,10 @@ import { likeStation } from '../audio/liked';
 /**
  * The heart and the fire on the car's now playing screen. The heart is
  * your saved stations (which HubContext syncs to your favourites on the
- * Hub); saving is Premium, so the car only offers it to members. The fire
- * is Hype, once a station a day, for anyone signed in. Draws nothing.
+ * Hub). The fire is Hype, once a station a day, for anyone signed in. Draws nothing.
  */
 export default function CarActions() {
   const { isSaved, toggleSaved } = useUser();
-  const { hasPremium } = usePremium();
   const { userId } = useHub();
   // isSaved is new with every change to your saved stations, so the car's
   // heart follows a save or unsave made on the phone too.
@@ -26,7 +23,7 @@ export default function CarActions() {
     },
     [isSaved, toggleSaved],
   );
-  useEffect(() => (hasPremium ? car.attachFavourites({ isSaved, toggle }) : undefined), [hasPremium, isSaved, toggle]);
+  useEffect(() => car.attachFavourites({ isSaved, toggle }), [isSaved, toggle]);
 
   // The stations you've fired today, so the car's fire shows as done.
   const [fired, setFired] = useState(() => new Set());

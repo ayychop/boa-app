@@ -7,7 +7,6 @@ let mockHub;
 jest.mock('../src/context/HubContext', () => ({ useHub: () => mockHub }));
 jest.mock('../src/api/hub', () => ({
   ...jest.requireActual('../src/api/hub'),
-  getPremiumAccess: jest.fn(),
   amIAdmin: jest.fn(async () => false),
 }));
 jest.mock('../src/calls/signaling', () => ({
@@ -307,13 +306,11 @@ describe('the camera, with Banuba drawing the background', () => {
 describe('the Background sheet on the call screen', () => {
   const hub = require('../src/api/hub');
   const { __engine: engine } = require('react-native-agora');
-  const { PremiumProvider } = require('../src/context/PremiumContext');
   const { CallProvider, useCall } = require('../src/context/CallContext');
   const KOFI = { id: 'user-kofi', username: 'kofi', display_name: 'Kofi Boateng', avatar_url: null };
 
   beforeEach(() => {
     mockHub = { userId: 'user-me', profile: { id: 'user-me', username: 'ama', display_name: 'Ama' }, isAdmin: false, blocked: new Set(), block: jest.fn(async () => {}) };
-    hub.getPremiumAccess.mockResolvedValue({ status: 'trial', hasAccess: true, isAdmin: false, trialEndsAt: new Date(Date.now() + 47 * 3600e3).toISOString() });
   });
 
   function Dial() {
@@ -324,11 +321,9 @@ describe('the Background sheet on the call screen', () => {
   test('Blur opens the blur depths only: no backdrop tabs, no green screen; a depth goes to the camera, off turns it off', async () => {
     const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
     await render(
-      <PremiumProvider>
         <CallProvider>
           <Dial />
         </CallProvider>
-      </PremiumProvider>,
     );
     await user.press(screen.getByText('Call Kofi'));
     await act(async () => {});
@@ -357,11 +352,9 @@ describe('the Background sheet on the call screen', () => {
   test('the Blur button pressed many times in a row keeps working, and a crash falls back to the plain camera', async () => {
     const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
     await render(
-      <PremiumProvider>
         <CallProvider>
           <Dial />
         </CallProvider>
-      </PremiumProvider>,
     );
     await user.press(screen.getByText('Call Kofi'));
     await act(async () => {});
@@ -404,11 +397,9 @@ describe('the Background sheet on the call screen', () => {
   test('Filters and Enhance: a toggle in the studio panel; Enhance is one slider that goes to the camera', async () => {
     const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
     await render(
-      <PremiumProvider>
         <CallProvider>
           <Dial />
         </CallProvider>
-      </PremiumProvider>,
     );
     await user.press(screen.getByText('Call Kofi'));
     await act(async () => {});

@@ -508,7 +508,7 @@ function setFacing(next) {
   facingListeners.forEach((fn) => fn(next));
 }
 
-/** The live encoder for the phone's heat: 1080p30, stepping down to 720p30, 540p24 and 360p15 as it heats up. */
+/** The live encoder for the phone's heat: 720p30, stepping down to 540p24, 360p24 and 270p15 as it heats up. */
 function applyEncoder() {
   if (!engine || !session) return;
   const cfg = session.live ? encoderForThermal(thermal.current()) : PREVIEW;

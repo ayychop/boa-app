@@ -111,11 +111,10 @@ beforeEach(async () => {
 });
 
 // The palette in the thread header changes the vibe mid-chat (your profile has it too).
-test('a new member starts on Turntable (a Premium vibe, for the trial); without Premium it shows as Noir', () => {
-  const { WELCOME_VIBE, allowedVibe, vibeById, isPremiumVibe } = require('../src/chat/vibes');
+test('a new member starts on Turntable, and every vibe is theirs to pick', () => {
+  const { WELCOME_VIBE, vibeById } = require('../src/chat/vibes');
   expect(WELCOME_VIBE).toBe('turntable');
-  expect(isPremiumVibe(WELCOME_VIBE)).toBe(true);
-  expect(allowedVibe(vibeById(WELCOME_VIBE), false).id).toBe('noir');
+  expect(vibeById(WELCOME_VIBE).id).toBe('turntable');
 });
 
 test("the thread header's palette opens the vibe sheet, and a pick shows at once", async () => {

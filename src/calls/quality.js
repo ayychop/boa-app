@@ -1,30 +1,30 @@
-// How BOA video calls look and sound. Models and creatives take these
-// calls, so picture quality wins once the call is live: 1080p, a quality-first
-// encoder, and Agora's clear-vision pipeline on in every call so a dim
-// bedroom or a backlit window still looks good. While it rings the camera
-// starts small (PREVIEW) so it comes on almost at once, then steps up to
-// ENCODER when the call connects.
+// How BOA video calls look and sound. A call is a conversation, so motion
+// wins: 720p at 30 fps, an encoder that keeps the frame rate and the delay
+// low, and light, auto-only clean-up passes (every extra pass over each
+// frame adds delay, and 1080p with a quality-first encoder made movement
+// visibly lag). While it rings the camera starts small (PREVIEW) so it comes
+// on almost at once, then steps up to ENCODER when the call connects.
 //
 // Plain numbers (Agora's enum values, named beside each one) so this file
 // loads anywhere, tests included; src/calls/media.native.js hands them to
 // the engine.
 
-/** 1080p at 30 fps for the live call. */
-export const HD = Object.freeze({ width: 1920, height: 1080, fps: 30 });
+/** 720p at 30 fps for the live call: sharp on a phone, and light enough to keep every frame on time. */
+export const HD = Object.freeze({ width: 1280, height: 720, fps: 30 });
 
 /**
  * Heat steps. Pixels per second is what heats the camera, ISP and encoder
  * (the old 720p60 "cool" mode was 55M px/s against 1080p30's 62M: it barely
  * cooled anything, and a Flip 7's Exynos kept climbing, worst on a charger).
- * Each step now cuts the work hard:
- *   1080p30  62M px/s   NOMINAL
- *    720p30  28M px/s   FAIR     (the phone is getting warm, or charging hot)
- *    540p24  12M px/s   WARNING  (hot)
- *    360p15   3M px/s   CRITICAL (very hot: the call carries on, picture small)
+ * Each step cuts the work by more than half:
+ *   720p30  28M px/s   NOMINAL
+ *   540p24  12M px/s   FAIR     (the phone is getting warm, or charging hot)
+ *   360p24   6M px/s   WARNING  (hot)
+ *   270p15   2M px/s   CRITICAL (very hot: the call carries on, picture small)
  */
-export const WARM = Object.freeze({ width: 1280, height: 720, fps: 30 });
-export const COOL = Object.freeze({ width: 960, height: 540, fps: 24 });
-export const COLD = Object.freeze({ width: 640, height: 360, fps: 15 });
+export const WARM = Object.freeze({ width: 960, height: 540, fps: 24 });
+export const COOL = Object.freeze({ width: 640, height: 360, fps: 24 });
+export const COLD = Object.freeze({ width: 480, height: 270, fps: 15 });
 
 /** setVideoEncoderConfiguration while it rings: 360p at 15 fps opens the camera fast. */
 export const PREVIEW = Object.freeze({
@@ -42,14 +42,14 @@ export const PREVIEW = Object.freeze({
 export const ENCODER = Object.freeze({
   dimensions: { width: HD.width, height: HD.height },
   frameRate: HD.fps,
-  bitrate: 3150, // Kbps: Agora's figure for clean 1080p30
+  bitrate: 1800, // Kbps: plenty for clean 720p30 on a phone screen
   minBitrate: -1, // DEFAULT_MIN_BITRATE
   orientationMode: 0, // OrientationModeAdaptive: portrait phones send portrait video
-  // MaintainQuality: on a weak network keep the picture sharp and give up
-  // frames first. A slightly lower frame rate reads far better on a face
-  // than a soft, blocky one.
-  degradationPreference: 0,
-  advanceOptions: { compressionPreference: 1 }, // PreferQuality
+  // MaintainFramerate: on a weak network give up sharpness, never motion.
+  // A softer picture that moves reads far better in a conversation than a
+  // sharp one that stutters.
+  degradationPreference: 1,
+  advanceOptions: { compressionPreference: 0 }, // PreferLowLatency: the quickest encode
   // VideoMirrorModeDisabled: they see you the right way round (text on your
   // shirt reads), while your own preview is mirrored like a mirror
   // (LocalVideo's canvas).
@@ -70,12 +70,12 @@ const cooler = (size, bitrate) =>
     minBitrate: -1,
     orientationMode: 0,
     degradationPreference: 1, // MaintainFramerate
-    advanceOptions: { compressionPreference: 0 }, // PreferFrameRate: the lightest encode
+    advanceOptions: { compressionPreference: 0 }, // PreferLowLatency: the lightest encode
     mirrorMode: 2,
   });
-export const WARM_ENCODER = cooler(WARM, 1500); // FAIR
-export const COOL_ENCODER = cooler(COOL, 800); // WARNING
-export const COLD_ENCODER = cooler(COLD, 400); // CRITICAL
+export const WARM_ENCODER = cooler(WARM, 1000); // FAIR
+export const COOL_ENCODER = cooler(COOL, 550); // WARNING
+export const COLD_ENCODER = cooler(COLD, 280); // CRITICAL
 
 /** The live encoder for this thermal state: lighter at every step up in heat. */
 export function encoderForThermal(state) {
@@ -110,15 +110,14 @@ export const CAPTURE = Object.freeze({
 export const STABILIZATION_OFF = -1; // CameraStabilizationModeOff
 
 /**
- * Any light: high-quality noise reduction and low-light enhancement, both
- * in auto mode, so they only step in when the picture is actually noisy or
- * dark. Denoising every frame smeared fine detail (tattoos, hair, fabric)
- * in a well-lit room, so a clean picture is now left alone.
- * High-quality low light needs high-quality denoising alongside it (Agora's
- * rule), so the two are always set as a pair.
+ * Any light: noise reduction and low-light enhancement, both in auto mode
+ * so they only step in when the picture is actually noisy or dark, and both
+ * at the FAST level. The high-quality passes cost a frame or more of delay
+ * on every frame they run on; fast ones keep a dim room usable without the
+ * lag. A clean, well-lit picture is left alone either way.
  */
-export const DENOISER = Object.freeze({ mode: 0, level: 0 }); // VideoDenoiserAuto, VideoDenoiserLevelHighQuality
-export const LOW_LIGHT = Object.freeze({ mode: 0, level: 0 }); // LowLightEnhanceAuto, LowLightEnhanceLevelHighQuality
+export const DENOISER = Object.freeze({ mode: 0, level: 1 }); // VideoDenoiserAuto, VideoDenoiserLevelFast
+export const LOW_LIGHT = Object.freeze({ mode: 0, level: 1 }); // LowLightEnhanceAuto, LowLightEnhanceLevelFast
 
 /**
  * 48 kHz voice (AudioProfileMusicStandard) in the chatroom scenario: calls

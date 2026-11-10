@@ -108,8 +108,8 @@ test('switching soundscapes swaps the recording in the same looping player', asy
   expect(audio.__players).toHaveLength(1);
   expect(player.replace).toHaveBeenLastCalledWith({ uri: 'file:///cache/soundscapes/white-noise.mp3' });
   expect(player.loop).toBe(true);
-  // Each recording is downloaded once, however it was asked for.
-  expect(downloadsOf('432hz').map((c) => c[0])).toEqual([soundscapeById('432hz').uri]);
+  // The six frequencies are in the app: never downloaded. Other recordings are, once.
+  expect(downloadsOf('432hz')).toEqual([]);
   expect(downloadsOf('white-noise').map((c) => c[0])).toEqual([soundscapeById('white-noise').uri]);
 });
 
@@ -243,11 +243,53 @@ test('every recording and scene points at a real https file with a licence and a
     expect(item.source).toMatch(/^https:\/\//);
     expect(item.author).toBeTruthy();
   }
-  // BOA's own tones and noise: in the app, no download, BOA's licence.
-  const generated = SOUNDSCAPES.filter((s) => s.asset);
-  expect(generated).toHaveLength(9);
+  // BOA's own noise: in the app, no download, BOA's licence.
+  const generated = SOUNDSCAPES.filter((s) => s.asset && s.category !== 'frequencies');
+  expect(generated).toHaveLength(4);
   for (const s of generated) expect(s).toMatchObject({ author: 'BOA Networks', license: 'CC0 1.0', source: null });
+  // The six frequencies: recordings bundled in the app, credited to their artist under CC BY.
+  const frequencies = SOUNDSCAPES.filter((s) => s.category === 'frequencies');
+  expect(frequencies.map((s) => s.id)).toEqual(['432hz', '396hz', '417hz', '528hz', '639hz', '741hz']);
+  for (const s of frequencies) {
+    expect(s.asset).toBeTruthy();
+    expect(s).toMatchObject({ author: 'Megis', license: 'CC BY 3.0' });
+    expect(s.source).toMatch(/^https:\/\/www\.jamendo\.com\//);
+  }
   expect(new Set(SOUNDSCAPES.map((s) => s.id)).size).toBe(24);
   for (const s of scenes) expect(s.video.ios).toMatch(/^https:\/\/upload\.wikimedia\.org\/.+\.mov$/);
   expect(engine.fadeOut).toBeDefined();
+});
+
+test('the six frequency recordings are in the app, as frequency-1 to frequency-6, ready to loop', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const sleep = fs.readFileSync(path.join(__dirname, '../src/data/sleep.js'), 'utf8');
+  for (let n = 1; n <= 6; n++) {
+    const file = path.join(__dirname, `../assets/zen/frequency-${n}.mp3`);
+    expect(fs.existsSync(file)).toBe(true);
+    // Real audio, not a placeholder, and light enough to ship.
+    const { size } = fs.statSync(file);
+    expect(size).toBeGreaterThan(1_000_000);
+    expect(size).toBeLessThan(8_000_000);
+    expect(sleep).toContain(`require('../../assets/zen/frequency-${n}.mp3')`);
+  }
+  // MP3 (ID3 tag or an MPEG frame sync) at the start of each.
+  for (let n = 1; n <= 6; n++) {
+    const head = fs.readFileSync(path.join(__dirname, `../assets/zen/frequency-${n}.mp3`)).subarray(0, 3);
+    expect(head.toString('latin1') === 'ID3' || (head[0] === 0xff && (head[1] & 0xe0) === 0xe0)).toBe(true);
+  }
+});
+
+test('a bundled frequency is primed in a paused, looping player and plays at once, with no download', async () => {
+  const ambient = require('../src/audio/ambient');
+  const before = audio.__players.length;
+  ambient.prime('432hz');
+  const player = lastPlayer();
+  expect(player.loop).toBe(true);
+  expect(player.play).not.toHaveBeenCalled();
+  expect(audio.__players.length).toBeLessThanOrEqual(before + 1);
+  await ambient.play('432hz');
+  await advance(200);
+  expect(player.play).toHaveBeenCalled();
+  expect(downloadsOf('432hz')).toEqual([]);
 });

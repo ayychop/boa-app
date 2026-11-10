@@ -12,7 +12,7 @@ import { Avatar, Chip, Field, PageHeader, SettingRow, Toggle } from '../../compo
 import { Button, Slate } from '../../components/ui';
 import { haptics } from '../../utils/haptics';
 import { QUOTE_CATEGORIES } from '../../data/quotes';
-import { CHAT_SOUNDS } from '../../chat/sounds';
+import NotificationSoundSection from './NotificationSoundSection';
 import useChatVibe, { useProfileVibe } from '../../chat/vibes';
 import VibePicker from '../../components/chat/VibePicker';
 import { ringtoneById } from '../../calls/ringtone';
@@ -346,33 +346,9 @@ function HubSettingsScreenBody({ navigation }) {
                 testID="hub-disappearing"
               />
             </SettingRow>
-            {CHAT_SOUNDS.map((s, i) => (
-              <SettingRow
-                key={s.id}
-                icon={s.icon}
-                title={s.label}
-                detail={s.detail}
-                onPress={() => {
-                  haptics.selection();
-                  setChatSound?.(s.id);
-                }}
-                last={i === CHAT_SOUNDS.length - 1}
-              >
-                {chatSound === s.id ? (
-                  <Ionicons name="checkmark-circle" size={20} color={colors.gold} accessibilityLabel="Selected" testID={`chat-sound-${s.id}-selected`} />
-                ) : (
-                  <Ionicons name="play-circle-outline" size={20} color={colors.textFaint} />
-                )}
-              </SettingRow>
-            ))}
           </View>
-          <Text style={styles.credit}>
-            New message sound.{' '}
-            {CHAT_SOUNDS.filter((s) => s.source)
-              .map((s) => `${s.label}: ${s.license.toLowerCase()} recording via Wikimedia Commons`)
-              .join(' · ')}
-            . The rest are BOA originals.
-          </Text>
+
+          <NotificationSoundSection chatSound={chatSound} setChatSound={setChatSound} />
 
           {blockedPeople.length > 0 && (
             <>

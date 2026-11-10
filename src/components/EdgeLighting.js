@@ -5,6 +5,7 @@ import Svg, { Defs, LinearGradient as SvgGradient, Rect, Stop } from 'react-nati
 import Animated, { Easing, cancelAnimation, useAnimatedProps, useAnimatedStyle, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
 import useReducedMotion from '../hooks/useReducedMotion';
 import { onEdgePulse, triggerEdgeLighting, useEdgeLighting } from '../data/edgeLighting';
+import { getOpenThread } from '../chat/notifications';
 
 // Edge Lighting. A notification arrives while BOA is open and a band of gold
 // light runs once around the rim of the screen, with a soft glow along the
@@ -28,8 +29,10 @@ const CORNER = 38;
 // Notifications that aren't news: an alarm has its own screen. (A ringing call
 // pulses from the call itself, CallContext, so its push doesn't pulse twice.)
 const quiet = (n) => {
-  const type = n?.request?.content?.data?.type;
-  return type === 'call' || !!n?.request?.content?.data?.alarmId;
+  const data = n?.request?.content?.data ?? {};
+  // A message for the thread you're reading is already in front of you.
+  if (data.type === 'chat' && data.conversationId && data.conversationId === getOpenThread()) return true;
+  return data.type === 'call' || !!data.alarmId;
 };
 
 /** The rim of the screen as a path of length `perimeter`, inset by `inset`. */
@@ -144,9 +147,9 @@ export default function EdgeLighting() {
     travel.value = withTiming(1, { duration: EDGE_PULSE_MS, easing: ease });
   }, [calm, glow, travel, fade, done]);
 
-  // A notification arrives while the app is open (the in-app signals for
-  // messages, hearts and calls pulse on their own, so this is the backstop for
-  // anything else, and the throttle makes the two one pulse).
+  // Every notification that arrives while the app is open, push or local
+  // (the in-app signals for messages, hearts and calls pulse on their own
+  // too, and the throttle makes the two one pulse).
   useEffect(() => {
     const sub = Notifications.addNotificationReceivedListener((n) => {
       if (quiet(n)) return;

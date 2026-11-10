@@ -26,6 +26,7 @@ import useBottomSpace from '../hooks/useBottomSpace';
 import useLayout, { WIDE } from '../hooks/useLayout';
 import MiniPlayer, { useMiniPlayerShown, useMiniPlayerSpace } from '../components/MiniPlayer';
 import ZenButton from '../components/display/ZenButton';
+import ProfileShortcut from '../components/display/ProfileShortcut';
 import WeatherPill from '../components/weather/WeatherPill';
 import { openPage } from '../navigation/ref';
 import { colors, fonts, space, type } from '../theme';
@@ -100,6 +101,8 @@ function Hero({ production, width, height, bottomInset = 0, topInset = 0 }) {
             )}
           </View>
           <View style={{ alignItems: 'flex-end', gap: 6, flexShrink: 1 }}>
+            {/* One tap to your Profile, from the top right corner. */}
+            <ProfileShortcut />
             <ZenButton style={{ marginBottom: 6 }} />
             {/* Local weather; tap for the coming days. */}
             <WeatherPill onOpen={() => openPage('Forecast')} />

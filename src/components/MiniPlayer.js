@@ -1,6 +1,8 @@
 import { useEffect } from 'react';
+import { GestureDetector, usePanGesture } from 'react-native-gesture-handler';
+import { scheduleOnRN } from 'react-native-worklets';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import Animated, { FadeInDown, FadeInUp, FadeOutDown, FadeOutUp, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeInDown, FadeInUp, FadeOut, FadeOutDown, FadeOutUp, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import useReducedMotion from '../hooks/useReducedMotion';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -11,13 +13,12 @@ import { podcastById } from '../data/podcasts';
 import PodcastCover from './PodcastCover';
 import { describePlayback } from '../audio/status';
 import useNowPlaying from '../hooks/useNowPlaying';
-import { useHasPremium } from '../context/PremiumContext';
-import { GoldBadge } from './ui';
 import StationLogo from './StationLogo';
 import { SleepButton } from './SleepTimerMenu';
 import { useSleepRemaining } from '../context/SleepTimerContext';
 import useLayout from '../hooks/useLayout';
 import useActiveAudio from '../hooks/useActiveAudio';
+import { dismissMini, restoreMini, useMiniDismissed } from '../audio/miniDismiss';
 import * as ambient from '../audio/ambient';
 import { categoryOf, soundscapeById } from '../data/sleep';
 import { haptics } from '../utils/haptics';
@@ -52,9 +53,87 @@ function ProgressLine({ tint }) {
   );
 }
 
-/** Whether the mini player has anything to show (radio, podcast or Zen). */
+/** Whether the mini player has anything to show (radio, podcast or Zen) and hasn't been swiped away. */
 export function useMiniPlayerShown() {
-  return useActiveAudio().kind != null;
+  const dismissed = useMiniDismissed();
+  return useActiveAudio().kind != null && !dismissed;
+}
+
+// Swipe it away: a flick or a drag of this much, and the bar goes. Short of
+// that it springs back.
+const DISMISS_DISTANCE = 36;
+const DISMISS_VELOCITY = 650;
+
+/**
+ * Makes a pill swipe-to-dismiss. Dragging follows the finger (never against the
+ * way the bar docks: a bar at the bottom only goes down, one at the top
+ * only goes up, and on Home also down); letting go past the threshold slides
+ * it out and hides it. The audio is never touched. Taps still reach the
+ * buttons inside: the pan only claims a mostly vertical drag.
+ */
+function useSwipeAway(placement) {
+  const y = useSharedValue(0);
+  const top = placement === 'top';
+  const pan = usePanGesture({
+    // Mostly vertical only, so a horizontal slide or a plain tap isn't taken.
+    activeOffsetY: [-10, 10],
+    failOffsetX: [-24, 24],
+    onUpdate: (e) => {
+      'worklet';
+      // The bar follows the finger towards the way it leaves, and gives a little the other way.
+      const away = top ? Math.min(e.translationY, 24) : Math.max(e.translationY, -24);
+      y.value = away < 0 && !top ? away * 0.2 : away;
+    },
+    onDeactivate: (e) => {
+      'worklet';
+      const down = e.translationY > DISMISS_DISTANCE || e.velocityY > DISMISS_VELOCITY;
+      const up = e.translationY < -DISMISS_DISTANCE || e.velocityY < -DISMISS_VELOCITY;
+      if (down || (top && up)) {
+        y.value = withTiming(top && up ? -140 : 140, { duration: 160 }, (finished) => {
+          'worklet';
+          if (finished) scheduleOnRN(dismissMini);
+        });
+      } else {
+        y.value = withSpring(0, { damping: 18, stiffness: 220 });
+      }
+    },
+  });
+  // Brought back (or a new one shown): it starts in place.
+  const dismissed = useMiniDismissed();
+  useEffect(() => {
+    if (!dismissed) y.value = 0;
+  }, [dismissed, y]);
+  const style = useAnimatedStyle(() => ({ transform: [{ translateY: y.value }], opacity: 1 - Math.min(0.6, Math.abs(y.value) / 160) }));
+  return { pan, style };
+}
+
+/**
+ * The small floating music icon that stands in for a swiped-away bar. Tap it
+ * and the bar is back. Only there while something is playing and the bar is
+ * hidden; sits where the bar would, on the right, above the tab bar.
+ */
+export function MiniPlayerFab() {
+  const dismissed = useMiniDismissed();
+  const { kind } = useActiveAudio();
+  const m = useMetrics();
+  if (!dismissed || kind == null) return null;
+  return (
+    <Animated.View style={[styles.fabWrap, { marginBottom: m.margin }]} pointerEvents="box-none">
+      <Pressable
+        onPress={() => {
+          haptics.selection();
+          restoreMini();
+        }}
+        hitSlop={10}
+        accessibilityRole="button"
+        accessibilityLabel="Show the player"
+        testID="mini-player-fab"
+        style={({ pressed }) => [styles.fab, pressed && { transform: [{ scale: 0.92 }] }]}
+      >
+        <Ionicons name="musical-notes" size={20} color={colors.bg} />
+      </Pressable>
+    </Animated.View>
+  );
 }
 
 // The pill's frosted glass and hairline, shared by both kinds of pill.
@@ -77,6 +156,7 @@ function ZenPill({ zen, placement, maxWidth }) {
   const { openZen } = useZen();
   const sound = soundscapeById(zen.id);
   const kind = categoryOf(zen.id);
+  const swipe = useSwipeAway(placement);
   if (!sound || !kind) return null;
   const playing = zen.status === 'playing' || zen.status === 'loading';
   const toggle = () => {
@@ -92,7 +172,8 @@ function ZenPill({ zen, placement, maxWidth }) {
       pointerEvents="box-none"
       testID="mini-player-zen"
     >
-      <View style={[styles.shell, maxWidth && { maxWidth }]}>
+      <GestureDetector gesture={swipe.pan}>
+      <Animated.View style={[styles.shell, maxWidth && { maxWidth }, swipe.style]} testID="mini-player-swipe">
         <View style={[styles.pill, { height: m.height }]}>
           <Glass />
           <Pressable onPress={() => openZen()} accessibilityRole="button" accessibilityLabel={`Now playing: ${kind.label}, ${sound.label}. Open Zen`} style={styles.info}>
@@ -124,7 +205,8 @@ function ZenPill({ zen, placement, maxWidth }) {
             )}
           </Pressable>
         </View>
-      </View>
+      </Animated.View>
+      </GestureDetector>
     </Animated.View>
   );
 }
@@ -138,6 +220,9 @@ function ZenPill({ zen, placement, maxWidth }) {
  */
 export default function MiniPlayer(props) {
   const { kind, zen } = useActiveAudio();
+  const dismissed = useMiniDismissed();
+  // Swiped away: only the small music icon remains (MiniPlayerFab). The audio plays on.
+  if (dismissed) return null;
   if (kind === 'zen') return <ZenPill zen={zen} placement={props.placement ?? 'bottom'} maxWidth={props.maxWidth} />;
   if (kind === 'radio') return <RadioPill {...props} />;
   return null;
@@ -147,7 +232,6 @@ function RadioPill({ onOpenRadio, placement = 'bottom', maxWidth }) {
   const { current, status, trackTitle, isPlaying, toggle, retry } = usePlayer();
   const media = useMedia();
   const reduceMotion = useReducedMotion();
-  const isPremium = useHasPremium();
   const nowPlaying = useNowPlaying(current, current?.kind === 'radio');
   const m = useMetrics();
   const sleepLeft = useSleepRemaining();
@@ -165,6 +249,7 @@ function RadioPill({ onOpenRadio, placement = 'bottom', maxWidth }) {
     swell.value = withSequence(withSpring(1.045, { duration: 220, dampingRatio: 0.7 }), withSpring(1, { duration: 600, dampingRatio: 0.5 }));
   }, [started, current?.id, reduceMotion, swell, halo]);
 
+  const swipe = useSwipeAway(placement);
   const swellStyle = useAnimatedStyle(() => ({ transform: [{ scale: swell.value }] }));
   const haloStyle = useAnimatedStyle(() => ({ opacity: halo.value }));
 
@@ -182,7 +267,8 @@ function RadioPill({ onOpenRadio, placement = 'bottom', maxWidth }) {
       style={placement === 'top' ? styles.wrapTop : [styles.wrap, { marginBottom: m.margin }]}
       pointerEvents="box-none"
     >
-      <Animated.View style={[styles.shell, maxWidth && { maxWidth }, swellStyle]}>
+      <GestureDetector gesture={swipe.pan}>
+      <Animated.View style={[styles.shell, maxWidth && { maxWidth }, swipe.style, swellStyle]} testID="mini-player-swipe">
         <Animated.View pointerEvents="none" style={[styles.halo, haloStyle]} />
         <View style={[styles.pill, { height: m.height }]}>
           {/* Frosted glass: heavy blur, a faint tint, a top sheen, a hairline. */}
@@ -194,7 +280,6 @@ function RadioPill({ onOpenRadio, placement = 'bottom', maxWidth }) {
                 <Text style={[styles.title, { flexShrink: 1 }]} numberOfLines={1}>
                   {current.name}
                 </Text>
-                {isPremium && <GoldBadge label="HI FI" />}
               </View>
               <Text style={styles.subtitle} numberOfLines={1}>
                 {subtitle}
@@ -218,11 +303,25 @@ function RadioPill({ onOpenRadio, placement = 'bottom', maxWidth }) {
           {podcast && <ProgressLine tint={podcast.palette[0]} />}
         </View>
       </Animated.View>
+      </GestureDetector>
     </Animated.View>
   );
 }
 
+const FAB = 46;
+
 const styles = StyleSheet.create({
+  // The music icon that brings a swiped-away bar back: bottom right, above the tab bar.
+  fabWrap: { position: 'absolute', right: space.md, bottom: '100%', alignItems: 'flex-end' },
+  fab: {
+    width: FAB,
+    height: FAB,
+    borderRadius: FAB / 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.gold,
+    boxShadow: '0px 10px 24px rgba(0,0,0,0.5), 0px 0px 0px 1px rgba(255,255,255,0.18)',
+  },
   wrap: {
     position: 'absolute',
     left: space.md,

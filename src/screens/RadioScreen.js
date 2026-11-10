@@ -26,9 +26,8 @@ import EqualizerSheet from '../components/radio/EqualizerSheet';
 import { IconButton } from '../components/kit';
 import Reactions from '../components/Reactions';
 import { likeStation } from '../audio/liked';
-import { GoldBadge, PulseDot } from '../components/ui';
+import { PulseDot } from '../components/ui';
 import { genreForVibes, useUser } from '../context/UserContext';
-import { usePremium } from '../context/PremiumContext';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, fonts, radius, space } from '../theme';
 
@@ -62,8 +61,7 @@ function GenrePills({ selected, onSelect, style }) {
   );
 }
 
-// Save-to-library heart. Free listeners hit the paywall; for Premium it fills
-// in with a pop.
+// Save-to-library heart: fills in with a pop.
 function SaveHeart({ saved, onPress }) {
   const scale = useSharedValue(1);
   const style = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
@@ -87,7 +85,7 @@ function SaveHeart({ saved, onPress }) {
   );
 }
 
-function StationText({ station, track, status, meta, compact, saved, onSave, hifi }) {
+function StationText({ station, track, status, meta, compact, saved, onSave }) {
   const onAir = status === 'playing';
   return (
     <View style={styles.textBlock}>
@@ -114,7 +112,6 @@ function StationText({ station, track, status, meta, compact, saved, onSave, hif
           )}
         </Animated.View>
         <View style={styles.metaRow}>
-          {hifi && <GoldBadge label="HI FI" />}
           <Text style={styles.meta} numberOfLines={1}>
             {meta}
           </Text>
@@ -196,7 +193,6 @@ export default function RadioScreen({ route, navigation }) {
   const insets = useSafeAreaInsets();
   const player = usePlayer();
   const user = useUser();
-  const { requirePremium, hasPremium } = usePremium();
   const isFocused = useIsFocused();
   // Carousel position, shared with the parallax layers behind it.
   const scrollX = useSharedValue(0);
@@ -407,8 +403,7 @@ export default function RadioScreen({ route, navigation }) {
           <StationText
             station={active}
             saved={user.isSaved(active.id)}
-            hifi={hasPremium}
-            onSave={() => requirePremium(() => user.toggleSaved(active), 'Upgrade to BOA Premium to save your favourite stations.')}
+            onSave={() => user.toggleSaved(active)}
             track={trackFor(active)}
             status={statusFor(active)}
             meta={metaFor(active)}

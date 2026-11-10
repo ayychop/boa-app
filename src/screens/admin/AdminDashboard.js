@@ -82,7 +82,7 @@ function Action({ label, icon, onPress, tone = colors.text, testID }) {
 
 // ------------------------------------------------------------ the sections
 
-function TalentDirectory({ users, query, setQuery, onToggleStar, onTogglePremium, onDelete, myId }) {
+function TalentDirectory({ users, query, setQuery, onToggleStar, onDelete, myId }) {
   return (
     <>
       <Field value={query} onChangeText={setQuery} placeholder="Search by name or @username" autoCapitalize="none" testID="admin-search" />
@@ -109,12 +109,6 @@ function TalentDirectory({ users, query, setQuery, onToggleStar, onTogglePremium
           <View style={styles.toggleRow}>
             <Text style={styles.toggleLabel}>Badge as BOA Star</Text>
             <Toggle value={!!u.is_boa_star} onChange={(v) => onToggleStar(u, v)} label={`Badge ${nameOf(u)} as BOA Star`} testID={`admin-star-${u.username}`} />
-          </View>
-          <View style={styles.toggleRow}>
-            <Text style={styles.toggleLabel}>
-              BOA Premium <Text style={styles.mono}>{(u.subscription_status ?? 'trial').toUpperCase()}</Text>
-            </Text>
-            <Toggle value={u.subscription_status === 'active'} onChange={(v) => onTogglePremium(u, v)} label={`BOA Premium for ${nameOf(u)}`} testID={`admin-premium-${u.username}`} />
           </View>
           {u.id !== myId ? (
             <View style={styles.deleteRow}>
@@ -502,7 +496,6 @@ export default function AdminDashboard({ navigation }) {
             query={query}
             setQuery={setQuery}
             onToggleStar={(u, star) => run(() => admin.setBoaStar(u.id, star))}
-            onTogglePremium={(u, on) => run(() => admin.setSubscription(u.id, on ? 'active' : 'expired'))}
             myId={userId}
             onDelete={(u) =>
               Alert.alert(`Delete ${nameOf(u)}?`, 'This permanently deletes their account, profile, posts, messages, blocks and files. It cannot be undone.', [

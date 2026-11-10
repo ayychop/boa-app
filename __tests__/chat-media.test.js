@@ -241,8 +241,10 @@ describe('notifications', () => {
     } finally {
       Platform.OS = os;
     }
-    // One per sound, one per ringtone, and the quiet one for message requests.
-    expect(Notifications.setNotificationChannelAsync).toHaveBeenCalledTimes(CHAT_SOUNDS.length + RINGTONES.length + 1);
+    // One per sound, one per ringtone, the phone's own sound, your own clip's silent one, and the quiet one for message requests.
+    expect(Notifications.setNotificationChannelAsync).toHaveBeenCalledTimes(CHAT_SOUNDS.length + RINGTONES.length + 3);
+    expect(Notifications.setNotificationChannelAsync).toHaveBeenCalledWith('boa-chat-system', expect.objectContaining({ sound: 'default', importance: Notifications.AndroidImportance.HIGH }));
+    expect(Notifications.setNotificationChannelAsync).toHaveBeenCalledWith('boa-chat-custom', expect.objectContaining({ sound: null, enableVibrate: true }));
     expect(Notifications.setNotificationChannelAsync).toHaveBeenCalledWith(
       'boa-chat-requests',
       expect.objectContaining({ importance: Notifications.AndroidImportance.LOW, sound: null, enableVibrate: false }),

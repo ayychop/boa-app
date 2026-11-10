@@ -4,13 +4,14 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Edge Lighting: a pulse of BOA gold that runs around the edges of the
 // screen when something happens while the app is open: a call or video call
-// rings, a message arrives, someone hearts your post. Off until
-// the listener turns it on (Profile > Edge Lighting). The choice is kept on
-// the phone and shared across the app.
+// rings, a message arrives, someone hearts your post. On from the first
+// launch; it goes off only when the listener switches it off themselves
+// (Profile > Edge Lighting). The choice is kept on the phone and shared across
+// the app.
 
 const KEY = 'boa.edgeLighting.v1';
 
-let enabled = false;
+let enabled = true;
 let chosen = false;
 const subs = new Set();
 const pulses = new Set();

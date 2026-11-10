@@ -2,13 +2,11 @@ import { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import BoaSlider from '../BoaSlider';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import BottomSheet from '../BottomSheet';
 import { Toggle } from '../kit';
-import { Button, Slate } from '../ui';
+import { Slate } from '../ui';
 import * as eq from '../../audio/eq';
-import { usePremium } from '../../context/PremiumContext';
 import { haptics } from '../../utils/haptics';
 import { colors, fonts, radius, space, type } from '../../theme';
 
@@ -56,7 +54,7 @@ function useEq() {
  * let go through onCommit. A change from elsewhere (a preset, a saved value)
  * moves it too, unless you're holding it.
  */
-function Band({ label, kind, value, onPreview, onCommit, locked, testID, minimum = -1, scale = ['FLAT', 'BOA SIGNATURE', 'MAX'], tag = 'PAST STOCK', format = readout }) {
+function Band({ label, kind, value, onPreview, onCommit, testID, minimum = -1, scale = ['FLAT', 'BOA SIGNATURE', 'MAX'], tag = 'PAST STOCK', format = readout }) {
   const [shown, setShown] = useState(value);
   const dragging = useRef(false);
   const last = useRef(0);
@@ -104,7 +102,6 @@ function Band({ label, kind, value, onPreview, onCommit, locked, testID, minimum
         maximumValue={1}
         step={1 / STEPS}
         value={shown}
-        disabled={locked}
         onValueChange={move}
         onSlidingComplete={done}
         minimumTrackTintColor={colors.gold}
@@ -123,17 +120,9 @@ function Band({ label, kind, value, onPreview, onCommit, locked, testID, minimum
   );
 }
 
-/**
- * BOA Hi Fi: bass, treble and spatial sound for the radio, with one-tap
- * presets. BOA Premium (or the trial); everyone else sees it locked behind
- * "Unlock with BOA Premium".
- */
+/** BOA Hi Fi: bass, treble and spatial sound for the radio, with one-tap presets. Free for everyone. */
 export default function EqualizerSheet({ open, onClose }) {
-  const { hasPremium, checked, requirePremium } = usePremium();
   const { settings, active, supported, route } = useEq();
-  // Never shown locked while the answer is still coming (an admin opening
-  // the app straight onto Radio would otherwise see it flash).
-  const locked = checked && !hasPremium;
   const preset = eq.presetOf(settings);
 
   return (
@@ -145,13 +134,13 @@ export default function EqualizerSheet({ open, onClose }) {
             <Slate dot>BOA Hi Fi</Slate>
             <Text style={[type.title, { marginTop: space.xs }]}>Sound</Text>
           </View>
-          {hasPremium && supported && settings.link && ROUTES[route] ? (
+          {supported && settings.link && ROUTES[route] ? (
             <View style={[styles.live, styles.route]} testID="eq-route">
               <Ionicons name={ROUTE_ICONS[route] ?? 'bluetooth'} size={11} color={colors.gold} />
               <Text style={[styles.liveText, { color: colors.gold }]}>{ROUTES[route]} BOOST</Text>
             </View>
           ) : null}
-          {hasPremium && supported ? (
+          {supported ? (
             <View style={[styles.live, !active && { opacity: 0.5 }]} testID="eq-live">
               <View style={[styles.liveDot, { backgroundColor: active ? colors.live : colors.textFaint }]} />
               <Text style={styles.liveText}>{active ? 'SHAPING' : 'FLAT'}</Text>
@@ -167,14 +156,13 @@ export default function EqualizerSheet({ open, onClose }) {
                 <Pressable
                   hitSlop={6}
                   key={p.id}
-                  disabled={locked}
                   onPress={() => {
                     haptics.selection();
                     // A preset shapes the sound; the Bluetooth switch is its own choice.
                     eq.setSettings({ ...p.settings, link: settings.link });
                   }}
                   accessibilityRole="radio"
-                  accessibilityState={{ checked: on, disabled: locked }}
+                  accessibilityState={{ checked: on }}
                   testID={`eq-preset-${p.id}`}
                   style={[styles.preset, on && styles.presetOn]}
                 >
@@ -184,8 +172,8 @@ export default function EqualizerSheet({ open, onClose }) {
             })}
           </View>
 
-          <Band label="Bass" kind="bass" value={settings.bass} onPreview={(v) => eq.preview({ bass: v })} onCommit={(v) => eq.setSettings({ bass: v })} locked={locked} testID="eq-bass" />
-          <Band label="Treble" kind="treble" value={settings.treble} onPreview={(v) => eq.preview({ treble: v })} onCommit={(v) => eq.setSettings({ treble: v })} locked={locked} testID="eq-treble" />
+          <Band label="Bass" kind="bass" value={settings.bass} onPreview={(v) => eq.preview({ bass: v })} onCommit={(v) => eq.setSettings({ bass: v })} testID="eq-bass" />
+          <Band label="Treble" kind="treble" value={settings.treble} onPreview={(v) => eq.preview({ treble: v })} onCommit={(v) => eq.setSettings({ treble: v })} testID="eq-treble" />
 
           <Band
             label="Loudness"
@@ -197,7 +185,7 @@ export default function EqualizerSheet({ open, onClose }) {
             format={boostReadout}
             onPreview={(v) => eq.preview({ loudness: v })}
             onCommit={(v) => eq.setSettings({ loudness: v })}
-            locked={locked}
+           
             testID="eq-loudness"
           />
           <Band
@@ -210,7 +198,7 @@ export default function EqualizerSheet({ open, onClose }) {
             format={boostReadout}
             onPreview={(v) => eq.preview({ vocals: v })}
             onCommit={(v) => eq.setSettings({ vocals: v })}
-            locked={locked}
+           
             testID="eq-vocals"
           />
 
@@ -222,7 +210,7 @@ export default function EqualizerSheet({ open, onClose }) {
               <Text style={styles.bandLabel}>Spatial Audio</Text>
               <Text style={styles.note}>Wider stereo, best on headphones</Text>
             </View>
-            <Toggle value={settings.spatial} onChange={(v) => !locked && eq.setSettings({ spatial: v })} label="Spatial Audio" testID="eq-spatial" />
+            <Toggle value={settings.spatial} onChange={(v) => eq.setSettings({ spatial: v })} label="Spatial Audio" testID="eq-spatial" />
           </View>
 
           <View style={styles.spatial}>
@@ -233,7 +221,7 @@ export default function EqualizerSheet({ open, onClose }) {
               <Text style={styles.bandLabel}>Bass Boost</Text>
               <Text style={styles.note}>The lows pushed past stock and an 18 dB louder ceiling. Mind your ears.</Text>
             </View>
-            <Toggle value={!!settings.boost} onChange={(v) => !locked && eq.setSettings({ boost: v })} label="Bass Boost" testID="eq-boost" />
+            <Toggle value={!!settings.boost} onChange={(v) => eq.setSettings({ boost: v })} label="Bass Boost" testID="eq-boost" />
           </View>
 
           <View style={styles.spatial}>
@@ -244,29 +232,8 @@ export default function EqualizerSheet({ open, onClose }) {
               <Text style={styles.bandLabel}>Bluetooth & Car Boost</Text>
               <Text style={styles.note}>Connect to Bluetooth, speakers or a car and the loudness, bass and surround go to the maximum. Mind your ears.</Text>
             </View>
-            <Toggle value={settings.link} onChange={(v) => !locked && eq.setSettings({ link: v })} label="Bluetooth and Car Boost" testID="eq-link" />
+            <Toggle value={settings.link} onChange={(v) => eq.setSettings({ link: v })} label="Bluetooth and Car Boost" testID="eq-link" />
           </View>
-
-          {locked ? (
-            <View style={StyleSheet.absoluteFill} testID="eq-locked">
-              <BlurView intensity={18} tint="dark" blurMethod="dimezisBlurView" style={StyleSheet.absoluteFill} />
-              <View style={styles.lockVeil}>
-                <View style={styles.lockIcon}>
-                  <Ionicons name="lock-closed" size={20} color={colors.bg} />
-                </View>
-                <Button
-                  label="Unlock with BOA Premium"
-                  icon="diamond"
-                  onPress={() => {
-                    onClose();
-                    requirePremium(() => {}, 'Hi Fi sound is part of BOA Premium.');
-                  }}
-                  style={{ marginTop: space.md }}
-                  testID="eq-unlock"
-                />
-              </View>
-            </View>
-          ) : null}
         </View>
 
         {!supported ? <Text style={[styles.note, { marginTop: space.lg, textAlign: 'center' }]}>Your settings are saved; they shape the sound in the BOA app on Android.</Text> : null}
@@ -329,6 +296,4 @@ const styles = StyleSheet.create({
   },
   spatialIcon: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.goldSoft },
   note: { fontFamily: fonts.medium, fontSize: 12, color: colors.textMuted, marginTop: 2 },
-  lockVeil: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(5,5,6,0.45)', borderRadius: radius.lg },
-  lockIcon: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.gold, boxShadow: '0px 8px 24px rgba(226,168,75,0.45)' },
 });

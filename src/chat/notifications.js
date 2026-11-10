@@ -2,7 +2,8 @@ import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
-import { CHAT_SOUNDS, DEFAULT_CHAT_SOUND, RETIRED_CHAT_SOUNDS, chatChannel, chatSoundById } from './sounds';
+import { CHAT_SOUNDS, CUSTOM_CHANNEL, DEFAULT_CHAT_SOUND, RETIRED_CHAT_SOUNDS, SYSTEM_CHANNEL, chatChannel, chatSoundById } from './sounds';
+import { customSound, notificationPlan, playCustomSound, setBoaSoundId, soundMode } from './soundPrefs';
 import { RINGTONES } from '../calls/ringtone';
 import { GIF_TAG, previewText } from './gifs';
 
@@ -38,6 +39,7 @@ export async function getChatSound() {
 }
 
 export async function saveChatSound(id) {
+  setBoaSoundId(id);
   await AsyncStorage.setItem(SOUND_KEY, chatSoundById(id).id).catch(() => {});
 }
 
@@ -57,6 +59,23 @@ export async function ensureChatChannels() {
       }).catch(() => null),
     ),
   );
+  // The phone's own sound, and the quiet channel for your own clip (the app plays that one).
+  await Notifications.setNotificationChannelAsync(SYSTEM_CHANNEL, {
+    name: 'Messages: phone default',
+    importance: Notifications.AndroidImportance.HIGH,
+    sound: 'default',
+    vibrationPattern: CHAT_VIBRATION,
+    enableVibrate: true,
+    lockscreenVisibility: Notifications.AndroidNotificationVisibility.PRIVATE,
+  }).catch(() => null);
+  await Notifications.setNotificationChannelAsync(CUSTOM_CHANNEL, {
+    name: 'Messages: your own sound',
+    importance: Notifications.AndroidImportance.HIGH,
+    sound: null,
+    vibrationPattern: CHAT_VIBRATION,
+    enableVibrate: true,
+    lockscreenVisibility: Notifications.AndroidNotificationVisibility.PRIVATE,
+  }).catch(() => null);
   // Message requests: in the shade, never a sound, a buzz or a popup.
   await Notifications.setNotificationChannelAsync(REQUESTS_CHANNEL, {
     name: 'Message requests',
@@ -115,7 +134,11 @@ export function installChatHandler() {
       const keep = data.type === 'chat' || data.type === 'heart' || data.type === 'missed-call' || data.type === 'call-reminder';
       // A message request never pops or plays a sound; it waits in the shade and in Requests.
       const pop = keep && !data.request && !(data.type === 'chat' && data.conversationId === openThread);
-      return { shouldShowBanner: pop, shouldShowList: keep, shouldPlaySound: pop, shouldSetBadge: false };
+      // Your own clip: the app plays it (the notification itself stays silent),
+      // for pushes that arrive here; the ones the app posted played it already.
+      const own = soundMode() === 'custom' && !!customSound();
+      if (pop && own && !data.own) playCustomSound();
+      return { shouldShowBanner: pop, shouldShowList: keep, shouldPlaySound: pop && !own, shouldSetBadge: false };
     },
   });
 }
@@ -153,31 +176,31 @@ installChatHandler();
 /** Rings for a message now (the app is open or in the background). */
 export async function notifyLocal({ title, body, conversationId, messageId, sound }) {
   if (conversationId === openThread) return null;
-  const tone = chatSoundById(sound);
-  return Notifications.scheduleNotificationAsync({
-    content: {
-      title,
-      body,
-      sound: tone.file,
-      vibrate: CHAT_VIBRATION,
-      data: { type: 'chat', conversationId, messageId },
-    },
-    trigger: Platform.OS === 'android' ? { channelId: chatChannel(tone.id) } : null,
+  const plan = notificationPlan(sound);
+  return post(plan, { title, body, vibrate: CHAT_VIBRATION, data: { type: 'chat', conversationId, messageId } });
+}
+
+/**
+ * Posts a notification the way the listener's sound choice says (their own
+ * clip, the phone's sound or a BOA one), and plays their clip if that's the one.
+ */
+async function post(plan, content) {
+  const id = await Notifications.scheduleNotificationAsync({
+    content: { ...content, sound: plan.file, data: { ...content.data, own: plan.own } },
+    trigger: Platform.OS === 'android' ? { channelId: plan.channelId } : null,
   }).catch(() => null);
+  if (id && plan.own) playCustomSound();
+  return id;
+}
+
+/** Posts a short notification in the sound you've chosen, so you can hear it (Settings). */
+export function previewNotificationSound() {
+  return post(notificationPlan(), { title: 'BOA HUB', body: 'This is how your notifications sound.', data: { type: 'preview' } });
 }
 
 /** "❤️ Kofi loved your photo": tapping it opens their profile. */
 export async function notifyHeart({ name, what = 'post', likerId, sound }) {
-  const tone = chatSoundById(sound);
-  return Notifications.scheduleNotificationAsync({
-    content: {
-      title: `❤️ ${name}`,
-      body: `loved your ${what}`,
-      sound: tone.file,
-      data: { type: 'heart', likerId },
-    },
-    trigger: Platform.OS === 'android' ? { channelId: chatChannel(tone.id) } : null,
-  }).catch(() => null);
+  return post(notificationPlan(sound), { title: `❤️ ${name}`, body: `loved your ${what}`, data: { type: 'heart', likerId } });
 }
 
 /** What a message says in a notification. */
@@ -199,14 +222,5 @@ export function previewOf(message) {
 
 /** "Missed video call": left in the shade when a call that rang here wasn't answered. */
 export async function notifyMissedCall({ name, peerId, sound }) {
-  const tone = chatSoundById(sound);
-  return Notifications.scheduleNotificationAsync({
-    content: {
-      title: name,
-      body: 'Missed video call',
-      sound: tone.file,
-      data: { type: 'missed-call', peerId },
-    },
-    trigger: Platform.OS === 'android' ? { channelId: chatChannel(tone.id) } : null,
-  }).catch(() => null);
+  return post(notificationPlan(sound), { title: name, body: 'Missed video call', data: { type: 'missed-call', peerId } });
 }

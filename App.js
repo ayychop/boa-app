@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import * as Linking from 'expo-linking';
 import { StatusBar } from 'expo-status-bar';
 import { Alert, Platform, StyleSheet, Text, View } from 'react-native';
@@ -11,6 +11,8 @@ import Animated, { cancelAnimation, Easing, FadeIn, useAnimatedStyle, useSharedV
 import useReducedMotion, { useCalm } from './src/hooks/useReducedMotion';
 import TabGlyph, { TabGlow, TabOrb } from './src/components/TabGlyph';
 import EdgeLighting from './src/components/EdgeLighting';
+import * as ambientAudio from './src/audio/ambient';
+import { whenIdle } from './src/utils/idle';
 import ScheduledCallSync from './src/components/ScheduledCallSync';
 import { openScheduledCall } from './src/calls/openRoom';
 import { parseRoomLink } from './src/calls/schedule';
@@ -28,7 +30,6 @@ import { PlayerProvider } from './src/context/PlayerContext';
 import { MediaProvider } from './src/context/MediaContext';
 import { FormsProvider } from './src/context/FormsContext';
 import { UserProvider, useUser } from './src/context/UserContext';
-import { PremiumProvider } from './src/context/PremiumContext';
 import CarActions from './src/components/CarActions';
 import { SleepTimerProvider } from './src/context/SleepTimerContext';
 import { ZenProvider, useZen } from './src/context/ZenContext';
@@ -45,7 +46,7 @@ import { loadNavState, saveNavState } from './src/navigation/persist';
 import { completeAuthLink, profileIdByUsername } from './src/api/hub';
 import OnboardingScreen from './src/screens/OnboardingScreen';
 import Intro from './src/components/Intro';
-import MiniPlayer from './src/components/MiniPlayer';
+import MiniPlayer, { MiniPlayerFab } from './src/components/MiniPlayer';
 import RecordArtwork from './src/components/RecordArtwork';
 import FirstRun from './src/components/FirstRun';
 import HomeScreen from './src/screens/HomeScreen';
@@ -110,6 +111,10 @@ const TAB_TITLES = { Originals: 'BOA Originals' };
 // easeOutExpo: nearly all of the movement happens in the first third, so the
 // new tab is readable almost at once and then just settles.
 const EASE_OUT_EXPO = Easing.bezier(0.16, 1, 0.3, 1);
+// A tab you're not on rests at this opacity, so the next one is already half
+// there when you tap it; it settles over TAB_SETTLE_MS.
+export const TAB_REST = 0.4;
+export const TAB_SETTLE_MS = 170;
 
 // Tabs are switched constantly, so this stays small: a short fade, and
 // opacity only, so a tab's buttons are where they'll stay from the first
@@ -121,9 +126,11 @@ function TabTransition({ children }) {
   const reduceMotion = useReducedMotion();
   const progress = useSharedValue(focused ? 1 : 0);
 
+  // The tab is on screen from the first frame (it never starts invisible)
+  // and settles in a fraction of a second, so a switch feels instant.
   useEffect(() => {
-    if (!focused) progress.value = 0;
-    else progress.value = withTiming(1, { duration: reduceMotion ? 180 : 340, easing: EASE_OUT_EXPO });
+    if (!focused) progress.value = TAB_REST;
+    else progress.value = withTiming(1, { duration: reduceMotion ? 120 : TAB_SETTLE_MS, easing: EASE_OUT_EXPO });
   }, [focused, reduceMotion, progress]);
 
   // The tab settles in: it fades up from a touch lower and a hair smaller.
@@ -131,7 +138,7 @@ function TabTransition({ children }) {
   const style = useAnimatedStyle(() => ({
     flex: 1,
     opacity: progress.value,
-    transform: reduceMotion ? [] : [{ translateY: (1 - progress.value) * 10 }, { scale: 0.985 + progress.value * 0.015 }],
+    transform: reduceMotion ? [] : [{ translateY: (1 - progress.value) * 6 }, { scale: 0.99 + progress.value * 0.01 }],
   }));
 
   return <Animated.View style={[style, { paddingHorizontal: side }]}>{children}</Animated.View>;
@@ -238,6 +245,9 @@ const withTransition = (Screen) =>
     );
   };
 
+// Built ahead of the first visit (FloatingTabBar), most used first.
+const PRELOAD_TABS = ['Radio', 'Chat', 'Originals', 'Talent', 'Profile'];
+
 const Home = withTransition(HomeScreen);
 const Radio = withTransition(RadioScreen);
 const Zen = withTransition(ZenScreen);
@@ -251,6 +261,40 @@ const Chat = withTransition(ChatScreen);
 function FloatingTabBar(props) {
   const { ambient } = useZen();
   const route = props.state.routes[props.state.index]?.name;
+  // Hooks first: the Zen screensaver below returns early.
+  // Once the app has settled, the other tabs are built one at a time in the
+  // background (never while something is moving), so the first visit to each
+  // is a switch, not a build. Zen stays out: its room only runs while you're there.
+  // The navigation prop is a new object on most renders, so it's read through a
+  // ref: this runs once, never again however often the bar re-renders.
+  const navigationRef = useRef(props.navigation);
+  navigationRef.current = props.navigation;
+  const routeRef = useRef(route);
+  routeRef.current = route;
+  useEffect(() => {
+    let alive = true;
+    const timers = [];
+    let cancel = whenIdle(() => {
+      PRELOAD_TABS.forEach((name, i) => {
+        timers.push(
+          setTimeout(() => {
+            if (!alive) return;
+            // Never over Zen's room; the others are built one at a time, each in a quiet moment, never while something is moving.
+            cancel = whenIdle(() => {
+              try {
+                if (routeRef.current !== 'Zen') navigationRef.current.preload?.(name);
+              } catch {}
+            });
+          }, 2500 + i * 1200),
+        );
+      });
+    });
+    return () => {
+      alive = false;
+      cancel?.();
+      timers.forEach(clearTimeout);
+    };
+  }, []);
   // The Zen screensaver is the whole screen: no tab bar, no mini player.
   if (route === 'Zen' && ambient) return null;
   // Home docks the mini player at its top instead, clear of its content;
@@ -259,6 +303,8 @@ function FloatingTabBar(props) {
   return (
     <View style={styles.tabBarWrap} pointerEvents="box-none">
       {showMini && <MiniPlayer onOpenRadio={() => props.navigation.navigate('Radio')} />}
+      {/* A swiped-away bar leaves this small music icon to bring it back (not on Zen, which has its own controls). */}
+      {route !== 'Zen' && <MiniPlayerFab />}
       <BottomTabBar {...props} />
     </View>
   );
@@ -454,7 +500,7 @@ function DeepLinks({ navReady }) {
 // Pages push in like iOS on every phone: the new page slides over while the
 // one under it eases back a little and dims (Android's own slide is flat).
 // Native, so it stays smooth however busy JS is.
-const PAGE_OPTIONS = { headerShown: false, animation: 'ios_from_right', contentStyle: { backgroundColor: colors.bg } };
+const PAGE_OPTIONS = { headerShown: false, animation: 'ios_from_right', animationDuration: 240, contentStyle: { backgroundColor: colors.bg } };
 // A photo or reel rises into view, the way media opens in a gallery.
 const MEDIA_OPTIONS = { animation: 'fade_from_bottom' };
 
@@ -615,6 +661,18 @@ function Root() {
   // so the stored profile loads while the boot loader plays.
   const [booted, setBooted] = useState(false);
   const finishBoot = useCallback(() => setBooted(true), []);
+  // Zen's recordings download in the background once the app has settled,
+  // on Wi-Fi only, so the first tap on any sound plays at once.
+  useEffect(() => {
+    let timer;
+    const cancel = whenIdle(() => {
+      timer = setTimeout(() => ambientAudio.warmOnWifi(), 6000);
+    });
+    return () => {
+      cancel();
+      clearTimeout(timer);
+    };
+  }, []);
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.bg }}>
       <SafeAreaProvider>
@@ -628,21 +686,19 @@ function Root() {
                       <WeatherProvider>
                         <AlarmProvider>
                           <HubProvider>
-                            <PremiumProvider>
-                              <CarActions />
-                              <CallWakeUpPrompt />
-                              <CallProvider>
-                                <FormsProvider>{booted ? <Gate /> : <Intro onDone={finishBoot} />}</FormsProvider>
-                              {/* Edge Lighting, over everything (Profile > Edge Lighting). */}
-                              <EdgeLighting />
-                              {/* "Offline Mode": the pill with no internet, and the switch to downloads. */}
-                              <OfflineMode />
-                              {/* Reminders for your scheduled calls, and what a tapped reminder opens. */}
-                              <ScheduledCallSync />
-                              {/* The Terms agreement before posting or messaging, and "Content Violates Guidelines". */}
-                              <SafetyHost />
-                              </CallProvider>
-                            </PremiumProvider>
+                            <CarActions />
+                            <CallWakeUpPrompt />
+                            <CallProvider>
+                              <FormsProvider>{booted ? <Gate /> : <Intro onDone={finishBoot} />}</FormsProvider>
+                            {/* Edge Lighting, over everything (Profile > Edge Lighting). */}
+                            <EdgeLighting />
+                            {/* "Offline Mode": the pill with no internet, and the switch to downloads. */}
+                            <OfflineMode />
+                            {/* Reminders for your scheduled calls, and what a tapped reminder opens. */}
+                            <ScheduledCallSync />
+                            {/* The Terms agreement before posting or messaging, and "Content Violates Guidelines". */}
+                            <SafetyHost />
+                            </CallProvider>
                           </HubProvider>
                         </AlarmProvider>
                       </WeatherProvider>

@@ -1,7 +1,6 @@
 import { StyleSheet, View } from 'react-native';
 import Text from '../ScopedText';
-import { isPremiumVibe, useProfileVibe } from '../../chat/vibes';
-import { usePremiumMaybe } from '../../context/PremiumContext';
+import { useProfileVibe } from '../../chat/vibes';
 import BottomSheet from '../BottomSheet';
 import VibePicker from './VibePicker';
 import { colors, fonts, space, type } from '../../theme';
@@ -14,19 +13,14 @@ import { colors, fonts, space, type } from '../../theme';
  */
 export default function ProfileVibeSheet({ open, onClose }) {
   const { vibe, setVibe, customColor, setCustomColor } = useProfileVibe();
-  // Premium vibes and Custom: members only. Outside the Premium provider, and
-  // until it has answered, nothing is locked.
-  const premium = usePremiumMaybe();
-  const locked = !!premium && premium.checked && !premium.hasPremium;
-  const gate = (id, apply) => (locked && isPremiumVibe(id) ? premium.requirePremium(apply, 'Living profile vibes and your own colour are part of BOA Premium.') : apply());
-  const pickVibe = (id) => gate(id, () => setVibe(id));
-  const pickCustom = (hex) => gate('custom', () => setCustomColor(hex));
+  const pickVibe = (id) => setVibe(id);
+  const pickCustom = (hex) => setCustomColor(hex);
   return (
     <BottomSheet open={open} onClose={onClose} dragAnywhere={false}>
       <View style={styles.sheet} testID="profile-vibe-sheet">
         <Text style={styles.kicker}>Profile vibe</Text>
         <Text style={[type.bodyMuted, { marginBottom: space.lg }]}>The colours of your profile header. Separate from your chat vibe, and the BOA wordmark never changes.</Text>
-        <VibePicker value={vibe.id} onChange={pickVibe} customColor={customColor} onCustomColor={pickCustom} locked={locked} />
+        <VibePicker value={vibe.id} onChange={pickVibe} customColor={customColor} onCustomColor={pickCustom} />
       </View>
     </BottomSheet>
   );

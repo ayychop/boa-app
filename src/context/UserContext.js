@@ -2,8 +2,8 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Everything we remember about this listener on-device: whether they've done
-// the vibe check (and what they picked) and saved stations. BOA Premium
-// lives in the database (PremiumContext).
+// the vibe check (and what they picked) and saved stations. The whole app is
+// free: there is no plan or paywall.
 const KEY = 'boa:user:v1';
 const EMPTY = { onboarded: false, vibes: [], saved: [] };
 
@@ -29,7 +29,7 @@ export function UserProvider({ children }) {
     AsyncStorage.getItem(KEY)
       .then((raw) => {
         if (!raw) return;
-        // Premium used to be a flag on this phone; the database has it now.
+        // An old build kept a plan flag on this phone; nothing reads it now.
         const { isPremium, ...stored } = JSON.parse(raw);
         setUser({ ...EMPTY, ...stored });
       })

@@ -15,7 +15,7 @@ import { loadCarTheme } from './carTheme';
 // them up when the app is opened (takeBoot).
 
 let player = null; // { play(item, list), next, previous } from PlayerContext
-let favourites = null; // { isSaved(id), toggle(item) }, while the app is open with Premium
+let favourites = null; // { isSaved(id), toggle(item) }, while the app is open
 let hype = null; // { hyped(id), fire(item) }, while the app is open and signed in
 let lastState = { status: 'idle' };
 let boot = null; // { item, list } played before the app was opened
@@ -161,8 +161,7 @@ export function attachPlayer(handlers) {
 
 /**
  * Your saved stations, for the car's heart: { isSaved(id), toggle(item) }.
- * Attached while the app is open and you have Premium (saving stations is
- * a Premium feature); without it the car shows no heart. Returns a detach.
+ * Attached while the app is open. Returns a detach.
  */
 export function attachFavourites(handlers) {
   favourites = handlers;

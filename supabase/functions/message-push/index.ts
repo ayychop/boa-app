@@ -112,7 +112,9 @@ Deno.serve(async (req) => {
           to: t.token,
           title,
           body,
-          sound: `chat_${t.sound}.wav`,
+          // 'system' is the phone's own sound (also what a phone using its own clip gets
+          // with the app closed); anything else is one of the app's bundled BOA sounds.
+          sound: t.sound === 'system' ? 'default' : `chat_${t.sound}.wav`,
           // The app's high-importance channel for this sound: that's what makes
           // Android pop it up over whatever's on screen.
           channelId: `boa-chat-${t.sound}`,

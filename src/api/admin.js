@@ -106,11 +106,6 @@ export async function setBoaStar(userId, star) {
   check(await need().from('profiles').update({ is_boa_star: star }).eq('id', userId));
 }
 
-/** BOA Premium by hand ('active'), or back to 'expired'. */
-export async function setSubscription(userId, status) {
-  check(await need().from('profiles').update({ subscription_status: status }).eq('id', userId));
-}
-
 /**
  * Deletes a member for good: their sign-in, profile, posts, messages,
  * blocks and files. Done by the delete-user Edge Function, because only the

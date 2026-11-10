@@ -20,6 +20,9 @@ import { guarded, safely } from '../utils/safely';
 // phone, otherwise streaming while a copy downloads in the background for
 // next time (utils/mediaCache.js).
 let player = null;
+// The soundscape the player currently holds (loaded, playing or not), so a
+// sound that's already loaded isn't loaded a second time.
+let loaded = null;
 let state = { id: null, status: 'idle', volume: 1 };
 let fadeTimer = null;
 let gen = 0;
@@ -54,6 +57,44 @@ function instantSource(soundscape) {
   if (local) return { uri: local };
   localSource(soundscape);
   return { uri: soundscape.uri, headers: MEDIA_HEADERS };
+}
+
+/**
+ * Loads a bundled sound into the (paused) player ahead of the tap, so the
+ * first play starts with nothing left to load. Never plays, never takes the
+ * audio focus; a no-op if the player already holds something or the sound
+ * has to be downloaded first.
+ */
+export function prime(id) {
+  const soundscape = soundscapeById(id);
+  if (player || !soundscape?.asset) return;
+  safely('zen prime', () => {
+    player = createAudioPlayer(soundscape.asset, { updateInterval: 1000 });
+    player.addListener(
+      'playbackStatusUpdate',
+      guarded('zen status', (s) => {
+        if (s.error && state.status !== 'idle') emit({ status: 'error' });
+      }),
+    );
+    player.loop = true;
+    player.volume = state.volume;
+    loaded = id;
+  });
+  if (!player) loaded = null;
+}
+
+/**
+ * The same download, started from app launch when (and only when) the phone
+ * is on Wi-Fi or a cable, so a first tap in Zen never waits and nobody's
+ * mobile data is spent. Quiet about every failure.
+ */
+export async function warmOnWifi() {
+  try {
+    const mod = require('@react-native-community/netinfo');
+    const NetInfo = mod?.default ?? mod;
+    const net = await NetInfo.fetch();
+    if (net?.isConnected && (net.type === 'wifi' || net.type === 'ethernet')) warmUp();
+  } catch {}
 }
 
 /** Downloads every soundscape in the background (the Zen tab calls this). */
@@ -140,6 +181,7 @@ export async function play(id) {
       console.warn(`[ambient] player gone, rebuilding for ${id}`, err?.message ?? err);
       safely('zen player remove', () => player?.remove?.());
       player = null;
+      loaded = null;
       return play(id);
     }
     showOnLockScreen(soundscape);
@@ -157,9 +199,11 @@ export async function play(id) {
           if (s.error && state.status !== 'idle') emit({ status: 'error' });
         }),
       );
-    } else {
+    } else if (loaded !== id) {
+      // Already primed with this very sound (prime): nothing to load.
       player.replace(source);
     }
+    loaded = id;
     player.loop = true;
     player.volume = state.volume;
     player.play();

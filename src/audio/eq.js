@@ -2,9 +2,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as native from '../../modules/boa-eq';
 
 // BOA Hi-Fi: the listener's bass, treble, loudness, clear vocals, spatial, Bass Boost and Bluetooth settings, kept on the
-// phone and applied to the radio player's sound (modules/boa-eq) while they
-// have BOA Premium. Without Premium, or with nothing playing yet, the
-// sound stays flat and the settings wait.
+// phone and applied to the radio player's sound (modules/boa-eq), free for
+// everyone. With nothing playing yet, the sound stays flat and the settings wait.
 //
 // Bass and treble run from -1 to 1 around the BOA Signature sound at 0,
 // which is what the very top of both sliders used to be (the phone's
@@ -65,11 +64,11 @@ let active = false;
 let route = native.route?.() ?? 'speaker';
 const subs = new Set();
 
-const snapshot = () => ({ settings, active, allowed, supported: isSupported, route });
+const snapshot = () => ({ settings, active, supported: isSupported, route });
 const emit = () => subs.forEach((fn) => fn(snapshot()));
 
 function apply() {
-  active = native.apply(session, allowed ? settings : FLAT);
+  active = native.apply(session, settings);
   emit();
 }
 
@@ -90,13 +89,6 @@ Promise.all([AsyncStorage.getItem(KEY), AsyncStorage.getItem(OLD_KEY)])
 /** The player's audio session (the native engine calls this once it exists). */
 export function setSession(id) {
   session = id > 0 ? id : 0;
-  apply();
-}
-
-/** Premium on or off: off flattens the sound, keeping the settings for later. */
-export function setAllowed(yes) {
-  if (allowed === !!yes) return;
-  allowed = !!yes;
   apply();
 }
 
