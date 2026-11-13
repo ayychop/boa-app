@@ -89,7 +89,9 @@ export default function NotificationSoundSection({ chatSound, setChatSound }) {
         ) : null}
       </View>
       <Text style={styles.note} testID="notif-sound-note">
-        Your own sound plays while BOA is open. With BOA closed, your phone plays its default sound.
+        {custom?.channel
+          ? 'Your own sound plays whether BOA is open or closed.'
+          : 'Your own sound plays while BOA is open. With BOA closed, your phone plays its default sound.'}
       </Text>
 
       <Slate style={styles.section}>BOA alert sounds</Slate>

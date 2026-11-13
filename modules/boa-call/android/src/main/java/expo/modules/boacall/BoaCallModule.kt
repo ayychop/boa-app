@@ -133,6 +133,16 @@ class BoaCallModule : Module() {
       battery = null
     }
 
+    /** Your own message sound as an Android channel, so it rings with BOA closed (AlertSounds). True if it worked. */
+    AsyncFunction("registerAlertSound") { fileUri: String, id: String, title: String ->
+      AlertSounds.register(context, fileUri, id, title)
+    }
+
+    /** Back to the phone's own sound: the channel and the copy are removed. */
+    AsyncFunction("clearAlertSounds") {
+      AlertSounds.clear(context)
+    }
+
     /** A call is on (placed, or answered): hold it in the foreground so the screen can go off. */
     AsyncFunction("startOngoing") { name: String, callId: String ->
       OngoingCallService.start(context, name, callId)

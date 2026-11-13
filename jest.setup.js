@@ -376,6 +376,9 @@ jest.mock('./modules/boa-call', () => {
   const screens = new Set();
   return {
     isAvailable: true,
+    // Your own message sound as an Android channel: not on a test phone, until a test says so.
+    registerAlertSound: jest.fn(async () => false),
+    clearAlertSounds: jest.fn(async () => {}),
     showIncoming: jest.fn(async () => true),
     cancelIncoming: jest.fn(async () => {}),
     // The native ringer, with the app on screen.

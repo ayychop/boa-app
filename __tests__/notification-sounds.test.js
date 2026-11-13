@@ -203,14 +203,86 @@ describe('your own sound', () => {
   });
 });
 
+describe('your own sound, with the app closed', () => {
+  const BoaCall = require('../modules/boa-call');
+  const choose = async () => {
+    pick({ uri: 'file:///picked/Air Raid.mp3', name: 'Air Raid.mp3', size: 400_000 });
+    return prefs.pickCustomSound();
+  };
+  const onAndroid = async (fn) => {
+    const was = Platform.OS;
+    Platform.OS = 'android';
+    try {
+      return await fn();
+    } finally {
+      Platform.OS = was;
+    }
+  };
+
+  test('the clip gets a channel of its own, and its id is what the database pushes with', async () => {
+    const spy = jest.spyOn(BoaCall, 'registerAlertSound').mockResolvedValue(true);
+    const song = await onAndroid(choose);
+    expect(spy).toHaveBeenCalledWith(song.uri, expect.stringMatching(/^own_[a-z0-9]{1,8}$/), 'Air Raid');
+    expect(song.channel).toMatch(/^own_[a-z0-9]{1,8}$/);
+    // Fits the column (a lowercase word of up to 24) and names the channel the phone made.
+    expect(song.channel).toMatch(/^[a-z0-9_]{1,24}$/);
+    await onAndroid(async () => expect(prefs.pushSound()).toBe(song.channel));
+    spy.mockRestore();
+  });
+
+  test('a notification BOA posts itself in the background uses that channel too', async () => {
+    const spy = jest.spyOn(BoaCall, 'registerAlertSound').mockResolvedValue(true);
+    const song = await onAndroid(choose);
+    AppState.currentState = 'background';
+    await onAndroid(async () => expect(prefs.notificationPlan()).toEqual({ file: 'default', channelId: `boa-chat-${song.channel}`, own: false }));
+    spy.mockRestore();
+  });
+
+  test('a clip the phone cannot make a channel for (too long, an older phone) stays on the phone default', async () => {
+    const spy = jest.spyOn(BoaCall, 'registerAlertSound').mockResolvedValue(false);
+    const song = await onAndroid(choose);
+    expect(song.channel).toBeUndefined();
+    await onAndroid(async () => expect(prefs.pushSound()).toBe('system'));
+    spy.mockRestore();
+  });
+
+  test('removing the clip removes its channel and copy', async () => {
+    const spy = jest.spyOn(BoaCall, 'registerAlertSound').mockResolvedValue(true);
+    const clear = jest.spyOn(BoaCall, 'clearAlertSounds').mockResolvedValue();
+    await onAndroid(choose);
+    await prefs.setCustomSound(null);
+    expect(clear).toHaveBeenCalled();
+    spy.mockRestore();
+    clear.mockRestore();
+  });
+
+  test('the Kotlin keeps the clip where the system can read it, under 30 seconds, on a channel boa-chat-own_<id>', () => {
+    const kt = read('modules/boa-call/android/src/main/java/expo/modules/boacall/AlertSounds.kt');
+    expect(kt).toMatch(/MediaStore\.Audio\.Media\.IS_NOTIFICATION/);
+    expect(kt).toMatch(/DIRECTORY_NOTIFICATIONS/);
+    expect(kt).toMatch(/MAX_MS = 30_000L/);
+    expect(kt).toMatch(/CHANNEL_PREFIX = "boa-chat-"/);
+    expect(kt).toMatch(/setSound\(/);
+    const mod = read('modules/boa-call/android/src/main/java/expo/modules/boacall/BoaCallModule.kt');
+    expect(mod).toMatch(/AsyncFunction\("registerAlertSound"\)/);
+    expect(mod).toMatch(/AsyncFunction\("clearAlertSounds"\)/);
+  });
+
+  test('message-push sends the recipient channel for their own clip, and a plain default sound beside it', () => {
+    const fn = read('supabase/functions/message-push/index.ts');
+    expect(fn).toMatch(/t\.sound\.startsWith\('own_'\)/);
+    expect(fn).toMatch(/channelId: `boa-chat-\$\{t\.sound\}`/);
+  });
+});
+
 describe('the database sends pushes with the same choice', () => {
-  test('push_tokens.sound is the BOA sound, or system for the phone default and your own clip', async () => {
+  test('push_tokens.sound is the BOA sound, system for the phone default, or own_<id> for your own clip's channel', async () => {
     const SQL = fs.readdirSync(path.join(__dirname, '../supabase/migrations')).map((f) => read(`supabase/migrations/${f}`)).join('\n');
     // The column accepts a lowercase word of up to 24 characters: 'system' fits.
     expect(SQL).toMatch(/sound text not null default 'pager' check \(sound ~ '\^\[a-z0-9_\]\{1,24\}\$'\)/);
     expect('system').toMatch(/^[a-z0-9_]{1,24}$/);
     const fn = read('supabase/functions/message-push/index.ts');
-    expect(fn).toMatch(/t\.sound === 'system' \? 'default'/);
+    expect(fn).toMatch(/t\.sound === 'system' \|\| t\.sound\.startsWith\('own_'\) \? 'default'/);
     expect(fn).toMatch(/channelId: `boa-chat-\$\{t\.sound\}`/);
     // And the app registers it on sign in and whenever the choice changes.
     const hubSrc = read('src/context/HubContext.js');

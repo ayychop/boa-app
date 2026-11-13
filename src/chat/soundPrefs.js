@@ -1,9 +1,10 @@
 import { useSyncExternalStore } from 'react';
-import { AppState } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import { createAudioPlayer } from 'expo-audio';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as DocumentPicker from 'expo-document-picker';
 import { Directory, File, Paths } from 'expo-file-system';
+import * as BoaCall from '../../modules/boa-call';
 import { CUSTOM_CHANNEL, DEFAULT_CHAT_SOUND, SYSTEM_CHANNEL, chatChannel, chatSoundById } from './sounds';
 
 // Which sound a notification makes: the phone's own default, a BOA alert, or
@@ -15,9 +16,15 @@ import { CUSTOM_CHANNEL, DEFAULT_CHAT_SOUND, SYSTEM_CHANNEL, chatChannel, chatSo
 //   'system'  the phone's default notification sound.
 //   'custom'  your own clip, chosen from the phone's storage and copied into
 //             the app. Android fixes a notification's sound per channel, and a
-//             channel can't point at a file the app made, so your clip is played
-//             by the app itself: whenever BOA is open. With BOA closed, a push
-//             arrives on the phone's default sound instead (pushSound()).
+//             channel can't point at a file in the app's private storage, so
+//             the clip is also copied where the system can read it and given a
+//             channel of its own (modules/boa-call AlertSounds.kt, Android 10
+//             and up, clips up to 30 seconds): custom.channel, own_<id>. That
+//             id goes to the database as push_tokens.sound, and a push with
+//             BOA closed rings on that channel. The app plays the clip itself
+//             while it's open. Where the channel couldn't be made (an older
+//             phone, a longer clip), a push arrives on the phone's default
+//             sound instead (pushSound()).
 
 const MODE_KEY = 'boa.chat.soundMode.v1';
 const CUSTOM_KEY = 'boa.chat.customSound.v1';
@@ -59,11 +66,24 @@ const ready = Promise.all([AsyncStorage.getItem(MODE_KEY), AsyncStorage.getItem(
     if (savedBoa) boaId = chatSoundById(savedBoa).id;
     try {
       const parsed = savedCustom ? JSON.parse(savedCustom) : null;
-      if (parsed?.uri) custom = { uri: String(parsed.uri), name: String(parsed.name ?? 'Your sound') };
+      if (parsed?.uri) custom = { uri: String(parsed.uri), name: String(parsed.name ?? 'Your sound'), ...(parsed.channel ? { channel: String(parsed.channel) } : null) };
     } catch {}
     emit();
   })
+  .then(() => upgradeCustom())
   .catch(() => {});
+
+// A clip chosen before it could ring with the app closed (or one that couldn't
+// then) gets its channel the next time the app opens.
+async function upgradeCustom() {
+  const song = customSound();
+  if (!song || song.channel || Platform.OS !== 'android') return;
+  const channel = await makeAlertChannel(song);
+  if (!channel || custom?.uri !== song.uri) return;
+  custom = { ...custom, channel };
+  await AsyncStorage.setItem(CUSTOM_KEY, JSON.stringify(custom)).catch(() => {});
+  emit();
+}
 
 /** Resolves once the saved choice has been read. */
 export const loadSoundPrefs = () => ready.then(read);
@@ -114,6 +134,14 @@ export async function setCustomSound(song) {
       new File(before.uri).delete();
     } catch {}
   }
+  // The system's channel for the clip, so it rings with the app closed. Made
+  // before anyone is told, so the database hears the final choice in one go.
+  if (custom) {
+    const channel = await makeAlertChannel(custom);
+    if (custom?.uri === song.uri && channel) custom = { ...custom, channel };
+  } else if (before) {
+    await BoaCall.clearAlertSounds();
+  }
   // No clip, nothing to play: the choice goes back to the phone's own sound.
   if (!custom && mode === 'custom') {
     mode = 'system';
@@ -122,6 +150,17 @@ export async function setCustomSound(song) {
   await (custom ? AsyncStorage.setItem(CUSTOM_KEY, JSON.stringify(custom)) : AsyncStorage.removeItem(CUSTOM_KEY)).catch(() => {});
   emit();
   return custom;
+}
+
+// Android 8 and up have channels; the notification's id is boa-chat-<this>. Eight
+// letters of the time keep it short (the database allows 24) and new each time.
+const newChannelId = () => `own_${Date.now().toString(36).slice(-8)}`;
+
+/** Gives the clip its own Android channel (so a push rings it with the app closed). Resolves to its id, or null. */
+async function makeAlertChannel(song) {
+  if (Platform.OS !== 'android') return null;
+  const id = newChannelId();
+  return (await BoaCall.registerAlertSound(song.uri, id, song.name)) ? id : null;
 }
 
 /**
@@ -147,11 +186,18 @@ export async function pickCustomSound() {
 
 /**
  * What the database sends pushes with (push_tokens.sound). A BOA sound is its
- * own id; the phone's default and your own clip are both 'system', because a
- * push that arrives with the app closed can only use a sound the phone knows.
+ * own id; the phone's default is 'system'; your own clip is its channel's id
+ * (own_<id>) where Android could make one, else 'system', because a push that
+ * arrives with the app closed can only use a sound the phone knows.
  */
 export function pushSound() {
-  return mode === 'boa' ? boaId : 'system';
+  if (mode === 'boa') return boaId;
+  // Your own clip, on a phone that could make its channel: that channel's id.
+  if (mode === 'custom' && Platform.OS === 'android') {
+    const song = customSound();
+    if (song?.channel) return song.channel;
+  }
+  return 'system';
 }
 
 /**
@@ -168,7 +214,12 @@ export function notificationPlan(boaOverride) {
     const tone = chatSoundById(boaOverride ?? boaId);
     return { file: tone.file, channelId: chatChannel(tone.id), own: false };
   }
-  // 'system', and your own clip while the app isn't on screen.
+  // Your own clip while the app isn't on screen: its own channel if it has one.
+  if (mode === 'custom') {
+    const song = customSound();
+    if (song?.channel && Platform.OS === 'android') return { file: 'default', channelId: `boa-chat-${song.channel}`, own: false };
+  }
+  // 'system', and your own clip where it has no channel.
   return { file: 'default', channelId: SYSTEM_CHANNEL, own: false };
 }
 

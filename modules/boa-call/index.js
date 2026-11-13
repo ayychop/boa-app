@@ -186,3 +186,26 @@ export function addThermalListener(fn) {
   const sub = native.addListener('onThermalChange', (e) => fn(e?.status || 'NOMINAL'));
   return () => sub.remove();
 }
+
+/**
+ * Makes your own message sound ring with the app closed (Android 10 and up):
+ * copies the clip where the system can read it and gives it a notification
+ * channel, boa-chat-<id>. `id` is own_<something>, new for every clip (a
+ * channel's sound can't be changed). Resolves to whether it worked; false
+ * for a clip over 30 seconds, an older phone or a build without the module.
+ */
+export async function registerAlertSound(fileUri, id, title = 'Your sound') {
+  if (!native?.registerAlertSound) return false;
+  try {
+    return !!(await native.registerAlertSound(fileUri, id, title));
+  } catch {
+    return false;
+  }
+}
+
+/** Removes your own sound's channel and copy. */
+export async function clearAlertSounds() {
+  try {
+    await native?.clearAlertSounds?.();
+  } catch {}
+}

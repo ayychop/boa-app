@@ -112,11 +112,13 @@ Deno.serve(async (req) => {
           to: t.token,
           title,
           body,
-          // 'system' is the phone's own sound (also what a phone using its own clip gets
-          // with the app closed); anything else is one of the app's bundled BOA sounds.
-          sound: t.sound === 'system' ? 'default' : `chat_${t.sound}.wav`,
-          // The app's high-importance channel for this sound: that's what makes
-          // Android pop it up over whatever's on screen.
+          // 'system' is the phone's own sound; 'own_<id>' is the recipient's own clip, which
+          // their phone keeps as a channel (modules/boa-call AlertSounds.kt) and which a
+          // push can only name by that channel, never by a link or a file; anything else
+          // is one of the app's bundled BOA sounds (chat_<id>.wav, in the app).
+          sound: t.sound === 'system' || t.sound.startsWith('own_') ? 'default' : `chat_${t.sound}.wav`,
+          // The channel for the recipient's sound. Android 8 and up take the sound, the
+          // buzz and the heads-up popup from the channel, and ignore the sound above.
           channelId: `boa-chat-${t.sound}`,
           priority: 'high',
           data: { type: 'chat', conversationId: m.conversation_id, messageId: m.id },
