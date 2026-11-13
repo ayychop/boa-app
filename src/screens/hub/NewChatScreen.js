@@ -5,7 +5,7 @@ import Text, { FontScope } from '../../components/ScopedText';
 import { READING } from '../../hooks/useLayout';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
-import { setStatusBarStyle } from 'expo-status-bar';
+import { SystemBars } from 'react-native-edge-to-edge';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
@@ -493,15 +493,13 @@ function Thread({ navigation, route }) {
     useCallback(() => {
       leaving.current = false;
       setFocused(true);
-      setStatusBarStyle(lightVibe ? 'dark' : 'light');
       const pause = { timer: null };
       return () => {
-        setStatusBarStyle('light');
         pause.timer = setTimeout(() => setFocused(false), LEAVE_SETTLE_MS);
         // Coming straight back (a swipe let go of) cancels it.
         cancelPause.current = () => clearTimeout(pause.timer);
       };
-    }, [lightVibe]),
+    }, []),
   );
   const cancelPause = useRef(() => {});
   useEffect(() => {
@@ -1066,6 +1064,8 @@ function Thread({ navigation, route }) {
 
   return (
     <View style={[styles.screen, { backgroundColor: vibe.mesh[1] }]} testID="hub-thread">
+      {/* Dark icons on a light vibe; the root light icons return when this unmounts. */}
+      <SystemBars style={lightVibe ? 'dark' : 'light'} />
       {/* Layer 1: full screen, behind everything, outside the keyboard's reach. */}
       {backdrop}
       <KeyboardAvoidingView style={styles.fill} behavior={keyboardBehavior()} testID="hub-thread-keyboard">

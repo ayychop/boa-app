@@ -105,7 +105,6 @@
           "enableBackgroundPlayback": true
         }
       ],
-      "expo-status-bar",
       [
         "./plugins/withAndroidConfigChanges",
         {

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import * as Linking from 'expo-linking';
-import { StatusBar } from 'expo-status-bar';
+import { SystemBars } from 'react-native-edge-to-edge';
 import { Alert, Platform, StyleSheet, Text, View } from 'react-native';
 import { DarkTheme, NavigationContainer, useIsFocused } from '@react-navigation/native';
 import { BottomTabBar, createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -529,7 +529,6 @@ function MainTabs({ freshInstall = false }) {
   if (initialState === undefined) return <View style={{ flex: 1, backgroundColor: colors.bg }} />;
   return (
     <NavigationContainer ref={navigationRef} theme={navTheme} initialState={initialState ?? undefined} onStateChange={(state) => saveNavState(state)} onReady={() => setNavReady(true)}>
-      <StatusBar style="light" />
       <Stack.Navigator screenOptions={PAGE_OPTIONS}>
         <Stack.Screen name="Tabs">{() => <Tabs />}</Stack.Screen>
         <Stack.Screen name="Forecast" component={ForecastScreen} />
@@ -583,7 +582,6 @@ function Gate() {
     </Animated.View>
   ) : (
     <Animated.View key="onboarding" entering={FadeIn.duration(450)} style={{ flex: 1 }}>
-      <StatusBar style="light" />
       <OnboardingScreen />
     </Animated.View>
   );
@@ -640,6 +638,7 @@ export default function App() {
   // from it. A font that fails to load falls back rather than hanging here.
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
+      <SystemBars style="light" />
       {(fontsLoaded || fontError) && (
         <ErrorBoundary name="app" fallback={(f) => <AppFallback {...f} />}>
           {publicHandle ? (

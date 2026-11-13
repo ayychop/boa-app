@@ -320,12 +320,20 @@ jest.mock('expo-font', () => ({
   isLoaded: () => true,
   isLoading: () => false,
 }));
-// The system navigation bar (Android): hidden over the Zen screensaver. Tests
-// read the calls; the bar only exists on Android (src/utils/navBar.js).
-jest.mock('expo-navigation-bar', () => ({
-  setVisibilityAsync: jest.fn(async () => {}),
-  getVisibilityAsync: jest.fn(async () => 'visible'),
-}));
+// System bars (react-native-edge-to-edge). The native module isn't here;
+// tests read setHidden, which is how the screensaver hides the navigation bar.
+jest.mock('react-native-edge-to-edge', () => {
+  const React = require('react');
+  function SystemBars() {
+    return null;
+  }
+  SystemBars.setHidden = jest.fn();
+  SystemBars.setStyle = jest.fn();
+  SystemBars.pushStackEntry = jest.fn(() => ({}));
+  SystemBars.popStackEntry = jest.fn();
+  SystemBars.replaceStackEntry = jest.fn(() => ({}));
+  return { SystemBars };
+});
 
 // The screen off/on broadcast (an Android native module in the app); tests
 // fire it with __emit('off' | 'on').

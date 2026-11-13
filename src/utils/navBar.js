@@ -1,16 +1,16 @@
 import { Platform } from 'react-native';
-import * as NavigationBar from 'expo-navigation-bar';
+import { SystemBars } from 'react-native-edge-to-edge';
 import { safelyAsync } from './safely';
 
-// The Android system navigation bar (the three buttons or the gesture pill,
-// on a translucent dark scrim). The Zen screensaver is the whole screen, so
-// while it is up the bar is hidden: a swipe from the bottom edge brings it
-// back for a moment and it slides away again. Expo's own module does the
-// window work (WindowInsetsController), so it behaves on every Android
-// version the app supports.
+// The Android system navigation bar (the three buttons or the gesture pill).
+// The Zen screensaver is the whole screen, so while it is up the bar is
+// hidden: a swipe from the bottom edge brings it back for a moment and it
+// slides away again. react-native-edge-to-edge hides it through
+// WindowInsetsController. The old expo-navigation-bar calls set the bar
+// color, which Android 15 deprecates.
 //
 // Both calls go through `safelyAsync`: the activity can be going away when
-// they land, and a rejection nobody awaits is a crash, not a message.
+// they land, and a throw nobody awaits is a crash, not a message.
 
 /** Hides the navigation bar. Resolves to whether it asked to. Never throws. */
 export function hideNavBar() {
@@ -18,7 +18,7 @@ export function hideNavBar() {
   return safelyAsync(
     'nav bar hide',
     async () => {
-      await NavigationBar.setVisibilityAsync('hidden');
+      SystemBars.setHidden({ navigationBar: true });
       return true;
     },
     false,
@@ -31,7 +31,7 @@ export function showNavBar() {
   return safelyAsync(
     'nav bar show',
     async () => {
-      await NavigationBar.setVisibilityAsync('visible');
+      SystemBars.setHidden({ navigationBar: false });
       return true;
     },
     false,

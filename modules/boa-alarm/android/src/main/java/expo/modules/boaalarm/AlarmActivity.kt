@@ -136,11 +136,8 @@ class AlarmActivity : Activity() {
   private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
   /** The page runs under the status and navigation bars, whose icons suit the theme. */
-  @Suppress("DEPRECATION")
   private fun edgeToEdge(t: AlarmTheme) {
     WindowCompat.setDecorFitsSystemWindows(window, false)
-    window.statusBarColor = Color.TRANSPARENT
-    window.navigationBarColor = Color.TRANSPARENT
     val controller = WindowCompat.getInsetsController(window, window.decorView)
     controller.isAppearanceLightStatusBars = t.light
     controller.isAppearanceLightNavigationBars = t.light

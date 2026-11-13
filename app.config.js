@@ -42,5 +42,15 @@ module.exports = ({ config }) => {
   // the GIF picker in chat (src/chat/gifs.js).
   const giphy = process.env.GIPHY_API_KEY?.trim();
   if (giphy) out = { ...out, extra: { ...out.extra, giphyApiKey: giphy } };
+  // Android 15 draws edge to edge and rejects the old bar-color APIs. Expo
+  // will not write this into a dynamic config, so it is set here: the Gradle
+  // flag, and the library plugin (an edge-to-edge theme, no status or
+  // navigation bar colors). Contrast enforcement stays off, or Android paints
+  // a scrim behind the navigation buttons.
+  const plugins = (out.plugins ?? []).filter((plugin) => plugin !== 'expo-status-bar' && !(Array.isArray(plugin) && plugin[0] === 'expo-status-bar'));
+  if (!plugins.some((plugin) => plugin === 'react-native-edge-to-edge' || (Array.isArray(plugin) && plugin[0] === 'react-native-edge-to-edge'))) {
+    plugins.push(['react-native-edge-to-edge', { android: { parentTheme: 'Default', enforceNavigationBarContrast: false } }]);
+  }
+  out = { ...out, android: { ...out.android, edgeToEdgeEnabled: true }, plugins };
   return out;
 };

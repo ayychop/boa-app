@@ -1,6 +1,6 @@
 import { Component, useEffect, useRef, useState } from 'react';
 import { AppState, BackHandler, Image, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { setStatusBarHidden } from 'expo-status-bar';
+import { SystemBars } from 'react-native-edge-to-edge';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { Ionicons } from '@expo/vector-icons';
@@ -1017,19 +1017,6 @@ function ZenRoom() {
     return () => cancelAnimation(hint);
   }, [ambient, hint]);
 
-  // The screensaver hides the status bar.
-  useEffect(() => {
-    if (!focused || !ambient) return;
-    try {
-      setStatusBarHidden(true, 'fade');
-    } catch {}
-    return () => {
-      try {
-        setStatusBarHidden(false, 'fade');
-      } catch {}
-    };
-  }, [focused, ambient]);
-
   // While anything plays on this tab, the screen stays on like a bedside
   // display; with nothing playing the phone sleeps as it normally would.
   const audible = focused && (isPlaying || sound.status === 'playing');
@@ -1111,6 +1098,8 @@ function ZenRoom() {
 
   return (
     <View style={styles.screen} testID={ambient ? 'zen-screensaver' : 'zen-screen'}>
+      {/* The status bar goes while the screensaver is up, and comes back when it unmounts. */}
+      {focused && ambient ? <SystemBars hidden={{ statusBar: true }} /> : null}
       {/* With the radio on, the room is a still photograph: no video
           player exists at all, so opening Zen can never take the audio
           focus from the radio (Android pauses whatever loses it). */}

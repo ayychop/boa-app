@@ -85,11 +85,9 @@ class IncomingCallActivity : Activity() {
     }
     window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     // Edge to edge: the picture runs under the status and navigation bars.
+    // Bar colors are not set: Android 15 deprecates them, and a transparent
+    // edge-to-edge window already draws nothing behind the icons.
     WindowCompat.setDecorFitsSystemWindows(window, false)
-    @Suppress("DEPRECATION")
-    window.statusBarColor = Color.TRANSPARENT
-    @Suppress("DEPRECATION")
-    window.navigationBarColor = Color.TRANSPARENT
   }
 
   private fun answer(call: CallInfo) {
